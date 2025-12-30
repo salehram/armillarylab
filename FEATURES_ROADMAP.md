@@ -1,5 +1,5 @@
 # AstroPlanner – Feature Roadmap  
-*Status: Updated to 2025-12-27 | Version 2.0.0-dev (PostgreSQL Support Branch)*
+*Status: Updated to 2025-12-30 | Version 2.0.0-dev (PostgreSQL Support Branch)*
 
 This document tracks the major features of the AstroPlanner project, what has been completed, and what remains.  
 It is intended to be version-controlled in Git for transparency, planning, and future development.
@@ -197,6 +197,18 @@ Database-driven palette management system allowing custom palettes beyond the ha
   - Auto-refresh every minute to stay current
   - Day rollover support for midnight transitions
   - Integration with chart legend
+- **Meridian Flip Marker**:
+  - Purple dashed vertical line indicating meridian transit time
+  - "Meridian" label at top of chart
+  - Helps plan imaging sessions around mount flip
+  - Interpolated positioning for precise time display
+- **Moon Rise/Set Indicators**:
+  - Amber dashed vertical lines marking moon rise and set times
+  - 🌙↑ and 🌙↓ emoji labels for easy identification
+  - Moon presence bar at bottom of chart showing when moon is up
+  - Amber-filled sections indicate moon in sky
+  - Empty sections indicate moonless (dark sky) imaging time
+  - Helps identify optimal imaging windows away from moonlight
 
 ### Status  
 **✅ Fully implemented and working.**

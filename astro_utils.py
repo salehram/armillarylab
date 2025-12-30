@@ -142,10 +142,20 @@ def compute_target_window(
     except Exception:
         meridian = None
 
+    # Moon rise and set times
+    try:
+        moon_rise = observer.moon_rise_time(t_now, which="nearest")
+        moon_set = observer.moon_set_time(t_now, which="nearest")
+    except Exception:
+        moon_rise = None
+        moon_set = None
+
     sunset_utc, sunset_local = tp(sunset)
     dark_start_utc, dark_start_local = tp(dark_start)
     dark_end_utc, dark_end_local = tp(dark_end)
     meridian_utc, meridian_local = tp(meridian) if meridian else (None, None)
+    moon_rise_utc, moon_rise_local = tp(moon_rise) if moon_rise else (None, None)
+    moon_set_utc, moon_set_local = tp(moon_set) if moon_set else (None, None)
 
     # Pack-up time (local)
     if packup_time_local:
@@ -236,6 +246,11 @@ def compute_target_window(
 
         "meridian_local": fmt(meridian_local),
         "meridian_utc": fmt(meridian_utc),
+
+        "moon_rise_local": fmt(moon_rise_local),
+        "moon_rise_utc": fmt(moon_rise_utc),
+        "moon_set_local": fmt(moon_set_local),
+        "moon_set_utc": fmt(moon_set_utc),
 
         "start_time_local": fmt(start_local),
         "start_time_utc": fmt(start_utc),

@@ -953,6 +953,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const minAltitude = {{ window_info.min_altitude_deg|tojson|safe }};
     const startTime = "{{ window_info.start_time_local }}".split(' ')[1].slice(0, 5); // Extract HH:MM
     const endTime = "{{ window_info.end_time_local }}".split(' ')[1].slice(0, 5); // Extract HH:MM
+    const meridianTime = "{{ window_info.meridian_local }}".split(' ')[1]?.slice(0, 5) || null; // Extract HH:MM for meridian transit
+    const moonRiseTime = "{{ window_info.moon_rise_local }}".split(' ')[1]?.slice(0, 5) || null; // Extract HH:MM for moon rise
+    const moonSetTime = "{{ window_info.moon_set_local }}".split(' ')[1]?.slice(0, 5) || null; // Extract HH:MM for moon set
 
     const ctx = canvas.getContext("2d");
     
@@ -1023,6 +1026,30 @@ document.addEventListener("DOMContentLoaded", function () {
                   pointStyle: 'line'
                 });
                 
+                // Add meridian flip indicator to legend
+                if (meridianTime) {
+                  labels.push({
+                    text: 'Meridian Flip',
+                    fillStyle: 'rgba(156, 39, 176, 0.8)',
+                    strokeStyle: 'rgba(156, 39, 176, 0.8)',
+                    lineWidth: 2,
+                    hidden: false,
+                    pointStyle: 'line'
+                  });
+                }
+                
+                // Add moon rise/set indicators to legend
+                if (moonRiseTime || moonSetTime) {
+                  labels.push({
+                    text: 'Moon Up',
+                    fillStyle: 'rgba(255, 193, 7, 0.4)',
+                    strokeStyle: 'rgba(255, 193, 7, 0.8)',
+                    lineWidth: 2,
+                    hidden: false,
+                    pointStyle: 'rect'
+                  });
+                }
+                
                 return labels;
               }
             }
@@ -1078,6 +1105,142 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       },
       plugins: [{
+        id: 'moonPresenceBar',
+        beforeDatasetsDraw: function(chart) {
+          if (!moonRiseTime && !moonSetTime) return;
+          
+          const ctx = chart.ctx;
+          const chartArea = chart.chartArea;
+          const meta = chart.getDatasetMeta(0);
+          const labels = chart.data.labels;
+          
+          if (!chartArea || !meta.data.length) return;
+          
+          // Helper function to convert time to minutes (handling day rollover)
+          function timeToMinutes(timeStr) {
+            if (!timeStr) return null;
+            const parts = timeStr.split(':');
+            return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+          }
+          
+          // Helper function to find X position for a given time
+          function findTimeX(targetTime) {
+            if (!targetTime) return null;
+            
+            const exactIndex = labels.indexOf(targetTime);
+            if (exactIndex !== -1 && meta.data[exactIndex]) {
+              return meta.data[exactIndex].x;
+            }
+            
+            for (let i = 0; i < labels.length - 1; i++) {
+              const time1 = labels[i];
+              const time2 = labels[i + 1];
+              
+              const targetMinutes = timeToMinutes(targetTime);
+              const time1Minutes = timeToMinutes(time1);
+              const time2Minutes = timeToMinutes(time2);
+              
+              const adjustedTime2Minutes = time2Minutes < time1Minutes ? time2Minutes + 1440 : time2Minutes;
+              const adjustedTargetMinutes = targetMinutes < time1Minutes ? targetMinutes + 1440 : targetMinutes;
+              
+              if (adjustedTargetMinutes >= time1Minutes && adjustedTargetMinutes <= adjustedTime2Minutes) {
+                if (meta.data[i] && meta.data[i + 1]) {
+                  const x1 = meta.data[i].x;
+                  const x2 = meta.data[i + 1].x;
+                  const ratio = (adjustedTargetMinutes - time1Minutes) / (adjustedTime2Minutes - time1Minutes);
+                  return x1 + (x2 - x1) * ratio;
+                }
+              }
+            }
+            return null;
+          }
+          
+          // Determine moon up periods during the chart time range
+          const chartStartTime = labels[0];
+          const chartEndTime = labels[labels.length - 1];
+          const chartStartX = chartArea.left;
+          const chartEndX = chartArea.right;
+          
+          const moonRiseX = findTimeX(moonRiseTime);
+          const moonSetX = findTimeX(moonSetTime);
+          
+          const barHeight = 6;
+          const barY = chartArea.bottom - barHeight - 2;
+          
+          ctx.save();
+          
+          // Determine which segments have moon up
+          // Moon is up between rise and set (or from chart start if already up, or to chart end if still up)
+          
+          const moonRiseMinutes = timeToMinutes(moonRiseTime);
+          const moonSetMinutes = timeToMinutes(moonSetTime);
+          const chartStartMinutes = timeToMinutes(chartStartTime);
+          const chartEndMinutes = timeToMinutes(chartEndTime);
+          
+          // Adjust for day rollover in chart (night typically goes from evening to morning)
+          const adjustedChartEndMinutes = chartEndMinutes < chartStartMinutes ? chartEndMinutes + 1440 : chartEndMinutes;
+          const adjustedMoonRiseMinutes = moonRiseMinutes !== null && moonRiseMinutes < chartStartMinutes ? moonRiseMinutes + 1440 : moonRiseMinutes;
+          const adjustedMoonSetMinutes = moonSetMinutes !== null && moonSetMinutes < chartStartMinutes ? moonSetMinutes + 1440 : moonSetMinutes;
+          
+          // Draw moon presence bar segments
+          ctx.fillStyle = 'rgba(255, 193, 7, 0.4)'; // Amber for moon up
+          
+          if (moonRiseMinutes !== null && moonSetMinutes !== null) {
+            // Both rise and set times available
+            if (adjustedMoonRiseMinutes < adjustedMoonSetMinutes) {
+              // Moon rises then sets during the night
+              // Moon is DOWN from chart start to rise, UP from rise to set, DOWN from set to end
+              if (moonRiseX !== null && moonSetX !== null) {
+                // Moon up between rise and set
+                ctx.fillRect(moonRiseX, barY, moonSetX - moonRiseX, barHeight);
+              } else if (moonRiseX !== null) {
+                // Moon rises during chart, set is after chart end
+                ctx.fillRect(moonRiseX, barY, chartEndX - moonRiseX, barHeight);
+              } else if (moonSetX !== null) {
+                // Moon already up at chart start, sets during chart
+                ctx.fillRect(chartStartX, barY, moonSetX - chartStartX, barHeight);
+              }
+            } else {
+              // Moon sets then rises during the night (moon was already up at start)
+              // Moon is UP from chart start to set, DOWN from set to rise, UP from rise to end
+              if (moonSetX !== null) {
+                ctx.fillRect(chartStartX, barY, moonSetX - chartStartX, barHeight);
+              }
+              if (moonRiseX !== null) {
+                ctx.fillRect(moonRiseX, barY, chartEndX - moonRiseX, barHeight);
+              }
+              if (moonSetX === null && moonRiseX === null) {
+                // Both outside chart range - need to determine if moon is up entire time
+                // If set is before chart start and rise is after chart end, moon is down entire time
+                // Otherwise moon is up entire time
+                if (adjustedMoonSetMinutes > adjustedChartEndMinutes || adjustedMoonRiseMinutes < chartStartMinutes) {
+                  ctx.fillRect(chartStartX, barY, chartEndX - chartStartX, barHeight);
+                }
+              }
+            }
+          } else if (moonRiseX !== null) {
+            // Only moon rise in chart range - moon up from rise to end
+            ctx.fillRect(moonRiseX, barY, chartEndX - moonRiseX, barHeight);
+          } else if (moonSetX !== null) {
+            // Only moon set in chart range - moon up from start to set
+            ctx.fillRect(chartStartX, barY, moonSetX - chartStartX, barHeight);
+          }
+          
+          // Draw border around the bar area
+          ctx.strokeStyle = 'rgba(255, 193, 7, 0.6)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(chartStartX, barY, chartEndX - chartStartX, barHeight);
+          
+          // Add moon icon label at the left
+          ctx.fillStyle = 'rgba(255, 193, 7, 1)';
+          ctx.font = '10px Arial';
+          ctx.textAlign = 'right';
+          ctx.fillText('🌙', chartStartX - 3, barY + barHeight - 1);
+          
+          ctx.restore();
+        }
+      },
+      {
         id: 'windowShading',
         beforeDatasetsDraw: function(chart) {
           const ctx = chart.ctx;
@@ -1198,6 +1361,172 @@ document.addEventListener("DOMContentLoaded", function () {
             ctx.font = '12px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('Now', currentTimeX, chartArea.top - 5);
+            
+            ctx.restore();
+          }
+        }
+      },
+      {
+        id: 'meridianFlipLine',
+        beforeDatasetsDraw: function(chart) {
+          if (!meridianTime) return;
+          
+          const ctx = chart.ctx;
+          const chartArea = chart.chartArea;
+          
+          if (!chartArea) return;
+          
+          // Find the meridian time position on the x-axis
+          const labels = chart.data.labels;
+          let meridianX = null;
+          
+          // Try to find exact match first
+          const exactIndex = labels.indexOf(meridianTime);
+          if (exactIndex !== -1) {
+            const meta = chart.getDatasetMeta(0);
+            if (meta.data[exactIndex]) {
+              meridianX = meta.data[exactIndex].x;
+            }
+          } else {
+            // If no exact match, interpolate between surrounding times
+            for (let i = 0; i < labels.length - 1; i++) {
+              const time1 = labels[i];
+              const time2 = labels[i + 1];
+              
+              // Convert times to minutes for comparison
+              const meridianMinutes = parseInt(meridianTime.split(':')[0]) * 60 + parseInt(meridianTime.split(':')[1]);
+              const time1Minutes = parseInt(time1.split(':')[0]) * 60 + parseInt(time1.split(':')[1]);
+              const time2Minutes = parseInt(time2.split(':')[0]) * 60 + parseInt(time2.split(':')[1]);
+              
+              // Handle day rollover (e.g., 23:00 -> 01:00)
+              const adjustedTime2Minutes = time2Minutes < time1Minutes ? time2Minutes + 1440 : time2Minutes;
+              const adjustedMeridianMinutes = meridianMinutes < time1Minutes ? meridianMinutes + 1440 : meridianMinutes;
+              
+              if (adjustedMeridianMinutes >= time1Minutes && adjustedMeridianMinutes <= adjustedTime2Minutes) {
+                const meta = chart.getDatasetMeta(0);
+                if (meta.data[i] && meta.data[i + 1]) {
+                  const x1 = meta.data[i].x;
+                  const x2 = meta.data[i + 1].x;
+                  const ratio = (adjustedMeridianMinutes - time1Minutes) / (adjustedTime2Minutes - time1Minutes);
+                  meridianX = x1 + (x2 - x1) * ratio;
+                  break;
+                }
+              }
+            }
+          }
+          
+          // Draw the meridian flip line if we found a position
+          if (meridianX !== null && meridianX >= chartArea.left && meridianX <= chartArea.right) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(156, 39, 176, 0.8)'; // Purple color
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 3]); // Dashed line to differentiate from current time
+            ctx.beginPath();
+            ctx.moveTo(meridianX, chartArea.top);
+            ctx.lineTo(meridianX, chartArea.bottom);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Add label for meridian flip
+            ctx.fillStyle = 'rgba(156, 39, 176, 1)';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Meridian', meridianX, chartArea.top - 5);
+            
+            ctx.restore();
+          }
+        }
+      },
+      {
+        id: 'moonRiseSetLines',
+        beforeDatasetsDraw: function(chart) {
+          const ctx = chart.ctx;
+          const chartArea = chart.chartArea;
+          
+          if (!chartArea) return;
+          
+          const labels = chart.data.labels;
+          
+          // Helper function to find X position for a given time
+          function findTimeX(targetTime) {
+            if (!targetTime) return null;
+            
+            // Try to find exact match first
+            const exactIndex = labels.indexOf(targetTime);
+            if (exactIndex !== -1) {
+              const meta = chart.getDatasetMeta(0);
+              if (meta.data[exactIndex]) {
+                return meta.data[exactIndex].x;
+              }
+            }
+            
+            // If no exact match, interpolate between surrounding times
+            for (let i = 0; i < labels.length - 1; i++) {
+              const time1 = labels[i];
+              const time2 = labels[i + 1];
+              
+              // Convert times to minutes for comparison
+              const targetMinutes = parseInt(targetTime.split(':')[0]) * 60 + parseInt(targetTime.split(':')[1]);
+              const time1Minutes = parseInt(time1.split(':')[0]) * 60 + parseInt(time1.split(':')[1]);
+              const time2Minutes = parseInt(time2.split(':')[0]) * 60 + parseInt(time2.split(':')[1]);
+              
+              // Handle day rollover (e.g., 23:00 -> 01:00)
+              const adjustedTime2Minutes = time2Minutes < time1Minutes ? time2Minutes + 1440 : time2Minutes;
+              const adjustedTargetMinutes = targetMinutes < time1Minutes ? targetMinutes + 1440 : targetMinutes;
+              
+              if (adjustedTargetMinutes >= time1Minutes && adjustedTargetMinutes <= adjustedTime2Minutes) {
+                const meta = chart.getDatasetMeta(0);
+                if (meta.data[i] && meta.data[i + 1]) {
+                  const x1 = meta.data[i].x;
+                  const x2 = meta.data[i + 1].x;
+                  const ratio = (adjustedTargetMinutes - time1Minutes) / (adjustedTime2Minutes - time1Minutes);
+                  return x1 + (x2 - x1) * ratio;
+                }
+              }
+            }
+            return null;
+          }
+          
+          // Draw moon rise line
+          const moonRiseX = findTimeX(moonRiseTime);
+          if (moonRiseX !== null && moonRiseX >= chartArea.left && moonRiseX <= chartArea.right) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 193, 7, 0.8)'; // Amber/yellow color for moon
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(moonRiseX, chartArea.top);
+            ctx.lineTo(moonRiseX, chartArea.bottom);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Add label for moon rise
+            ctx.fillStyle = 'rgba(255, 193, 7, 1)';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('🌙↑', moonRiseX, chartArea.bottom + 12);
+            
+            ctx.restore();
+          }
+          
+          // Draw moon set line
+          const moonSetX = findTimeX(moonSetTime);
+          if (moonSetX !== null && moonSetX >= chartArea.left && moonSetX <= chartArea.right) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 193, 7, 0.8)'; // Amber/yellow color for moon
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(moonSetX, chartArea.top);
+            ctx.lineTo(moonSetX, chartArea.bottom);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Add label for moon set
+            ctx.fillStyle = 'rgba(255, 193, 7, 1)';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('🌙↓', moonSetX, chartArea.bottom + 12);
             
             ctx.restore();
           }

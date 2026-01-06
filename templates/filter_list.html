@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h4 mb-0">Filter Management</h1>
+  <div>
+    <a href="{{ url_for('filter_wheel_list') }}" class="btn btn-outline-light me-2">
+      <i class="bi bi-gear"></i> Filter Wheels
+    </a>
+    <a href="{{ url_for('new_filter') }}" class="btn btn-primary">
+      <i class="bi bi-plus-circle"></i> New Filter
+    </a>
+  </div>
+</div>
+
+<p class="text-muted mb-4">
+  Manage filter types used across your palettes and filter wheels. System filters can be deactivated but not deleted.
+</p>
+
+<div class="row">
+  {% for filter in filters %}
+  <div class="col-md-6 col-lg-4 mb-4">
+    <div class="card {% if not filter.is_active %}opacity-50{% endif %}">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <h6 class="mb-0">{{ filter.name }}</h6>
+          <small class="text-muted">{{ filter.display_name }}</small>
+        </div>
+        <div>
+          {% if filter.is_system %}
+            <span class="badge bg-success">System</span>
+          {% else %}
+            <span class="badge bg-info">Custom</span>
+          {% endif %}
+          {% if not filter.is_active %}
+            <span class="badge bg-warning">Inactive</span>
+          {% endif %}
+        </div>
+      </div>
+      
+      <div class="card-body">
+        <!-- Filter Info -->
+        <div class="row mb-3">
+          <div class="col-6">
+            <small class="text-muted d-block">Type</small>
+            <span class="badge {% if filter.filter_type == 'narrowband' %}bg-danger{% elif filter.filter_type == 'broadband' %}bg-primary{% else %}bg-secondary{% endif %}">
+              {{ filter.filter_type | title }}
+            </span>
+          </div>
+          <div class="col-6">
+            <small class="text-muted d-block">Default Exposure</small>
+            <strong>{{ filter.default_exposure }}s</strong>
+          </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="d-flex gap-2">
+          <a href="{{ url_for('edit_filter', filter_id=filter.id) }}" class="btn btn-sm btn-outline-light">
+            <i class="bi bi-pencil"></i> Edit
+          </a>
+          
+          <form method="post" action="{{ url_for('delete_filter', filter_id=filter.id) }}" 
+                class="d-inline" 
+                {% if not filter.is_system %}onsubmit="return confirm('Delete this filter?')"{% endif %}>
+            {% if filter.is_system %}
+              <button type="submit" class="btn btn-sm btn-outline-{% if filter.is_active %}warning{% else %}success{% endif %}">
+                <i class="bi bi-{% if filter.is_active %}pause{% else %}play{% endif %}-circle"></i> 
+                {% if filter.is_active %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            {% else %}
+              <button type="submit" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash"></i> Delete
+              </button>
+            {% endif %}
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if not filters %}
+<div class="text-center py-5">
+  <h5 class="text-muted">No filters found</h5>
+  <p class="text-muted">System filters will be created on database initialization.</p>
+  <a href="{{ url_for('new_filter') }}" class="btn btn-primary">Create Filter</a>
+</div>
+{% endif %}
+
+{% endblock %}

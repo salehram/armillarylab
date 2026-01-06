@@ -230,10 +230,17 @@ class DatabaseMigrator:
         """Get table names in export order (dependencies first)."""
         # For AstroPlanner, the dependency order is:
         # 1. Independent tables (no foreign keys)
-        # 2. Tables with foreign keys
+        # 2. Tables with foreign keys to independent tables
+        # 3. Tables with foreign keys to dependent tables
         
-        independent_tables = ['target_types', 'palettes', 'global_configs']
-        dependent_tables = ['targets', 'target_plans', 'imaging_sessions', 'object_mappings']
+        # Level 1: No foreign key dependencies
+        independent_tables = ['target_types', 'palettes', 'global_config', 'filters', 'filter_wheels']
+        
+        # Level 2: Depend on independent tables
+        level2_tables = ['targets', 'object_mappings', 'filter_wheel_slots', 'palette_filters']
+        
+        # Level 3: Depend on level 2 tables
+        level3_tables = ['target_plans', 'imaging_sessions']
         
         # Filter to only existing tables
         all_tables = set(metadata.tables.keys())
@@ -243,7 +250,11 @@ class DatabaseMigrator:
             if table in all_tables:
                 export_order.append(table)
         
-        for table in dependent_tables:
+        for table in level2_tables:
+            if table in all_tables:
+                export_order.append(table)
+                
+        for table in level3_tables:
             if table in all_tables:
                 export_order.append(table)
         

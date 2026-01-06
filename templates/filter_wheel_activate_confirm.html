@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card border-warning">
+  <div class="card-header bg-warning text-dark">
+    <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Filter Compatibility Warning</h5>
+  </div>
+  <div class="card-body">
+    <p>
+      You're about to activate <strong>{{ wheel.name }}</strong>. 
+      Some of your active target plans use filters that are not configured on this wheel:
+    </p>
+    
+    <div class="table-responsive mb-4">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Target</th>
+            <th>Missing Filters</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in affected_targets %}
+          <tr>
+            <td>
+              <a href="{{ url_for('target_detail', target_id=item.target.id) }}">
+                {{ item.target.name }}
+              </a>
+            </td>
+            <td>
+              {% for filter_name in item.missing_filters %}
+                <span class="badge bg-danger">{{ filter_name }}</span>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="alert alert-info">
+      <i class="bi bi-info-circle"></i>
+      <strong>What this means:</strong> NINA exports for these targets may not work correctly 
+      because the required filters aren't mapped to wheel positions. You can:
+      <ul class="mb-0 mt-2">
+        <li>Add the missing filters to the wheel slots</li>
+        <li>Update the target plans to use different filters</li>
+        <li>Switch anyway and manually adjust NINA sequences</li>
+      </ul>
+    </div>
+    
+    <div class="d-flex gap-2">
+      <form method="post" action="{{ url_for('activate_filter_wheel', wheel_id=wheel.id) }}">
+        <input type="hidden" name="confirm" value="yes">
+        <button type="submit" class="btn btn-warning">
+          <i class="bi bi-check-circle"></i> Switch Anyway
+        </button>
+      </form>
+      <a href="{{ url_for('filter_wheel_list') }}" class="btn btn-secondary">
+        <i class="bi bi-x-circle"></i> Cancel
+      </a>
+      <a href="{{ url_for('edit_filter_wheel', wheel_id=wheel.id) }}" class="btn btn-outline-light">
+        <i class="bi bi-pencil"></i> Configure Wheel First
+      </a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -153,6 +153,116 @@ class Palette(db.Model):
         self.filters_json = json.dumps(filters_dict)
 
 
+# ---------------------------------------------------------------------------
+# FILTER & FILTER WHEEL MODELS
+# ---------------------------------------------------------------------------
+
+class Filter(db.Model):
+    """Abstract filter type (app-wide definition)."""
+    __tablename__ = "filters"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(16), unique=True, nullable=False)  # Code: "H", "O", "S", "L", etc.
+    display_name = db.Column(db.String(128), nullable=False)  # "Hydrogen Alpha", "Oxygen III"
+    filter_type = db.Column(db.String(32), default="narrowband")  # narrowband, broadband, other
+    default_exposure = db.Column(db.Integer, default=300)  # Default sub exposure in seconds
+    is_system = db.Column(db.Boolean, default=False)  # True for built-in filters
+    is_active = db.Column(db.Boolean, default=True)  # Can be deactivated (not deleted) for system
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    wheel_slots = relationship("FilterWheelSlot", back_populates="filter", cascade="all, delete-orphan")
+    palette_filters = relationship("PaletteFilter", back_populates="filter", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<Filter {self.name} ({self.display_name})>"
+
+
+class FilterWheel(db.Model):
+    """Physical filter wheel hardware profile."""
+    __tablename__ = "filter_wheels"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False)  # "ZWO 8x1.25"", "Astronomik 7x2""
+    slot_count = db.Column(db.Integer, nullable=False, default=8)  # Number of filter positions
+    filter_size = db.Column(db.String(16), default="1.25\"")  # "1.25"", "2"", "36mm"
+    nina_profile_name = db.Column(db.String(128))  # Optional NINA equipment profile name
+    is_active = db.Column(db.Boolean, default=False)  # Only one wheel active at a time
+    is_default = db.Column(db.Boolean, default=False)  # Mark as default wheel
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    slots = relationship("FilterWheelSlot", back_populates="wheel", cascade="all, delete-orphan",
+                        order_by="FilterWheelSlot.position")
+    
+    def __repr__(self):
+        return f"<FilterWheel {self.name} ({self.slot_count} slots)>"
+    
+    def get_filter_at_position(self, position):
+        """Get the filter at a specific wheel position."""
+        for slot in self.slots:
+            if slot.position == position:
+                return slot.filter
+        return None
+    
+    def get_slot_by_filter_name(self, filter_name):
+        """Get slot info by filter name/code."""
+        for slot in self.slots:
+            if slot.filter and slot.filter.name == filter_name:
+                return slot
+        return None
+
+
+class FilterWheelSlot(db.Model):
+    """Position mapping linking filters to physical wheel slots."""
+    __tablename__ = "filter_wheel_slots"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    filter_wheel_id = db.Column(db.Integer, db.ForeignKey("filter_wheels.id"), nullable=False)
+    filter_id = db.Column(db.Integer, db.ForeignKey("filters.id"), nullable=True)  # NULL = empty slot
+    position = db.Column(db.Integer, nullable=False)  # 0-indexed wheel position
+    nina_filter_name = db.Column(db.String(64))  # NINA-specific name: "Ha", "OIII", "SII"
+    physical_filter_brand = db.Column(db.String(128))  # Optional: "Antlia", "Optolong", "Astronomik"
+    notes = db.Column(db.Text)  # Optional notes about this slot
+    
+    # Relationships
+    wheel = relationship("FilterWheel", back_populates="slots")
+    filter = relationship("Filter", back_populates="wheel_slots")
+    
+    # Unique constraint: one filter per position per wheel
+    __table_args__ = (
+        db.UniqueConstraint('filter_wheel_id', 'position', name='unique_wheel_position'),
+    )
+    
+    def __repr__(self):
+        filter_name = self.filter.name if self.filter else "Empty"
+        return f"<FilterWheelSlot pos={self.position} filter={filter_name}>"
+
+
+class PaletteFilter(db.Model):
+    """Association table linking Palettes to Filters with additional attributes."""
+    __tablename__ = "palette_filters"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    palette_id = db.Column(db.Integer, db.ForeignKey("palettes.id"), nullable=False)
+    filter_id = db.Column(db.Integer, db.ForeignKey("filters.id"), nullable=False)
+    rgb_channel = db.Column(db.String(16))  # "red", "green", "blue", "luminance", or combo like "GB"
+    weight = db.Column(db.Float, default=1.0)  # Relative weight for this filter in the palette
+    order = db.Column(db.Integer, default=0)  # Display/processing order
+    
+    # Relationships
+    palette = relationship("Palette", backref="palette_filters_rel")
+    filter = relationship("Filter", back_populates="palette_filters")
+    
+    # Unique constraint: one filter per palette
+    __table_args__ = (
+        db.UniqueConstraint('palette_id', 'filter_id', name='unique_palette_filter'),
+    )
+    
+    def __repr__(self):
+        return f"<PaletteFilter palette={self.palette_id} filter={self.filter_id} rgb={self.rgb_channel}>"
+
+
 class Target(db.Model):
     __tablename__ = "targets"
 
@@ -1472,6 +1582,341 @@ def delete_palette(palette_id):
 
 
 # ---------------------------------------------------------------------------
+# FILTER MANAGEMENT ROUTES
+# ---------------------------------------------------------------------------
+
+@app.route("/filters")
+def filter_list():
+    """List all filters."""
+    filters = Filter.query.order_by(Filter.is_system.desc(), Filter.name).all()
+    return render_template("filter_list.html", filters=filters)
+
+
+@app.route("/filter/new", methods=["GET", "POST"])
+def new_filter():
+    """Create a new custom filter."""
+    if request.method == "POST":
+        name = request.form.get("name", "").strip().upper()
+        display_name = request.form.get("display_name", "").strip()
+        filter_type = request.form.get("filter_type", "narrowband")
+        default_exposure = int(request.form.get("default_exposure", 300))
+        
+        if name and display_name:
+            # Check for duplicate name
+            existing = Filter.query.filter_by(name=name).first()
+            if existing:
+                flash(f"A filter with code '{name}' already exists.", "error")
+            else:
+                try:
+                    filter_obj = Filter(
+                        name=name,
+                        display_name=display_name,
+                        filter_type=filter_type,
+                        default_exposure=default_exposure,
+                        is_system=False,
+                        is_active=True
+                    )
+                    db.session.add(filter_obj)
+                    db.session.commit()
+                    flash(f"Filter '{display_name}' created successfully!", "success")
+                    return redirect(url_for("filter_list"))
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f"Error creating filter: {e}", "error")
+        else:
+            flash("Please fill in all required fields (name and display name).", "error")
+    
+    return render_template("filter_form.html", filter=None)
+
+
+@app.route("/filter/<int:filter_id>/edit", methods=["GET", "POST"])
+def edit_filter(filter_id):
+    """Edit an existing filter."""
+    filter_obj = Filter.query.get_or_404(filter_id)
+    
+    if request.method == "POST":
+        # System filters can only change display_name and default_exposure
+        if not filter_obj.is_system:
+            new_name = request.form.get("name", "").strip().upper()
+            # Check for duplicate if name changed
+            if new_name != filter_obj.name:
+                existing = Filter.query.filter_by(name=new_name).first()
+                if existing:
+                    flash(f"A filter with code '{new_name}' already exists.", "error")
+                    return render_template("filter_form.html", filter=filter_obj)
+            filter_obj.name = new_name
+            filter_obj.filter_type = request.form.get("filter_type", "narrowband")
+        
+        filter_obj.display_name = request.form.get("display_name", "").strip()
+        filter_obj.default_exposure = int(request.form.get("default_exposure", 300))
+        
+        if filter_obj.display_name:
+            try:
+                db.session.commit()
+                flash(f"Filter '{filter_obj.display_name}' updated successfully!", "success")
+                return redirect(url_for("filter_list"))
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Error updating filter: {e}", "error")
+        else:
+            flash("Display name is required.", "error")
+    
+    return render_template("filter_form.html", filter=filter_obj)
+
+
+@app.route("/filter/<int:filter_id>/delete", methods=["POST"])
+def delete_filter(filter_id):
+    """Delete or deactivate a filter."""
+    filter_obj = Filter.query.get_or_404(filter_id)
+    
+    # System filters can only be deactivated, not deleted
+    if filter_obj.is_system:
+        filter_obj.is_active = not filter_obj.is_active
+        status = "activated" if filter_obj.is_active else "deactivated"
+        try:
+            db.session.commit()
+            flash(f"System filter '{filter_obj.display_name}' {status}.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Error updating filter: {e}", "error")
+    else:
+        # Check if filter is used in any palette or wheel slot
+        palette_usages = PaletteFilter.query.filter_by(filter_id=filter_id).count()
+        slot_usages = FilterWheelSlot.query.filter_by(filter_id=filter_id).count()
+        
+        if palette_usages > 0 or slot_usages > 0:
+            flash(f"Cannot delete filter - it's used in {palette_usages} palette(s) and {slot_usages} wheel slot(s).", "error")
+        else:
+            try:
+                db.session.delete(filter_obj)
+                db.session.commit()
+                flash(f"Filter '{filter_obj.display_name}' deleted successfully!", "success")
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Error deleting filter: {e}", "error")
+    
+    return redirect(url_for("filter_list"))
+
+
+@app.route("/api/filters")
+def api_filters():
+    """API endpoint returning all active filters as JSON."""
+    filters = Filter.query.filter_by(is_active=True).order_by(Filter.name).all()
+    return jsonify([{
+        "id": f.id,
+        "name": f.name,
+        "display_name": f.display_name,
+        "filter_type": f.filter_type,
+        "default_exposure": f.default_exposure,
+        "is_system": f.is_system
+    } for f in filters])
+
+
+# ---------------------------------------------------------------------------
+# FILTER WHEEL MANAGEMENT ROUTES
+# ---------------------------------------------------------------------------
+
+@app.route("/filter-wheels")
+def filter_wheel_list():
+    """List all filter wheels."""
+    wheels = FilterWheel.query.order_by(FilterWheel.is_active.desc(), FilterWheel.name).all()
+    return render_template("filter_wheel_list.html", wheels=wheels)
+
+
+@app.route("/filter-wheel/new", methods=["GET", "POST"])
+def new_filter_wheel():
+    """Create a new filter wheel."""
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        slot_count = int(request.form.get("slot_count", 8))
+        filter_size = request.form.get("filter_size", "1.25\"").strip()
+        nina_profile_name = request.form.get("nina_profile_name", "").strip() or None
+        
+        if name:
+            try:
+                wheel = FilterWheel(
+                    name=name,
+                    slot_count=slot_count,
+                    filter_size=filter_size,
+                    nina_profile_name=nina_profile_name,
+                    is_active=False,
+                    is_default=False
+                )
+                db.session.add(wheel)
+                db.session.commit()
+                
+                # Create empty slots for the wheel
+                for pos in range(slot_count):
+                    slot = FilterWheelSlot(
+                        filter_wheel_id=wheel.id,
+                        filter_id=None,
+                        position=pos
+                    )
+                    db.session.add(slot)
+                db.session.commit()
+                
+                flash(f"Filter wheel '{name}' created successfully! Configure the slots below.", "success")
+                return redirect(url_for("edit_filter_wheel", wheel_id=wheel.id))
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Error creating filter wheel: {e}", "error")
+        else:
+            flash("Please provide a name for the filter wheel.", "error")
+    
+    filters = Filter.query.filter_by(is_active=True).order_by(Filter.name).all()
+    return render_template("filter_wheel_form.html", wheel=None, filters=filters)
+
+
+@app.route("/filter-wheel/<int:wheel_id>/edit", methods=["GET", "POST"])
+def edit_filter_wheel(wheel_id):
+    """Edit a filter wheel and its slot assignments."""
+    wheel = FilterWheel.query.get_or_404(wheel_id)
+    
+    if request.method == "POST":
+        wheel.name = request.form.get("name", "").strip()
+        wheel.filter_size = request.form.get("filter_size", "1.25\"").strip()
+        wheel.nina_profile_name = request.form.get("nina_profile_name", "").strip() or None
+        
+        # Update slot assignments
+        for slot in wheel.slots:
+            filter_id_str = request.form.get(f"slot_{slot.position}_filter", "")
+            filter_id = int(filter_id_str) if filter_id_str else None
+            slot.filter_id = filter_id
+            slot.nina_filter_name = request.form.get(f"slot_{slot.position}_nina_name", "").strip() or None
+            slot.physical_filter_brand = request.form.get(f"slot_{slot.position}_brand", "").strip() or None
+            slot.notes = request.form.get(f"slot_{slot.position}_notes", "").strip() or None
+        
+        try:
+            db.session.commit()
+            flash(f"Filter wheel '{wheel.name}' updated successfully!", "success")
+            return redirect(url_for("filter_wheel_list"))
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Error updating filter wheel: {e}", "error")
+    
+    filters = Filter.query.filter_by(is_active=True).order_by(Filter.name).all()
+    return render_template("filter_wheel_form.html", wheel=wheel, filters=filters)
+
+
+@app.route("/filter-wheel/<int:wheel_id>/delete", methods=["POST"])
+def delete_filter_wheel(wheel_id):
+    """Delete a filter wheel."""
+    wheel = FilterWheel.query.get_or_404(wheel_id)
+    
+    # Don't allow deleting the active wheel
+    if wheel.is_active:
+        flash("Cannot delete the active filter wheel. Activate another wheel first.", "error")
+        return redirect(url_for("filter_wheel_list"))
+    
+    try:
+        db.session.delete(wheel)
+        db.session.commit()
+        flash(f"Filter wheel '{wheel.name}' deleted successfully!", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error deleting filter wheel: {e}", "error")
+    
+    return redirect(url_for("filter_wheel_list"))
+
+
+@app.route("/filter-wheel/<int:wheel_id>/activate", methods=["POST"])
+def activate_filter_wheel(wheel_id):
+    """Activate a filter wheel with validation against active target plans."""
+    wheel = FilterWheel.query.get_or_404(wheel_id)
+    
+    # Get all filter codes available on this wheel
+    wheel_filter_codes = set()
+    for slot in wheel.slots:
+        if slot.filter:
+            wheel_filter_codes.add(slot.filter.name)
+    
+    # Check active target plans for filter compatibility
+    affected_targets = []
+    targets = Target.query.all()
+    
+    for target in targets:
+        # Get the latest plan for this target
+        plan = TargetPlan.query.filter_by(target_id=target.id).order_by(TargetPlan.created_at.desc()).first()
+        if plan:
+            try:
+                plan_data = json.loads(plan.plan_json)
+                channels = plan_data.get("channels", [])
+                
+                # Check each channel's filter
+                missing_filters = []
+                for ch in channels:
+                    filter_name = ch.get("name", "")
+                    # For custom filters, check mapped_filter_id or nina_filter
+                    mapped_filter = ch.get("mapped_filter_id")
+                    if mapped_filter:
+                        mapped = Filter.query.get(mapped_filter)
+                        if mapped and mapped.name not in wheel_filter_codes:
+                            missing_filters.append(mapped.name)
+                    elif filter_name not in wheel_filter_codes:
+                        # Check if it's a standard filter
+                        if Filter.query.filter_by(name=filter_name).first():
+                            missing_filters.append(filter_name)
+                
+                if missing_filters:
+                    affected_targets.append({
+                        "target": target,
+                        "missing_filters": list(set(missing_filters))
+                    })
+            except (json.JSONDecodeError, KeyError):
+                pass
+    
+    # If there are affected targets and user hasn't confirmed, show warning
+    if affected_targets and request.form.get("confirm") != "yes":
+        return render_template("filter_wheel_activate_confirm.html", 
+                             wheel=wheel, 
+                             affected_targets=affected_targets)
+    
+    # Proceed with activation
+    try:
+        # Deactivate all other wheels
+        FilterWheel.query.update({FilterWheel.is_active: False})
+        
+        # Activate selected wheel
+        wheel.is_active = True
+        db.session.commit()
+        
+        flash(f"Filter wheel '{wheel.name}' is now active!", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error activating filter wheel: {e}", "error")
+    
+    return redirect(url_for("filter_wheel_list"))
+
+
+@app.route("/api/active-wheel")
+def api_active_wheel():
+    """API endpoint returning the active filter wheel configuration."""
+    wheel = FilterWheel.query.filter_by(is_active=True).first()
+    if not wheel:
+        return jsonify({"error": "No active filter wheel"}), 404
+    
+    slots = []
+    for slot in wheel.slots:
+        slots.append({
+            "position": slot.position,
+            "filter_id": slot.filter_id,
+            "filter_name": slot.filter.name if slot.filter else None,
+            "filter_display_name": slot.filter.display_name if slot.filter else None,
+            "nina_filter_name": slot.nina_filter_name,
+            "brand": slot.physical_filter_brand
+        })
+    
+    return jsonify({
+        "id": wheel.id,
+        "name": wheel.name,
+        "slot_count": wheel.slot_count,
+        "filter_size": wheel.filter_size,
+        "nina_profile_name": wheel.nina_profile_name,
+        "slots": slots
+    })
+
+
+# ---------------------------------------------------------------------------
 # CLI helper
 # ---------------------------------------------------------------------------
 
@@ -1580,6 +2025,77 @@ def init_db():
         
         db.session.commit()
         print("Created default palettes.")
+    
+    # Create default system filters if none exist
+    if not Filter.query.first():
+        # System filters matching nina_integration.py FILTER_CONFIG
+        default_filters = [
+            # Narrowband filters
+            {"name": "H", "display_name": "Hydrogen Alpha", "filter_type": "narrowband", "default_exposure": 300},
+            {"name": "O", "display_name": "Oxygen III", "filter_type": "narrowband", "default_exposure": 300},
+            {"name": "S", "display_name": "Sulfur II", "filter_type": "narrowband", "default_exposure": 300},
+            # Broadband filters
+            {"name": "L", "display_name": "Luminance", "filter_type": "broadband", "default_exposure": 180},
+            {"name": "R", "display_name": "Red", "filter_type": "broadband", "default_exposure": 180},
+            {"name": "G", "display_name": "Green", "filter_type": "broadband", "default_exposure": 180},
+            {"name": "B", "display_name": "Blue", "filter_type": "broadband", "default_exposure": 180},
+            # Other filters
+            {"name": "LP", "display_name": "Light Pollution", "filter_type": "other", "default_exposure": 300},
+        ]
+        
+        for f_data in default_filters:
+            filter_obj = Filter(
+                name=f_data["name"],
+                display_name=f_data["display_name"],
+                filter_type=f_data["filter_type"],
+                default_exposure=f_data["default_exposure"],
+                is_system=True,
+                is_active=True
+            )
+            db.session.add(filter_obj)
+        
+        db.session.commit()
+        print("Created default system filters.")
+    
+    # Create default filter wheel if none exists
+    if not FilterWheel.query.first():
+        # Create default 8-slot wheel matching nina_integration.py FILTER_CONFIG positions
+        default_wheel = FilterWheel(
+            name="Default 8-Slot (1.25\")",
+            slot_count=8,
+            filter_size='1.25"',
+            nina_profile_name=None,
+            is_active=True,
+            is_default=True
+        )
+        db.session.add(default_wheel)
+        db.session.commit()
+        
+        # Create slots with filter assignments matching FILTER_CONFIG positions
+        # FILTER_CONFIG: LP=0, L=1, R=2, G=3, B=4, H=5, S=6, O=7
+        slot_config = [
+            {"position": 0, "filter_code": "LP", "nina_name": "LP"},
+            {"position": 1, "filter_code": "L", "nina_name": "L"},
+            {"position": 2, "filter_code": "R", "nina_name": "R"},
+            {"position": 3, "filter_code": "G", "nina_name": "G"},
+            {"position": 4, "filter_code": "B", "nina_name": "B"},
+            {"position": 5, "filter_code": "H", "nina_name": "Ha"},
+            {"position": 6, "filter_code": "S", "nina_name": "SII"},
+            {"position": 7, "filter_code": "O", "nina_name": "OIII"},
+        ]
+        
+        for slot_data in slot_config:
+            filter_obj = Filter.query.filter_by(name=slot_data["filter_code"]).first()
+            slot = FilterWheelSlot(
+                filter_wheel_id=default_wheel.id,
+                filter_id=filter_obj.id if filter_obj else None,
+                position=slot_data["position"],
+                nina_filter_name=slot_data["nina_name"]
+            )
+            db.session.add(slot)
+        
+        db.session.commit()
+        print("Created default filter wheel with slot assignments.")
     
     print("Database initialized.")
 

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1 class="h4 mb-4">
+  {% if filter %}Edit Filter: {{ filter.display_name }}{% else %}Create New Filter{% endif %}
+</h1>
+
+{% if filter and filter.is_system %}
+<div class="alert alert-info">
+  <i class="bi bi-info-circle"></i> This is a system filter. Only the display name and default exposure can be changed.
+</div>
+{% endif %}
+
+<form method="post">
+  <div class="row">
+    <div class="col-md-6">
+      
+      <!-- Filter Code -->
+      <div class="mb-3">
+        <label class="form-label">Filter Code <span class="text-danger">*</span></label>
+        <input class="form-control" name="name" 
+               value="{{ filter.name if filter else '' }}" 
+               {% if filter and filter.is_system %}readonly{% endif %} 
+               required
+               placeholder="e.g., H, O, S, L, R, G, B"
+               maxlength="16"
+               style="text-transform: uppercase;">
+        <div class="form-text">Short code used internally (e.g., "H" for Hydrogen Alpha). Must be unique.</div>
+      </div>
+
+      <!-- Display Name -->
+      <div class="mb-3">
+        <label class="form-label">Display Name <span class="text-danger">*</span></label>
+        <input class="form-control" name="display_name" 
+               value="{{ filter.display_name if filter else '' }}" required
+               placeholder="e.g., Hydrogen Alpha">
+        <div class="form-text">Human-readable name shown in the UI.</div>
+      </div>
+
+      <!-- Filter Type -->
+      <div class="mb-3">
+        <label class="form-label">Filter Type</label>
+        <select class="form-select" name="filter_type" 
+                {% if filter and filter.is_system %}disabled{% endif %}>
+          <option value="narrowband" {% if filter and filter.filter_type == 'narrowband' %}selected{% endif %}>
+            Narrowband (Ha, OIII, SII, etc.)
+          </option>
+          <option value="broadband" {% if filter and filter.filter_type == 'broadband' %}selected{% endif %}>
+            Broadband (L, R, G, B)
+          </option>
+          <option value="other" {% if filter and filter.filter_type == 'other' %}selected{% endif %}>
+            Other (LP, UV, IR, etc.)
+          </option>
+        </select>
+        {% if filter and filter.is_system %}
+        <input type="hidden" name="filter_type" value="{{ filter.filter_type }}">
+        {% endif %}
+        <div class="form-text">Category of the filter for organization purposes.</div>
+      </div>
+
+      <!-- Default Exposure -->
+      <div class="mb-3">
+        <label class="form-label">Default Exposure (seconds)</label>
+        <input class="form-control" name="default_exposure" type="number"
+               value="{{ filter.default_exposure if filter else 300 }}" 
+               min="1" max="3600">
+        <div class="form-text">Default sub-exposure time when creating new plans with this filter.</div>
+      </div>
+      
+    </div>
+    
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0"><i class="bi bi-info-circle"></i> Filter Information</h6>
+        </div>
+        <div class="card-body">
+          <p class="small mb-2">
+            <strong>Filter codes</strong> are used internally to match filters across palettes, 
+            plans, and filter wheels. Common codes:
+          </p>
+          <ul class="small mb-3">
+            <li><code>H</code> - Hydrogen Alpha (Ha)</li>
+            <li><code>O</code> - Oxygen III (OIII)</li>
+            <li><code>S</code> - Sulfur II (SII)</li>
+            <li><code>L</code> - Luminance</li>
+            <li><code>R</code>, <code>G</code>, <code>B</code> - Red, Green, Blue</li>
+            <li><code>LP</code> - Light Pollution</li>
+          </ul>
+          <p class="small mb-0">
+            <strong>NINA mapping</strong> is configured separately in the filter wheel settings, 
+            allowing different physical filters to use the same filter code.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Submit -->
+  <div class="mt-4">
+    <button type="submit" class="btn btn-primary">
+      {% if filter %}
+        <i class="bi bi-floppy me-1"></i>Update Filter
+      {% else %}
+        <i class="bi bi-plus-circle me-1"></i>Create Filter
+      {% endif %}
+    </button>
+    <a href="{{ url_for('filter_list') }}" class="btn btn-secondary">
+      <i class="bi bi-x-circle me-1"></i>Cancel
+    </a>
+  </div>
+</form>
+
+{% endblock %}

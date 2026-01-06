@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from copy import deepcopy
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-# Your filter wheel mapping (positions start from 0 as you said)
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Legacy filter wheel mapping (used as fallback)
 # Channels here are the short codes used in your planner: H, O, S, L, R, G, B, LP
 FILTER_CONFIG: dict[str, dict[str, int | str]] = {
     "LP": {"nina_name": "LP",   "position": 0},
@@ -17,6 +21,50 @@ FILTER_CONFIG: dict[str, dict[str, int | str]] = {
     "S":  {"nina_name": "SII",  "position": 6},   # SII
     "O":  {"nina_name": "OIII", "position": 7},   # OIII
 }
+
+
+def get_active_wheel_config() -> Optional[Dict[str, Dict[str, Any]]]:
+    """
+    Get filter configuration from the active filter wheel in the database.
+    Returns a dict mapping filter codes to {nina_name, position}.
+    Returns None if no active wheel or database not available.
+    """
+    try:
+        # Import here to avoid circular imports
+        from app import db, FilterWheel, FilterWheelSlot
+        
+        wheel = FilterWheel.query.filter_by(is_active=True).first()
+        if not wheel:
+            logger.warning("No active filter wheel found, using legacy FILTER_CONFIG")
+            return None
+        
+        config = {}
+        for slot in wheel.slots:
+            if slot.filter:
+                filter_code = slot.filter.name
+                nina_name = slot.nina_filter_name or filter_code
+                config[filter_code] = {
+                    "nina_name": nina_name,
+                    "position": slot.position
+                }
+        
+        logger.info(f"Using active filter wheel '{wheel.name}' with {len(config)} filters")
+        return config
+        
+    except Exception as e:
+        logger.warning(f"Could not load active wheel config: {e}, using legacy FILTER_CONFIG")
+        return None
+
+
+def get_filter_config() -> Dict[str, Dict[str, Any]]:
+    """
+    Get filter configuration, preferring active wheel from database,
+    falling back to legacy FILTER_CONFIG.
+    """
+    wheel_config = get_active_wheel_config()
+    if wheel_config:
+        return wheel_config
+    return FILTER_CONFIG
 
 
 def _deep_clone(obj: Any) -> Any:
@@ -124,6 +172,10 @@ def build_nina_sequence_from_blocks(
 
     # For each remaining block, we create:
     # Wait -> SwitchFilter -> Wait -> TakeManyExposures
+    
+    # Get filter configuration (from active wheel or legacy fallback)
+    filter_config = get_filter_config()
+    
     for idx, block in enumerate(blocks):
         chan = block["channel"]
         exposure_s = float(block["exposure_s"])
@@ -132,9 +184,10 @@ def build_nina_sequence_from_blocks(
         if frames <= 0:
             continue
 
-        cfg = FILTER_CONFIG.get(chan)
+        cfg = filter_config.get(chan)
         if not cfg:
             # unknown channel, skip
+            logger.warning(f"Unknown channel '{chan}' - skipping in NINA export")
             continue
 
         # Clone templates

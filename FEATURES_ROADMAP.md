@@ -577,9 +577,10 @@ Create comprehensive documentation and user guide to help new users get started 
 | Imaging logs & session tracking | ✅ Done | Comprehensive progress tracking with analytics |
 | Enhanced imaging progress & custom filters | ✅ Done | Auto-populated filters, custom filter addition, collapsible UI |
 | Session recommendation engine | 🟡 Pending | AI-driven session optimization |
-| PostgreSQL database support | 🟡 Pending | Cloud deployment readiness |
+| PostgreSQL database support | ✅ Done | Cloud deployment readiness |
 | Automatic recomputation | 🟡 Pending | After changes to settings |
 | Comprehensive user guide & documentation | 🟡 Pending | Getting started guides, tutorials, and feature documentation |
+| Filter & channel management | 🟡 In Progress | Multi-wheel support, NINA integration |
 
 ---
 
@@ -628,6 +629,56 @@ Nothing. Feature fully implemented and production-ready.
 
 ---
 
+---
+
+## 🟡 14. Filter & Channel Management System (Pending)
+### Summary
+Three-tier filter management system: app-wide filter types, multiple filter wheel hardware profiles, and per-wheel slot mappings. Replaces hardcoded filter definitions with database-driven configuration. Full NINA compatibility with flexible naming.
+
+### Architecture
+- **Filter**: Abstract filter type (Ha, OIII, SII, L, R, G, B, LP) with display name, type (narrowband/broadband), default exposure
+- **FilterWheel**: Physical hardware profile (name, slot count, filter size, NINA profile name)
+- **FilterWheelSlot**: Position mapping linking filters to wheel slots with NINA-specific names and optional brand info
+
+### Planned Features
+- Filter CRUD with system filter protection (soft-delete/deactivate only)
+- Filter wheel CRUD with slot assignment interface
+- Wheel activation validation (warn if active plans use unmapped filters)
+- PaletteFilter association (future: replace filters_json in palettes)
+- NINA integration update to use active wheel configuration
+- Migration from existing filters_json with backup
+- API endpoints for dynamic dropdowns (`/api/filters`, `/api/active-wheel`)
+
+### Database Models Added
+```
+filters                    filter_wheels              filter_wheel_slots
+- id                       - id                       - id
+- name (code)              - name                     - filter_wheel_id (FK)
+- display_name             - slot_count               - filter_id (FK)
+- filter_type              - filter_size              - position
+- default_exposure         - nina_profile_name        - nina_filter_name
+- is_system                - is_active                - physical_filter_brand
+- is_active                - is_default               - notes
+
+palette_filters
+- id
+- palette_id (FK)
+- filter_id (FK)
+- rgb_channel
+- weight
+- order
+```
+
+### 14.1 Future Enhancements (Planned)
+- **Visual Wheel Diagram**: Drag-drop slot assignment interface for intuitive configuration
+- **Per-Target Wheel Override**: Allow targets to specify which wheel to use for mixed imaging setups
+- **Profile Export/Import**: Backup and restore filter wheel configurations
+
+### Status
+**🟡 In Progress - Core implementation complete, testing and refinement ongoing.**
+
+---
+
 # Next Recommended Focus
 **11. Session Recommendation Engine** - AI-driven session optimization  
 Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, and enhanced custom filter system), the next major enhancement is implementing an intelligent session recommendation engine. This ambitious feature includes:
@@ -637,6 +688,7 @@ Now that the core planning features are complete (time formatting, palette manag
 - Machine learning to adapt to user behavior and local conditions
 
 Alternative focus areas:
+- **14. Filter & Channel Management System** - Hardware configuration for multi-wheel setups (in progress)
 - **13. Comprehensive User Guide & Documentation** - Getting started guides, tutorials, and feature documentation to improve user onboarding
 - **12. Automatic Recomputation** - Dynamic updates when settings change
 - **Additional Export Formats** - More observatory software integrations

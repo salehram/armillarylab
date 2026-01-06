@@ -222,15 +222,7 @@
                       <div class="col-md-2">
                         <label class="form-label small fw-bold text-light">Maps to Filter <span class="text-danger">*</span></label>
                         <select class="form-control form-control-sm" id="custom_channel_nina_filter">
-                          <option value="">Select...</option>
-                          <option value="H">H (H-Alpha)</option>
-                          <option value="O">O (OIII)</option>
-                          <option value="S">S (SII)</option>
-                          <option value="L">L (Luminance)</option>
-                          <option value="R">R (Red)</option>
-                          <option value="G">G (Green)</option>
-                          <option value="B">B (Blue)</option>
-                          <option value="LP">LP (Light Pollution)</option>
+                          <option value="">Loading filters...</option>
                         </select>
                       </div>
                       <div class="col-md-2">
@@ -638,6 +630,26 @@ document.addEventListener("DOMContentLoaded", function () {
   const globalExpInput = document.getElementById("plan_sub_exposure");
   const planTable = document.getElementById("plan-table");
   const rows = document.querySelectorAll("tr.plan-row");
+  
+  // Load filters from API for custom filter dropdown
+  const customFilterSelect = document.getElementById('custom_channel_nina_filter');
+  if (customFilterSelect) {
+    fetch('/api/filters')
+      .then(response => response.json())
+      .then(filters => {
+        customFilterSelect.innerHTML = '<option value="">Select filter...</option>';
+        filters.forEach(f => {
+          const opt = document.createElement('option');
+          opt.value = f.name;
+          opt.textContent = `${f.name} (${f.display_name})`;
+          customFilterSelect.appendChild(opt);
+        });
+      })
+      .catch(err => {
+        console.error('Error loading filters:', err);
+        customFilterSelect.innerHTML = '<option value="">Error loading filters</option>';
+      });
+  }
   
   // Check if we need to refresh (coming from settings update)
   const urlParams = new URLSearchParams(window.location.search);

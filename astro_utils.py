@@ -7,7 +7,7 @@ import datetime
 from zoneinfo import ZoneInfo
 
 try:
-    from astropy.coordinates import SkyCoord, EarthLocation, AltAz, get_sun
+    from astropy.coordinates import SkyCoord, EarthLocation, AltAz, get_sun, get_body
     from astropy.time import Time
     import astropy.units as u
     from astroplan import Observer
@@ -181,6 +181,7 @@ def compute_target_window(
     steps = 60
     sample_times = []
     altitudes = []
+    moon_altitudes = []
     above = []
 
     if base_end_local > base_start_local:
@@ -191,12 +192,18 @@ def compute_target_window(
             t_ast = ATime(t_utc)
             altaz = coord.transform_to(AltAz(obstime=t_ast, location=location))
             alt = float(altaz.alt.deg)
+            # Calculate moon altitude
+            moon_coord = get_body('moon', t_ast, location)
+            moon_altaz = moon_coord.transform_to(AltAz(obstime=t_ast, location=location))
+            moon_alt = max(0, float(moon_altaz.alt.deg))  # Clip negative values to 0
             sample_times.append(t_loc)
             altitudes.append(alt)
+            moon_altitudes.append(moon_alt)
             above.append(alt >= min_altitude_deg)
     else:
         sample_times = []
         altitudes = []
+        moon_altitudes = []
         above = []
 
     valid_i = [i for i, ok in enumerate(above) if ok]
@@ -228,6 +235,11 @@ def compute_target_window(
     altitude_profile = [
         {"time_label": fmt_short(t), "alt_deg": round(a, 1)}
         for t, a in zip(sample_times, altitudes)
+    ]
+
+    moon_altitude_profile = [
+        {"time_label": fmt_short(t), "alt_deg": round(a, 1)}
+        for t, a in zip(sample_times, moon_altitudes)
     ]
 
     return {
@@ -268,6 +280,7 @@ def compute_target_window(
         "midpoint_altitude_deg": midpoint_alt,
 
         "altitude_profile": altitude_profile,
+        "moon_altitude_profile": moon_altitude_profile,
     }
 
 

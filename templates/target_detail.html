@@ -962,6 +962,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const altitudeData = {{ window_info.altitude_profile|tojson|safe }};
     if (!altitudeData || !altitudeData.length) return;
 
+    const moonAltitudeData = {{ window_info.moon_altitude_profile|tojson|safe }};
     const minAltitude = {{ window_info.min_altitude_deg|tojson|safe }};
     const startTime = "{{ window_info.start_time_local }}".split(' ')[1].slice(0, 5); // Extract HH:MM
     const endTime = "{{ window_info.end_time_local }}".split(' ')[1].slice(0, 5); // Extract HH:MM
@@ -988,7 +989,7 @@ document.addEventListener("DOMContentLoaded", function () {
         labels: altitudeData.map(p => p.time_label),
         datasets: [
           {
-            label: "Altitude (°)",
+            label: "Target Altitude (°)",
             data: altitudeData.map(p => p.alt_deg),
             tension: 0.25,
             borderWidth: 3,
@@ -996,6 +997,17 @@ document.addEventListener("DOMContentLoaded", function () {
             backgroundColor: 'rgba(54, 162, 235, 0.1)',
             pointRadius: 0,
             fill: false
+          },
+          {
+            label: "Moon Altitude (°)",
+            data: moonAltitudeData ? moonAltitudeData.map(p => p.alt_deg) : [],
+            tension: 0.25,
+            borderWidth: 2,
+            borderColor: 'rgba(255, 193, 7, 0.8)',
+            backgroundColor: 'rgba(255, 193, 7, 0.1)',
+            pointRadius: 0,
+            fill: false,
+            borderDash: [3, 3]
           },
           {
             label: `Min Altitude (${minAltitude}°)`,

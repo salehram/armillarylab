@@ -1911,7 +1911,59 @@ def delete_palette(palette_id):
 def filter_list():
     """List all filters."""
     filters = Filter.query.order_by(Filter.is_system.desc(), Filter.name).all()
-    return render_template("filter_list.html", filters=filters)
+    
+    # Load available presets for the Apply Preset modal
+    presets = []
+    preset_dir = os.path.join(get_preset_dir(), 'filters')
+    if os.path.exists(preset_dir):
+        for filename in os.listdir(preset_dir):
+            if filename.endswith('.json'):
+                preset_path = os.path.join(preset_dir, filename)
+                try:
+                    data = load_preset_file(preset_path)
+                    presets.append({
+                        'key': filename.replace('.json', ''),
+                        'name': data.get('preset_name', filename.replace('.json', '')),
+                        'has_astrobin': any(f.get('astrobin_id') for f in data.get('filters', []))
+                    })
+                except Exception:
+                    pass
+    
+    return render_template("filter_list.html", filters=filters, presets=presets)
+
+
+@app.route("/filters/apply-preset-ids", methods=["POST"])
+def apply_preset_astrobin_ids():
+    """Apply AstroBin IDs from a preset to existing filters."""
+    preset_name = request.form.get("preset_name", "")
+    
+    preset_path = os.path.join(get_preset_dir(), 'filters', f'{preset_name}.json')
+    if not os.path.exists(preset_path):
+        flash(f"Preset '{preset_name}' not found.", "error")
+        return redirect(url_for("filter_list"))
+    
+    try:
+        preset_data = load_preset_file(preset_path)
+        preset_filters = {f['name']: f.get('astrobin_id') for f in preset_data.get('filters', [])}
+        
+        updated_count = 0
+        for filter_obj in Filter.query.all():
+            if filter_obj.name in preset_filters and preset_filters[filter_obj.name]:
+                filter_obj.astrobin_id = preset_filters[filter_obj.name]
+                updated_count += 1
+        
+        db.session.commit()
+        
+        if updated_count > 0:
+            flash(f"Updated AstroBin IDs for {updated_count} filter(s) from '{preset_name}' preset.", "success")
+        else:
+            flash("No matching filters found to update.", "warning")
+            
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error applying preset: {e}", "error")
+    
+    return redirect(url_for("filter_list"))
 
 
 @app.route("/filter/new", methods=["GET", "POST"])

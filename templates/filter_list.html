@@ -7,6 +7,9 @@
     <a href="{{ url_for('filter_wheel_list') }}" class="btn btn-outline-light me-2">
       <i class="bi bi-gear"></i> Filter Wheels
     </a>
+    <button type="button" class="btn btn-outline-info me-2" data-bs-toggle="modal" data-bs-target="#applyPresetModal">
+      <i class="bi bi-cloud-download"></i> Apply Preset IDs
+    </button>
     <a href="{{ url_for('new_filter') }}" class="btn btn-primary">
       <i class="bi bi-plus-circle"></i> New Filter
     </a>
@@ -16,6 +19,19 @@
 <p class="text-muted mb-4">
   Manage filter types used across your palettes and filter wheels. System filters can be deactivated but not deleted.
 </p>
+
+<!-- AstroBin ID Status Alert -->
+{% set missing_ids = filters | selectattr('is_active') | rejectattr('astrobin_id') | list %}
+{% if missing_ids %}
+<div class="alert alert-warning d-flex align-items-center mb-4">
+  <i class="bi bi-exclamation-triangle-fill me-2"></i>
+  <div>
+    <strong>{{ missing_ids | length }} filter(s) missing AstroBin IDs:</strong>
+    {{ missing_ids | map(attribute='name') | join(', ') }}
+    <br><small>Click "Apply Preset IDs" to bulk-update from a preset, or edit each filter individually.</small>
+  </div>
+</div>
+{% endif %}
 
 <div class="row">
   {% for filter in filters %}
@@ -41,15 +57,25 @@
       <div class="card-body">
         <!-- Filter Info -->
         <div class="row mb-3">
-          <div class="col-6">
+          <div class="col-4">
             <small class="text-muted d-block">Type</small>
             <span class="badge {% if filter.filter_type == 'narrowband' %}bg-danger{% elif filter.filter_type == 'broadband' %}bg-primary{% else %}bg-secondary{% endif %}">
               {{ filter.filter_type | title }}
             </span>
           </div>
-          <div class="col-6">
-            <small class="text-muted d-block">Default Exposure</small>
+          <div class="col-4">
+            <small class="text-muted d-block">Exposure</small>
             <strong>{{ filter.default_exposure }}s</strong>
+          </div>
+          <div class="col-4">
+            <small class="text-muted d-block">AstroBin ID</small>
+            {% if filter.astrobin_id %}
+              <a href="https://www.astrobin.com/equipment/filter/{{ filter.astrobin_id }}/" target="_blank" class="text-info">
+                <strong>{{ filter.astrobin_id }}</strong> <i class="bi bi-box-arrow-up-right small"></i>
+              </a>
+            {% else %}
+              <span class="badge bg-warning text-dark">Not set</span>
+            {% endif %}
           </div>
         </div>
         
@@ -87,5 +113,46 @@
   <a href="{{ url_for('new_filter') }}" class="btn btn-primary">Create Filter</a>
 </div>
 {% endif %}
+
+<!-- Apply Preset Modal -->
+<div class="modal fade" id="applyPresetModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-cloud-download me-2"></i>Apply AstroBin IDs from Preset</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('apply_preset_astrobin_ids') }}">
+        <div class="modal-body">
+          <p class="text-muted">Update your filters with AstroBin IDs from a preset. This will only update filters that match by name (e.g., H, O, S, L, R, G, B).</p>
+          
+          <div class="mb-3">
+            <label class="form-label">Select Preset</label>
+            <select name="preset_name" class="form-select" required>
+              {% for preset in presets %}
+              <option value="{{ preset.key }}" {% if preset.has_astrobin %}selected{% endif %}>
+                {{ preset.name }} 
+                {% if preset.has_astrobin %}(has AstroBin IDs){% else %}(no IDs){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          
+          <div class="alert alert-info small">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Tip:</strong> The ZWO preset includes AstroBin equipment IDs for ZWO 1.25" filters. 
+            If you use different filters, you can edit individual filters to set your specific AstroBin IDs.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-info">
+            <i class="bi bi-check-circle me-1"></i>Apply IDs
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 {% endblock %}

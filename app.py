@@ -1,3 +1,6 @@
+import csv
+import click
+
 from datetime import datetime, time, timezone, timedelta
 import os
 import io
@@ -166,6 +169,7 @@ class Filter(db.Model):
     display_name = db.Column(db.String(128), nullable=False)  # "Hydrogen Alpha", "Oxygen III"
     filter_type = db.Column(db.String(32), default="narrowband")  # narrowband, broadband, other
     default_exposure = db.Column(db.Integer, default=300)  # Default sub exposure in seconds
+    astrobin_id = db.Column(db.Integer, nullable=True)  # AstroBin equipment database ID for CSV export
     is_system = db.Column(db.Boolean, default=False)  # True for built-in filters
     is_active = db.Column(db.Boolean, default=True)  # Can be deactivated (not deleted) for system
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -786,6 +790,9 @@ def target_detail(target_id):
     # Get active palettes for palette selector
     palettes = Palette.query.filter_by(is_active=True).order_by(Palette.name).all()
 
+    # Get AstroBin ID map for export modal
+    astrobin_filter_map = {f.name: f.astrobin_id for f in Filter.query.all() if f.astrobin_id}
+
     return render_template(
         "target_detail.html",
         target=target,
@@ -800,6 +807,7 @@ def target_detail(target_id):
         progress_minutes=progress_minutes,
         progress_seconds=progress_seconds,
         palettes=palettes,
+        astrobin_filter_map=astrobin_filter_map,
     )
 
 @app.post("/target/<int:target_id>/export_nina")
@@ -885,6 +893,131 @@ def export_nina_sequence(target_id):
     return send_file(
         buf,
         mimetype="application/json",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@app.post("/target/<int:target_id>/export_astrobin")
+def export_astrobin_csv(target_id):
+    """Export imaging sessions for a target as AstroBin-compatible CSV."""
+    target = Target.query.get_or_404(target_id)
+    
+    if not target.sessions:
+        flash("No imaging sessions to export for this target.", "warning")
+        return redirect(url_for("target_detail", target_id=target.id))
+    
+    # Get filter name mapping from the target's plan
+    filter_name_map = {}  # Maps channel name (e.g., "O_HDR_1") to base filter (e.g., "O")
+    plan = (
+        TargetPlan.query
+        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
+        .order_by(TargetPlan.created_at.desc())
+        .first()
+    )
+    if plan:
+        try:
+            plan_data = json.loads(plan.plan_json)
+            for ch in plan_data.get("channels", []):
+                ch_name = ch.get("name", "")
+                # Use nina_filter if available (for custom filters), otherwise use the channel name itself
+                base_filter = (ch.get("nina_filter") or "").strip() or ch_name
+                if ch_name:
+                    filter_name_map[ch_name] = base_filter
+        except (json.JSONDecodeError, KeyError):
+            pass
+    
+    # Build AstroBin ID map from database filters
+    astrobin_id_map = {}  # Maps filter name (e.g., "H") to AstroBin ID (e.g., 1955)
+    for f in Filter.query.all():
+        if f.astrobin_id:
+            astrobin_id_map[f.name] = f.astrobin_id
+    
+    # Get form data with defaults
+    binning = request.form.get("binning", "1")
+    gain = request.form.get("gain", "100")
+    sensor_cooling = request.form.get("sensor_cooling", "-10")
+    bortle = request.form.get("bortle", "")
+    darks = request.form.get("darks", "")
+    flats = request.form.get("flats", "")
+    flat_darks = request.form.get("flat_darks", "")
+    bias = request.form.get("bias", "")
+    
+    # Build CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    header = ["date", "filter", "number", "duration", "binning", "gain", "sensorCooling"]
+    if darks:
+        header.append("darks")
+    if flats:
+        header.append("flats")
+    if flat_darks:
+        header.append("flatDarks")
+    if bias:
+        header.append("bias")
+    if bortle:
+        header.append("bortle")
+    writer.writerow(header)
+    
+    # Group sessions by date and BASE filter to consolidate
+    # Map channel names to their base filter names
+    from collections import defaultdict
+    sessions_grouped = defaultdict(lambda: {"number": 0, "duration": None})
+    
+    for session in target.sessions:
+        # Map channel name to base filter name
+        base_filter = filter_name_map.get(session.channel, session.channel)
+        key = (session.date.strftime("%Y-%m-%d"), base_filter, session.sub_exposure_seconds)
+        sessions_grouped[key]["number"] += session.sub_count
+        sessions_grouped[key]["duration"] = session.sub_exposure_seconds
+    
+    # Track filters missing AstroBin IDs
+    filters_missing_ids = []
+    
+    # Write rows
+    for (date, filter_name, duration), data in sorted(sessions_grouped.items()):
+        # Use AstroBin ID if available, otherwise use filter name as fallback
+        filter_value = astrobin_id_map.get(filter_name, filter_name)
+        if filter_name not in astrobin_id_map and filter_name not in filters_missing_ids:
+            filters_missing_ids.append(filter_name)
+        
+        row = [
+            date,
+            filter_value,
+            data["number"],
+            duration,
+            binning,
+            gain,
+            sensor_cooling
+        ]
+        if darks:
+            row.append(darks)
+        if flats:
+            row.append(flats)
+        if flat_darks:
+            row.append(flat_darks)
+        if bias:
+            row.append(bias)
+        if bortle:
+            row.append(bortle)
+        writer.writerow(row)
+    
+    # Flash warning if some filters are missing AstroBin IDs
+    if filters_missing_ids:
+        flash(f"Warning: The following filters are missing AstroBin IDs and will need manual editing: {', '.join(filters_missing_ids)}. "
+              f"Go to Filter Settings to add AstroBin IDs for proper import.", "warning")
+    
+    # Prepare file for download
+    output.seek(0)
+    buf = io.BytesIO(output.getvalue().encode("utf-8"))
+    
+    filename = f"AstroBin_{target.name.replace(' ', '_')}.csv"
+    
+    return send_file(
+        buf,
+        mimetype="text/csv",
         as_attachment=True,
         download_name=filename,
     )
@@ -1387,7 +1520,196 @@ def global_settings():
             
         return redirect(url_for("global_settings"))
     
-    return render_template("settings.html", config=config)
+    # Load available presets for the UI
+    presets = []
+    preset_dir = os.path.join(get_preset_dir(), 'filters')
+    if os.path.exists(preset_dir):
+        for filename in os.listdir(preset_dir):
+            if filename.endswith('.json'):
+                preset_path = os.path.join(preset_dir, filename)
+                try:
+                    data = load_preset_file(preset_path)
+                    presets.append({
+                        'key': filename.replace('.json', ''),
+                        'name': data.get('preset_name', filename.replace('.json', '')),
+                        'description': data.get('description', ''),
+                        'filter_count': len(data.get('filters', [])),
+                        'has_astrobin': any(f.get('astrobin_id') for f in data.get('filters', []))
+                    })
+                except Exception:
+                    pass
+    
+    return render_template("settings.html", config=config, presets=presets)
+
+
+@app.route("/settings/export-preset", methods=["POST"])
+def export_preset_web():
+    """Export current filters and optionally filter wheels as JSON."""
+    include_wheels = request.form.get("include_wheels") == "1"
+    
+    filters = Filter.query.all()
+    if not filters:
+        flash("No filters found to export.", "warning")
+        return redirect(url_for("global_settings"))
+    
+    export_data = {
+        "preset_name": "Custom Export",
+        "description": "Exported from AstroPlanner",
+        "filters": []
+    }
+    
+    for f in filters:
+        filter_data = {
+            "name": f.name,
+            "display_name": f.display_name,
+            "filter_type": f.filter_type,
+            "default_exposure": f.default_exposure
+        }
+        if f.astrobin_id:
+            filter_data["astrobin_id"] = f.astrobin_id
+        export_data["filters"].append(filter_data)
+    
+    if include_wheels:
+        wheels = FilterWheel.query.all()
+        export_data["filter_wheels"] = []
+        for wheel in wheels:
+            wheel_data = {
+                "name": wheel.name,
+                "slot_count": wheel.slot_count,
+                "filter_size": wheel.filter_size,
+                "is_default": wheel.is_default,
+                "slots": []
+            }
+            for slot in wheel.slots:
+                slot_data = {
+                    "position": slot.position,
+                    "filter_code": slot.filter.name if slot.filter else None,
+                    "nina_name": slot.nina_filter_name
+                }
+                wheel_data["slots"].append(slot_data)
+            export_data["filter_wheels"].append(wheel_data)
+    
+    # Create file for download
+    output = io.BytesIO()
+    output.write(json.dumps(export_data, indent=2).encode('utf-8'))
+    output.seek(0)
+    
+    filename = f"astroplanner_preset_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    return send_file(output, mimetype='application/json', as_attachment=True, download_name=filename)
+
+
+@app.route("/settings/import-preset", methods=["POST"])
+def import_preset_web():
+    """Import filters and optionally filter wheels from JSON."""
+    if 'preset_file' not in request.files:
+        flash("No file uploaded.", "error")
+        return redirect(url_for("global_settings"))
+    
+    file = request.files['preset_file']
+    if file.filename == '':
+        flash("No file selected.", "error")
+        return redirect(url_for("global_settings"))
+    
+    try:
+        import_data = json.load(file)
+    except json.JSONDecodeError:
+        flash("Invalid JSON file.", "error")
+        return redirect(url_for("global_settings"))
+    
+    filters_data = import_data.get('filters', [])
+    if not filters_data:
+        flash("No filters found in import file.", "warning")
+        return redirect(url_for("global_settings"))
+    
+    import_mode = request.form.get("import_mode", "merge")
+    include_wheels = request.form.get("include_wheels") == "1"
+    
+    if import_mode == "replace":
+        # Remove existing filters (and dependent wheel slots)
+        FilterWheelSlot.query.delete()
+        Filter.query.delete()
+        db.session.commit()
+    
+    imported_count = 0
+    updated_count = 0
+    
+    for f_data in filters_data:
+        existing = Filter.query.filter_by(name=f_data['name']).first()
+        
+        if existing and import_mode == "merge":
+            # Update existing filter
+            existing.display_name = f_data.get('display_name', existing.display_name)
+            existing.filter_type = f_data.get('filter_type', existing.filter_type)
+            existing.default_exposure = f_data.get('default_exposure', existing.default_exposure)
+            if 'astrobin_id' in f_data:
+                existing.astrobin_id = f_data['astrobin_id']
+            updated_count += 1
+        elif not existing:
+            # Create new filter
+            filter_obj = Filter(
+                name=f_data['name'],
+                display_name=f_data.get('display_name', f_data['name']),
+                filter_type=f_data.get('filter_type', 'other'),
+                default_exposure=f_data.get('default_exposure', 300),
+                astrobin_id=f_data.get('astrobin_id'),
+                is_system=False,
+                is_active=True
+            )
+            db.session.add(filter_obj)
+            imported_count += 1
+    
+    db.session.commit()
+    
+    # Import filter wheels if requested
+    wheel_count = 0
+    if include_wheels and 'filter_wheels' in import_data:
+        if import_mode == "replace":
+            FilterWheel.query.delete()
+            db.session.commit()
+        
+        wheels_data = import_data.get('filter_wheels', [])
+        for wheel_data in wheels_data:
+            wheel = FilterWheel(
+                name=wheel_data['name'],
+                slot_count=wheel_data.get('slot_count', 8),
+                filter_size=wheel_data.get('filter_size', '1.25"'),
+                is_active=True,
+                is_default=wheel_data.get('is_default', False)
+            )
+            db.session.add(wheel)
+            db.session.commit()
+            
+            for slot_data in wheel_data.get('slots', []):
+                filter_obj = Filter.query.filter_by(name=slot_data.get('filter_code')).first() if slot_data.get('filter_code') else None
+                slot = FilterWheelSlot(
+                    filter_wheel_id=wheel.id,
+                    filter_id=filter_obj.id if filter_obj else None,
+                    position=slot_data['position'],
+                    nina_filter_name=slot_data.get('nina_name')
+                )
+                db.session.add(slot)
+            db.session.commit()
+            wheel_count += 1
+    
+    if import_mode == "merge":
+        flash(f"Import complete: {imported_count} new filters, {updated_count} updated, {wheel_count} filter wheel(s).", "success")
+    else:
+        flash(f"Imported {imported_count} filters and {wheel_count} filter wheel(s).", "success")
+    
+    return redirect(url_for("global_settings"))
+
+
+@app.route("/settings/download-preset/<preset_name>")
+def download_builtin_preset(preset_name):
+    """Download a built-in preset file."""
+    preset_path = os.path.join(get_preset_dir(), 'filters', f'{preset_name}.json')
+    
+    if not os.path.exists(preset_path):
+        flash(f"Preset '{preset_name}' not found.", "error")
+        return redirect(url_for("global_settings"))
+    
+    return send_file(preset_path, mimetype='application/json', as_attachment=True, 
+                     download_name=f'{preset_name}_filters.json')
 
 
 @app.route("/target/<int:target_id>/settings", methods=["GET", "POST"])
@@ -1600,6 +1922,8 @@ def new_filter():
         display_name = request.form.get("display_name", "").strip()
         filter_type = request.form.get("filter_type", "narrowband")
         default_exposure = int(request.form.get("default_exposure", 300))
+        astrobin_id_str = request.form.get("astrobin_id", "").strip()
+        astrobin_id = int(astrobin_id_str) if astrobin_id_str else None
         
         if name and display_name:
             # Check for duplicate name
@@ -1613,6 +1937,7 @@ def new_filter():
                         display_name=display_name,
                         filter_type=filter_type,
                         default_exposure=default_exposure,
+                        astrobin_id=astrobin_id,
                         is_system=False,
                         is_active=True
                     )
@@ -1635,7 +1960,7 @@ def edit_filter(filter_id):
     filter_obj = Filter.query.get_or_404(filter_id)
     
     if request.method == "POST":
-        # System filters can only change display_name and default_exposure
+        # System filters can only change display_name, default_exposure, and astrobin_id
         if not filter_obj.is_system:
             new_name = request.form.get("name", "").strip().upper()
             # Check for duplicate if name changed
@@ -1649,6 +1974,10 @@ def edit_filter(filter_id):
         
         filter_obj.display_name = request.form.get("display_name", "").strip()
         filter_obj.default_exposure = int(request.form.get("default_exposure", 300))
+        
+        # AstroBin ID can always be updated (even for system filters)
+        astrobin_id_str = request.form.get("astrobin_id", "").strip()
+        filter_obj.astrobin_id = int(astrobin_id_str) if astrobin_id_str else None
         
         if filter_obj.display_name:
             try:
@@ -1917,12 +2246,103 @@ def api_active_wheel():
 
 
 # ---------------------------------------------------------------------------
-# CLI helper
+# CLI helpers - Preset System
 # ---------------------------------------------------------------------------
 
+def load_preset_file(preset_path):
+    """Load a JSON preset file."""
+    import json
+    with open(preset_path, 'r') as f:
+        return json.load(f)
+
+
+def get_preset_dir():
+    """Get the path to the presets directory."""
+    return os.path.join(os.path.dirname(__file__), 'config', 'presets')
+
+
+def list_filter_presets():
+    """List available filter presets."""
+    preset_dir = os.path.join(get_preset_dir(), 'filters')
+    if not os.path.exists(preset_dir):
+        return []
+    return [f.replace('.json', '') for f in os.listdir(preset_dir) if f.endswith('.json')]
+
+
+@app.cli.command("migrate-db")
+def migrate_db():
+    """Run database migrations for schema changes."""
+    from sqlalchemy import inspect, text
+    
+    inspector = inspect(db.engine)
+    
+    # Check if filters table exists
+    if 'filters' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('filters')]
+        
+        # Add astrobin_id column if it doesn't exist
+        if 'astrobin_id' not in columns:
+            with db.engine.connect() as conn:
+                conn.execute(text('ALTER TABLE filters ADD COLUMN astrobin_id INTEGER'))
+                conn.commit()
+            print("Added 'astrobin_id' column to filters table.")
+        else:
+            print("Column 'astrobin_id' already exists in filters table.")
+    else:
+        print("Table 'filters' does not exist. Run 'flask init-db' first.")
+    
+    print("Database migration complete.")
+
+
 @app.cli.command("init-db")
-def init_db():
-    """Initialize the database tables."""
+@click.option('--mode', type=click.Choice(['starter', 'minimal']), default='starter',
+              help='starter = full setup with all palettes/types/wheel; minimal = just filters')
+@click.option('--filter-preset', '-f', default='generic',
+              help='Filter preset to use (e.g., generic, zwo). Run "flask list-presets" to see available options.')
+@click.option('--force', is_flag=True, help='Force re-initialization (drops existing data)')
+def init_db(mode, filter_preset, force):
+    """Initialize the database with configurable presets.
+    
+    Examples:
+        flask init-db                          # Standard setup with generic filters
+        flask init-db --filter-preset zwo      # Use ZWO filters with AstroBin IDs
+        flask init-db --mode minimal           # Just filters, no palettes/wheels
+        flask init-db --force                  # Reset and reinitialize
+    """
+    import json
+    
+    preset_dir = get_preset_dir()
+    
+    # Validate filter preset exists
+    filter_preset_path = os.path.join(preset_dir, 'filters', f'{filter_preset}.json')
+    if not os.path.exists(filter_preset_path):
+        available = list_filter_presets()
+        print(f"Error: Filter preset '{filter_preset}' not found.")
+        print(f"Available presets: {', '.join(available)}")
+        return
+    
+    # Load preset files
+    base_preset_path = os.path.join(preset_dir, 'base.json')
+    if not os.path.exists(base_preset_path):
+        print("Error: base.json preset file not found. Creating with defaults...")
+        # Fall back to hardcoded defaults if preset file missing
+        base_preset = None
+    else:
+        base_preset = load_preset_file(base_preset_path)
+    
+    filter_preset_data = load_preset_file(filter_preset_path)
+    
+    # Handle force flag
+    if force:
+        print("Force flag set - clearing existing data...")
+        FilterWheelSlot.query.delete()
+        FilterWheel.query.delete()
+        Filter.query.delete()
+        Palette.query.delete()
+        TargetType.query.delete()
+        db.session.commit()
+        print("Existing data cleared.")
+    
     db.create_all()
     
     # Create default global config if none exists
@@ -1932,172 +2352,302 @@ def init_db():
         db.session.commit()
         print("Created default global configuration.")
     
-    # Create default target types if none exist
-    if not TargetType.query.first():
-        default_types = [
-            ("emission", "SHO", "Emission nebulae work excellently with narrowband SHO filters"),
-            ("diffuse", "HOO", "Diffuse nebulae often benefit from HOO for enhanced contrast"),
-            ("reflection", "LRGB", "Reflection nebulae show great detail with broadband LRGB"),
-            ("galaxy", "LRGB", "Galaxies typically use broadband LRGB for star colors and detail"),
-            ("cluster", "LRGB", "Star clusters showcase natural colors best with LRGB"),
-            ("planetary", "SHO", "Planetary nebulae reveal structure well with narrowband SHO"),
-            ("supernova_remnant", "SHO", "Supernova remnants often have strong emission lines, perfect for SHO"),
-            ("other", "SHO", "SHO is a versatile starting point for most deep sky targets")
-        ]
-        
-        for name, palette, desc in default_types:
-            target_type = TargetType(
-                name=name,
-                recommended_palette=palette,
-                description=desc
-            )
-            db.session.add(target_type)
-        
-        db.session.commit()
-        print("Created default target types.")
-    
-    # Create default palettes if none exist
-    if not Palette.query.first():
-        default_palettes = [
-            {
-                "name": "SHO",
-                "display_name": "Sulfur-Hydrogen-Oxygen (SHO)",
-                "description": "Classic Hubble-style narrowband palette using SII (red), Ha (green), OIII (blue)",
-                "filters": {
-                    "channels": [
-                        {"name": "S", "label": "SII", "filter": "Sulfur II", "rgb_channel": "red", "default_exposure": 300, "default_weight": 1.0},
-                        {"name": "H", "label": "Ha", "filter": "Hydrogen Alpha", "rgb_channel": "green", "default_exposure": 300, "default_weight": 1.0},
-                        {"name": "O", "label": "OIII", "filter": "Oxygen III", "rgb_channel": "blue", "default_exposure": 300, "default_weight": 1.0}
-                    ]
-                }
-            },
-            {
-                "name": "HOO",
-                "display_name": "Hydrogen-Oxygen (HOO)",
-                "description": "Two-filter narrowband palette using Ha (red), OIII (blue), synthetic green",
-                "filters": {
-                    "channels": [
-                        {"name": "H", "label": "Ha", "filter": "Hydrogen Alpha", "rgb_channel": "red", "default_exposure": 300, "default_weight": 1.0},
-                        {"name": "O", "label": "OIII", "filter": "Oxygen III", "rgb_channel": "blue", "default_exposure": 300, "default_weight": 1.0}
-                    ]
-                }
-            },
-            {
-                "name": "LRGB",
-                "display_name": "Luminance-Red-Green-Blue (LRGB)",
-                "description": "Traditional broadband palette for natural color imaging",
-                "filters": {
-                    "channels": [
-                        {"name": "L", "label": "Lum", "filter": "Luminance", "rgb_channel": "luminance", "default_exposure": 180, "default_weight": 4.0},
-                        {"name": "R", "label": "Red", "filter": "Red", "rgb_channel": "red", "default_exposure": 180, "default_weight": 1.0},
-                        {"name": "G", "label": "Green", "filter": "Green", "rgb_channel": "green", "default_exposure": 180, "default_weight": 1.0},
-                        {"name": "B", "label": "Blue", "filter": "Blue", "rgb_channel": "blue", "default_exposure": 180, "default_weight": 1.0}
-                    ]
-                }
-            },
-            {
-                "name": "LRGBNB",
-                "display_name": "LRGB + Narrowband",
-                "description": "Broadband LRGB enhanced with narrowband filters for nebular detail",
-                "filters": {
-                    "channels": [
-                        {"name": "L", "label": "Lum", "filter": "Luminance", "rgb_channel": "luminance", "default_exposure": 180, "default_weight": 3.0},
-                        {"name": "R", "label": "Red", "filter": "Red", "rgb_channel": "red", "default_exposure": 180, "default_weight": 1.0},
-                        {"name": "G", "label": "Green", "filter": "Green", "rgb_channel": "green", "default_exposure": 180, "default_weight": 1.0},
-                        {"name": "B", "label": "Blue", "filter": "Blue", "rgb_channel": "blue", "default_exposure": 180, "default_weight": 1.0},
-                        {"name": "H", "label": "Ha", "filter": "Hydrogen Alpha", "rgb_channel": "red", "default_exposure": 300, "default_weight": 0.5},
-                        {"name": "O", "label": "OIII", "filter": "Oxygen III", "rgb_channel": "blue", "default_exposure": 300, "default_weight": 0.5}
-                    ]
-                }
-            }
-        ]
-        
-        for palette_data in default_palettes:
-            palette = Palette(
-                name=palette_data["name"],
-                display_name=palette_data["display_name"],
-                description=palette_data["description"],
-                is_system=True,
-                is_active=True
-            )
-            palette.set_filters(palette_data["filters"])
-            db.session.add(palette)
-        
-        db.session.commit()
-        print("Created default palettes.")
-    
-    # Create default system filters if none exist
+    # Create filters from preset
     if not Filter.query.first():
-        # System filters matching nina_integration.py FILTER_CONFIG
-        default_filters = [
-            # Narrowband filters
-            {"name": "H", "display_name": "Hydrogen Alpha", "filter_type": "narrowband", "default_exposure": 300},
-            {"name": "O", "display_name": "Oxygen III", "filter_type": "narrowband", "default_exposure": 300},
-            {"name": "S", "display_name": "Sulfur II", "filter_type": "narrowband", "default_exposure": 300},
-            # Broadband filters
-            {"name": "L", "display_name": "Luminance", "filter_type": "broadband", "default_exposure": 180},
-            {"name": "R", "display_name": "Red", "filter_type": "broadband", "default_exposure": 180},
-            {"name": "G", "display_name": "Green", "filter_type": "broadband", "default_exposure": 180},
-            {"name": "B", "display_name": "Blue", "filter_type": "broadband", "default_exposure": 180},
-            # Other filters
-            {"name": "LP", "display_name": "Light Pollution", "filter_type": "other", "default_exposure": 300},
-        ]
-        
-        for f_data in default_filters:
+        filters_data = filter_preset_data.get('filters', [])
+        for f_data in filters_data:
             filter_obj = Filter(
                 name=f_data["name"],
                 display_name=f_data["display_name"],
                 filter_type=f_data["filter_type"],
-                default_exposure=f_data["default_exposure"],
+                default_exposure=f_data.get("default_exposure", 300),
+                astrobin_id=f_data.get("astrobin_id"),
                 is_system=True,
                 is_active=True
             )
             db.session.add(filter_obj)
         
         db.session.commit()
-        print("Created default system filters.")
+        preset_name = filter_preset_data.get('preset_name', filter_preset)
+        print(f"Created filters from '{preset_name}' preset ({len(filters_data)} filters).")
+    else:
+        print("Filters already exist - skipping. Use --force to reinitialize.")
     
-    # Create default filter wheel if none exists
-    if not FilterWheel.query.first():
-        # Create default 8-slot wheel matching nina_integration.py FILTER_CONFIG positions
-        default_wheel = FilterWheel(
-            name="Default 8-Slot (1.25\")",
-            slot_count=8,
-            filter_size='1.25"',
-            nina_profile_name=None,
-            is_active=True,
-            is_default=True
-        )
-        db.session.add(default_wheel)
-        db.session.commit()
+    # For starter mode, also create palettes, target types, and filter wheel
+    if mode == 'starter' and base_preset:
+        # Create target types
+        if not TargetType.query.first():
+            target_types = base_preset.get('target_types', [])
+            for tt_data in target_types:
+                target_type = TargetType(
+                    name=tt_data["name"],
+                    recommended_palette=tt_data["recommended_palette"],
+                    description=tt_data["description"]
+                )
+                db.session.add(target_type)
+            db.session.commit()
+            print(f"Created {len(target_types)} target types.")
+        else:
+            print("Target types already exist - skipping.")
         
-        # Create slots with filter assignments matching FILTER_CONFIG positions
-        # FILTER_CONFIG: LP=0, L=1, R=2, G=3, B=4, H=5, S=6, O=7
-        slot_config = [
-            {"position": 0, "filter_code": "LP", "nina_name": "LP"},
-            {"position": 1, "filter_code": "L", "nina_name": "L"},
-            {"position": 2, "filter_code": "R", "nina_name": "R"},
-            {"position": 3, "filter_code": "G", "nina_name": "G"},
-            {"position": 4, "filter_code": "B", "nina_name": "B"},
-            {"position": 5, "filter_code": "H", "nina_name": "Ha"},
-            {"position": 6, "filter_code": "S", "nina_name": "SII"},
-            {"position": 7, "filter_code": "O", "nina_name": "OIII"},
-        ]
+        # Create palettes
+        if not Palette.query.first():
+            palettes = base_preset.get('palettes', [])
+            for palette_data in palettes:
+                palette = Palette(
+                    name=palette_data["name"],
+                    display_name=palette_data["display_name"],
+                    description=palette_data["description"],
+                    is_system=True,
+                    is_active=True
+                )
+                palette.set_filters(palette_data["filters"])
+                db.session.add(palette)
+            db.session.commit()
+            print(f"Created {len(palettes)} palettes.")
+        else:
+            print("Palettes already exist - skipping.")
         
-        for slot_data in slot_config:
-            filter_obj = Filter.query.filter_by(name=slot_data["filter_code"]).first()
-            slot = FilterWheelSlot(
-                filter_wheel_id=default_wheel.id,
-                filter_id=filter_obj.id if filter_obj else None,
-                position=slot_data["position"],
-                nina_filter_name=slot_data["nina_name"]
+        # Create filter wheel
+        if not FilterWheel.query.first():
+            wheel_data = base_preset.get('filter_wheel', {})
+            wheel = FilterWheel(
+                name=wheel_data.get('name', 'Default 8-Slot'),
+                slot_count=wheel_data.get('slot_count', 8),
+                filter_size=wheel_data.get('filter_size', '1.25"'),
+                nina_profile_name=None,
+                is_active=True,
+                is_default=True
             )
-            db.session.add(slot)
-        
-        db.session.commit()
-        print("Created default filter wheel with slot assignments.")
+            db.session.add(wheel)
+            db.session.commit()
+            
+            # Create slots
+            slots_data = wheel_data.get('slots', [])
+            for slot_data in slots_data:
+                filter_obj = Filter.query.filter_by(name=slot_data["filter_code"]).first()
+                slot = FilterWheelSlot(
+                    filter_wheel_id=wheel.id,
+                    filter_id=filter_obj.id if filter_obj else None,
+                    position=slot_data["position"],
+                    nina_filter_name=slot_data["nina_name"]
+                )
+                db.session.add(slot)
+            db.session.commit()
+            print(f"Created filter wheel '{wheel.name}' with {len(slots_data)} slots.")
+        else:
+            print("Filter wheel already exists - skipping.")
     
-    print("Database initialized.")
+    elif mode == 'minimal':
+        print("Minimal mode - skipped palettes, target types, and filter wheel.")
+    
+    print(f"\nDatabase initialized successfully!")
+    print(f"  Mode: {mode}")
+    print(f"  Filter preset: {filter_preset}")
+
+
+@app.cli.command("list-presets")
+def list_presets():
+    """List available filter presets."""
+    import json
+    
+    presets = list_filter_presets()
+    if not presets:
+        print("No filter presets found in config/presets/filters/")
+        return
+    
+    print("Available filter presets:")
+    print("-" * 50)
+    
+    preset_dir = os.path.join(get_preset_dir(), 'filters')
+    for preset_name in presets:
+        preset_path = os.path.join(preset_dir, f'{preset_name}.json')
+        try:
+            data = load_preset_file(preset_path)
+            display_name = data.get('preset_name', preset_name)
+            desc = data.get('description', 'No description')
+            filter_count = len(data.get('filters', []))
+            has_astrobin = any(f.get('astrobin_id') for f in data.get('filters', []))
+            astrobin_status = "✓ AstroBin IDs" if has_astrobin else "✗ No AstroBin IDs"
+            
+            print(f"\n  {preset_name}")
+            print(f"    Name: {display_name}")
+            print(f"    Filters: {filter_count}")
+            print(f"    AstroBin: {astrobin_status}")
+            print(f"    Description: {desc}")
+        except Exception as e:
+            print(f"\n  {preset_name} (error loading: {e})")
+    
+    print("\n" + "-" * 50)
+    print("Usage: flask init-db --filter-preset <preset_name>")
+
+
+@app.cli.command("export-preset")
+@click.argument('output_file')
+@click.option('--include-wheels', is_flag=True, help='Include filter wheel configurations')
+def export_preset(output_file, include_wheels):
+    """Export current filters (and optionally filter wheels) to a JSON preset file.
+    
+    Examples:
+        flask export-preset my_filters.json
+        flask export-preset my_setup.json --include-wheels
+    """
+    import json
+    
+    filters = Filter.query.all()
+    if not filters:
+        print("No filters found in database to export.")
+        return
+    
+    export_data = {
+        "preset_name": "Custom Export",
+        "description": "Exported from database",
+        "filters": []
+    }
+    
+    for f in filters:
+        filter_data = {
+            "name": f.name,
+            "display_name": f.display_name,
+            "filter_type": f.filter_type,
+            "default_exposure": f.default_exposure
+        }
+        if f.astrobin_id:
+            filter_data["astrobin_id"] = f.astrobin_id
+        export_data["filters"].append(filter_data)
+    
+    if include_wheels:
+        wheels = FilterWheel.query.all()
+        export_data["filter_wheels"] = []
+        for wheel in wheels:
+            wheel_data = {
+                "name": wheel.name,
+                "slot_count": wheel.slot_count,
+                "filter_size": wheel.filter_size,
+                "is_default": wheel.is_default,
+                "slots": []
+            }
+            for slot in wheel.slots:
+                slot_data = {
+                    "position": slot.position,
+                    "filter_code": slot.filter.name if slot.filter else None,
+                    "nina_name": slot.nina_filter_name
+                }
+                wheel_data["slots"].append(slot_data)
+            export_data["filter_wheels"].append(wheel_data)
+    
+    # Ensure output directory exists
+    output_dir = os.path.dirname(output_file)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    with open(output_file, 'w') as f:
+        json.dump(export_data, f, indent=2)
+    
+    print(f"Exported {len(filters)} filters to {output_file}")
+    if include_wheels:
+        print(f"  (including {len(wheels)} filter wheel(s))")
+
+
+@app.cli.command("import-preset")
+@click.argument('input_file')
+@click.option('--merge', is_flag=True, help='Merge with existing filters (default replaces)')
+@click.option('--include-wheels', is_flag=True, help='Also import filter wheel configurations')
+def import_preset(input_file, merge, include_wheels):
+    """Import filters from a JSON preset file.
+    
+    Examples:
+        flask import-preset my_filters.json              # Replace existing filters
+        flask import-preset my_filters.json --merge      # Add to existing filters
+        flask import-preset my_setup.json --include-wheels
+    """
+    import json
+    
+    if not os.path.exists(input_file):
+        print(f"Error: File '{input_file}' not found.")
+        return
+    
+    with open(input_file, 'r') as f:
+        import_data = json.load(f)
+    
+    filters_data = import_data.get('filters', [])
+    if not filters_data:
+        print("No filters found in import file.")
+        return
+    
+    if not merge:
+        # Remove existing filters (and dependent wheel slots)
+        FilterWheelSlot.query.delete()
+        Filter.query.delete()
+        db.session.commit()
+        print("Cleared existing filters.")
+    
+    imported_count = 0
+    updated_count = 0
+    
+    for f_data in filters_data:
+        existing = Filter.query.filter_by(name=f_data['name']).first()
+        
+        if existing and merge:
+            # Update existing filter
+            existing.display_name = f_data.get('display_name', existing.display_name)
+            existing.filter_type = f_data.get('filter_type', existing.filter_type)
+            existing.default_exposure = f_data.get('default_exposure', existing.default_exposure)
+            if 'astrobin_id' in f_data:
+                existing.astrobin_id = f_data['astrobin_id']
+            updated_count += 1
+        elif not existing:
+            # Create new filter
+            filter_obj = Filter(
+                name=f_data['name'],
+                display_name=f_data.get('display_name', f_data['name']),
+                filter_type=f_data.get('filter_type', 'other'),
+                default_exposure=f_data.get('default_exposure', 300),
+                astrobin_id=f_data.get('astrobin_id'),
+                is_system=False,
+                is_active=True
+            )
+            db.session.add(filter_obj)
+            imported_count += 1
+    
+    db.session.commit()
+    
+    if merge:
+        print(f"Import complete: {imported_count} new, {updated_count} updated")
+    else:
+        print(f"Imported {imported_count} filters")
+    
+    # Import filter wheels if requested
+    if include_wheels and 'filter_wheels' in import_data:
+        if not merge:
+            FilterWheel.query.delete()
+            db.session.commit()
+        
+        wheels_data = import_data.get('filter_wheels', [])
+        for wheel_data in wheels_data:
+            wheel = FilterWheel(
+                name=wheel_data['name'],
+                slot_count=wheel_data.get('slot_count', 8),
+                filter_size=wheel_data.get('filter_size', '1.25"'),
+                is_active=True,
+                is_default=wheel_data.get('is_default', False)
+            )
+            db.session.add(wheel)
+            db.session.commit()
+            
+            for slot_data in wheel_data.get('slots', []):
+                filter_obj = Filter.query.filter_by(name=slot_data.get('filter_code')).first() if slot_data.get('filter_code') else None
+                slot = FilterWheelSlot(
+                    filter_wheel_id=wheel.id,
+                    filter_id=filter_obj.id if filter_obj else None,
+                    position=slot_data['position'],
+                    nina_filter_name=slot_data.get('nina_name')
+                )
+                db.session.add(slot)
+            db.session.commit()
+            print(f"  Imported filter wheel: {wheel.name}")
+        
+        print(f"Imported {len(wheels_data)} filter wheel(s)")
 
 
 if __name__ == "__main__":

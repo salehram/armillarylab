@@ -51,6 +51,19 @@ AstroPlanner v1.0.0 represents a mature, feature-complete astrophotography plann
 - **Filter Wheel Integration**: Custom filter mapping ensures proper telescope hardware operation
 - **Remaining Frames Export**: Intelligent export of only remaining frames for efficient session continuation
 
+### 📤 AstroBin Integration
+- **Per-Target CSV Export**: Export acquisition data in AstroBin-compatible CSV format
+- **Filter ID Mapping**: Store AstroBin equipment database IDs for accurate data import
+- **Configurable Export Settings**: Binning, gain, sensor cooling, and Bortle scale options
+- **Smart Filter Mapping**: Automatic mapping from channel names to base filter IDs
+
+### 🔄 Equipment Preset System
+- **JSON-Based Presets**: Modular filter and equipment configuration files
+- **Multi-User Support**: Easy sharing and import of filter configurations
+- **Brand-Specific Presets**: Pre-configured presets for ZWO and other filter brands
+- **CLI & Web Management**: Full preset management via command line and web interface
+- **Export/Import**: Backup and restore equipment configurations
+
 ### 🌍 Global Configuration & Settings
 - **Observer Location**: Configurable latitude, longitude, and elevation with global defaults
 - **Timezone Support**: Robust timezone handling with Windows compatibility and UTC conversion
@@ -96,16 +109,164 @@ AstroPlanner v1.0.0 represents a mature, feature-complete astrophotography plann
 
 4. **Initialize the database**
    ```bash
-   python -c "from app import app, init_db; app.app_context().push(); init_db()"
+   flask init-db
    ```
 
 5. **Run the application**
    ```bash
-   python app.py
+   flask run
    ```
 
 6. **Open your browser**
    Navigate to `http://127.0.0.1:5000`
+
+## 🖥️ Command Line Interface (CLI)
+
+AstroPlanner provides comprehensive CLI commands for database management, equipment configuration, and system administration.
+
+### Database Commands
+
+#### `flask init-db`
+Initialize the database with configurable presets.
+
+```bash
+# Standard setup with generic filters
+flask init-db
+
+# Use ZWO filters with AstroBin IDs
+flask init-db --filter-preset zwo
+
+# Minimal setup (filters only, no palettes/wheels)
+flask init-db --mode minimal
+
+# Force re-initialization (clears existing data)
+flask init-db --force
+
+# Combined options
+flask init-db --mode starter --filter-preset zwo --force
+```
+
+**Options:**
+| Option | Values | Description |
+|--------|--------|-------------|
+| `--mode` | `starter`, `minimal` | `starter` = full setup with palettes/types/wheel; `minimal` = just filters |
+| `-f, --filter-preset` | preset name | Filter preset to use (e.g., `generic`, `zwo`) |
+| `--force` | flag | Force re-initialization, drops existing data |
+
+#### `flask migrate-db`
+Run database migrations for schema changes.
+
+```bash
+flask migrate-db
+```
+
+This command handles schema updates such as adding new columns to existing tables. Safe to run multiple times - only applies pending migrations.
+
+### Equipment Preset Commands
+
+#### `flask list-presets`
+Display available filter presets with details.
+
+```bash
+flask list-presets
+```
+
+**Output includes:**
+- Preset name and description
+- Number of filters included
+- Whether AstroBin IDs are configured
+
+#### `flask export-preset`
+Export current filters and optionally filter wheels to a JSON file.
+
+```bash
+# Export filters only
+flask export-preset my_filters.json
+
+# Export filters and filter wheel configuration
+flask export-preset my_setup.json --include-wheels
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--include-wheels` | Include filter wheel configurations in export |
+
+#### `flask import-preset`
+Import filters from a JSON preset file.
+
+```bash
+# Replace existing filters with imported ones
+flask import-preset my_filters.json
+
+# Merge with existing filters (add new, update existing)
+flask import-preset my_filters.json --merge
+
+# Also import filter wheel configurations
+flask import-preset my_setup.json --include-wheels
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--merge` | Merge with existing filters instead of replacing |
+| `--include-wheels` | Also import filter wheel configurations |
+
+### Database Administration Commands
+
+#### `flask db info`
+Display current database configuration and test connection.
+
+```bash
+flask db info
+```
+
+#### `flask db backup`
+Create a backup of the current database.
+
+```bash
+flask db backup
+```
+
+#### `flask db reset`
+Reset the database for development (use with caution).
+
+```bash
+flask db reset
+```
+
+### Running the Application
+
+#### Development Server
+```bash
+# Default (port 5000)
+flask run
+
+# Custom port
+flask run --port 5001
+
+# Debug mode with auto-reload
+flask run --debug
+
+# Accessible from network
+flask run --host 0.0.0.0
+```
+
+#### Production Server
+```bash
+# Using Gunicorn (recommended for production)
+gunicorn -w 4 -b 0.0.0.0:5000 app:app
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `FLASK_APP` | Application module | `app.py` |
+| `FLASK_ENV` | Environment mode | `production` |
+| `SECRET_KEY` | Flask secret key | `dev-secret-key` |
+| `DATABASE_URL` | Database connection string | SQLite |
+| `UPLOAD_FOLDER` | File upload directory | `./uploads` |
 
 ## 📋 Usage
 
@@ -150,20 +311,35 @@ AstroPlanner v1.0.0 represents a mature, feature-complete astrophotography plann
 astroplanner/
 ├── app.py                 # Main Flask application
 ├── astro_utils.py         # Astronomical calculations
+├── cli.py                 # CLI command definitions
 ├── nina_integration.py    # N.I.N.A. export functionality
-├── time_utils.py         # Time formatting and parsing utilities
-├── requirements.txt      # Python dependencies
-├── FEATURES_ROADMAP.md   # Feature development roadmap
-├── templates/            # HTML templates
+├── time_utils.py          # Time formatting and parsing utilities
+├── requirements.txt       # Python dependencies
+├── FEATURES_ROADMAP.md    # Feature development roadmap
+├── config/                # Configuration modules
+│   ├── database.py        # Database configuration
+│   ├── migration.py       # Migration utilities
+│   └── presets/           # Equipment preset files
+│       ├── base.json      # Palettes, target types, wheel config
+│       └── filters/       # Filter preset files
+│           ├── generic.json   # Generic filters (no AstroBin IDs)
+│           └── zwo.json       # ZWO filters with AstroBin IDs
+├── templates/             # HTML templates
 │   ├── base.html
 │   ├── index.html
 │   ├── target_detail.html
 │   ├── target_form.html
 │   ├── settings.html
-│   └── palette_list.html
-├── dev/                  # Virtual environment
-├── uploads/              # File uploads directory
-└── astroplanner.db       # SQLite database
+│   ├── filter_form.html
+│   ├── filter_list.html
+│   ├── filter_wheel_form.html
+│   ├── filter_wheel_list.html
+│   ├── palette_list.html
+│   └── imaging_logs.html
+├── static/                # Static assets (CSS, JS, fonts)
+├── dev/                   # Virtual environment
+├── uploads/               # File uploads directory
+└── astroplanner.db        # SQLite database
 ```
 
 ## ⚙️ Configuration
@@ -175,9 +351,40 @@ astroplanner/
 - `UPLOAD_FOLDER`: File upload directory (defaults to ./uploads)
 - `OBSERVER_TZ`: Observer timezone (defaults to UTC+3)
 
+### Equipment Presets
+
+AstroPlanner supports JSON-based equipment presets for easy configuration sharing:
+
+**Creating Custom Presets:**
+1. Export your current configuration: `flask export-preset my_filters.json --include-wheels`
+2. Edit the JSON file to customize filter names, AstroBin IDs, etc.
+3. Place in `config/presets/filters/` for automatic detection
+4. Use with: `flask init-db --filter-preset my_filters`
+
+**Preset File Format:**
+```json
+{
+  "preset_name": "My Custom Filters",
+  "description": "Description of filter set",
+  "filters": [
+    {
+      "name": "H",
+      "display_name": "Hydrogen Alpha",
+      "filter_type": "narrowband",
+      "default_exposure": 300,
+      "astrobin_id": 1955
+    }
+  ]
+}
+```
+
+**AstroBin Filter IDs:**
+Find your filter IDs from AstroBin equipment URLs:
+- `https://www.astrobin.com/equipment/filter/1955/` → ID is `1955`
+
 ### Database Models
 
-The application uses SQLite with SQLAlchemy ORM:
+The application uses SQLAlchemy ORM with support for SQLite and PostgreSQL:
 
 - **GlobalConfig**: Observer location, default settings, timezone
 - **TargetType**: Target classification system
@@ -185,6 +392,9 @@ The application uses SQLite with SQLAlchemy ORM:
 - **Target**: Individual imaging targets
 - **TargetPlan**: Exposure plans and channel definitions
 - **ImagingSession**: Session tracking and progress data
+- **Filter**: Filter definitions with AstroBin IDs
+- **FilterWheel**: Filter wheel hardware profiles
+- **FilterWheelSlot**: Filter-to-slot position mappings
 - **ObjectMapping**: Catalog cross-references
 
 ## 🐳 Docker Support
@@ -226,13 +436,20 @@ docker-compose up --build
 - Palette management system with CRUD operations
 - Plan & Palette Enhancements with H:M:S formatting
 - Bidirectional frame/time input functionality
+- Altitude Chart with moon position, meridian flip, current time markers
+- Comprehensive imaging logs and session tracking
+- Enhanced custom filter system with NINA mapping
+- PostgreSQL support for cloud deployment
+- **Equipment preset system with JSON configuration**
+- **AstroBin CSV export with filter ID mapping**
+- **Multi-user setup support via preset import/export**
 
 ### 🚧 Roadmap
 
-- **Altitude Chart Enhancements**: Visual improvements with threshold lines and shading
 - **Session Recommendation Engine**: AI-driven session optimization
 - **Automatic Recomputation**: Dynamic updates after configuration changes
 - **Advanced Export Options**: Additional template formats and customization
+- **Comprehensive User Guide**: Documentation and tutorials
 
 ## 📝 License
 

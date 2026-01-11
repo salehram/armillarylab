@@ -1,0 +1,90 @@
+{
+  "version": "1.0",
+  "description": "Base preset containing target types, palettes, and default filter wheel configuration",
+  
+  "target_types": [
+    {"name": "emission", "recommended_palette": "SHO", "description": "Emission nebulae work excellently with narrowband SHO filters"},
+    {"name": "diffuse", "recommended_palette": "HOO", "description": "Diffuse nebulae often benefit from HOO for enhanced contrast"},
+    {"name": "reflection", "recommended_palette": "LRGB", "description": "Reflection nebulae show great detail with broadband LRGB"},
+    {"name": "galaxy", "recommended_palette": "LRGB", "description": "Galaxies typically use broadband LRGB for star colors and detail"},
+    {"name": "cluster", "recommended_palette": "LRGB", "description": "Star clusters showcase natural colors best with LRGB"},
+    {"name": "planetary", "recommended_palette": "SHO", "description": "Planetary nebulae reveal structure well with narrowband SHO"},
+    {"name": "supernova_remnant", "recommended_palette": "SHO", "description": "Supernova remnants often have strong emission lines, perfect for SHO"},
+    {"name": "other", "recommended_palette": "SHO", "description": "SHO is a versatile starting point for most deep sky targets"}
+  ],
+  
+  "palettes": [
+    {
+      "name": "SHO",
+      "display_name": "Sulfur-Hydrogen-Oxygen (SHO)",
+      "description": "Classic Hubble-style narrowband palette using SII (red), Ha (green), OIII (blue)",
+      "is_system": true,
+      "filters": {
+        "channels": [
+          {"name": "S", "label": "SII", "filter": "Sulfur II", "rgb_channel": "red", "default_exposure": 300, "default_weight": 1.0},
+          {"name": "H", "label": "Ha", "filter": "Hydrogen Alpha", "rgb_channel": "green", "default_exposure": 300, "default_weight": 1.0},
+          {"name": "O", "label": "OIII", "filter": "Oxygen III", "rgb_channel": "blue", "default_exposure": 300, "default_weight": 1.0}
+        ]
+      }
+    },
+    {
+      "name": "HOO",
+      "display_name": "Hydrogen-Oxygen (HOO)",
+      "description": "Two-filter narrowband palette using Ha (red), OIII (blue), synthetic green",
+      "is_system": true,
+      "filters": {
+        "channels": [
+          {"name": "H", "label": "Ha", "filter": "Hydrogen Alpha", "rgb_channel": "red", "default_exposure": 300, "default_weight": 1.0},
+          {"name": "O", "label": "OIII", "filter": "Oxygen III", "rgb_channel": "blue", "default_exposure": 300, "default_weight": 1.0}
+        ]
+      }
+    },
+    {
+      "name": "LRGB",
+      "display_name": "Luminance-Red-Green-Blue (LRGB)",
+      "description": "Traditional broadband palette for natural color imaging",
+      "is_system": true,
+      "filters": {
+        "channels": [
+          {"name": "L", "label": "Lum", "filter": "Luminance", "rgb_channel": "luminance", "default_exposure": 180, "default_weight": 4.0},
+          {"name": "R", "label": "Red", "filter": "Red", "rgb_channel": "red", "default_exposure": 180, "default_weight": 1.0},
+          {"name": "G", "label": "Green", "filter": "Green", "rgb_channel": "green", "default_exposure": 180, "default_weight": 1.0},
+          {"name": "B", "label": "Blue", "filter": "Blue", "rgb_channel": "blue", "default_exposure": 180, "default_weight": 1.0}
+        ]
+      }
+    },
+    {
+      "name": "LRGBNB",
+      "display_name": "LRGB + Narrowband",
+      "description": "Broadband LRGB enhanced with narrowband filters for nebular detail",
+      "is_system": true,
+      "filters": {
+        "channels": [
+          {"name": "L", "label": "Lum", "filter": "Luminance", "rgb_channel": "luminance", "default_exposure": 180, "default_weight": 3.0},
+          {"name": "R", "label": "Red", "filter": "Red", "rgb_channel": "red", "default_exposure": 180, "default_weight": 1.0},
+          {"name": "G", "label": "Green", "filter": "Green", "rgb_channel": "green", "default_exposure": 180, "default_weight": 1.0},
+          {"name": "B", "label": "Blue", "filter": "Blue", "rgb_channel": "blue", "default_exposure": 180, "default_weight": 1.0},
+          {"name": "H", "label": "Ha", "filter": "Hydrogen Alpha", "rgb_channel": "red", "default_exposure": 300, "default_weight": 0.5},
+          {"name": "O", "label": "OIII", "filter": "Oxygen III", "rgb_channel": "blue", "default_exposure": 300, "default_weight": 0.5}
+        ]
+      }
+    }
+  ],
+  
+  "filter_wheel": {
+    "name": "Default 8-Slot (1.25\")",
+    "slot_count": 8,
+    "filter_size": "1.25\"",
+    "is_default": true,
+    "slots": [
+      {"position": 0, "filter_code": "LP", "nina_name": "LP"},
+      {"position": 1, "filter_code": "L", "nina_name": "L"},
+      {"position": 2, "filter_code": "R", "nina_name": "R"},
+      {"position": 3, "filter_code": "G", "nina_name": "G"},
+      {"position": 4, "filter_code": "B", "nina_name": "B"},
+      {"position": 5, "filter_code": "H", "nina_name": "Ha"},
+      {"position": 6, "filter_code": "S", "nina_name": "SII"},
+      {"position": 7, "filter_code": "O", "nina_name": "OIII"}
+    ]
+  }
+}

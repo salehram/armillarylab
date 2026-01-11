@@ -66,6 +66,18 @@
                min="1" max="3600">
         <div class="form-text">Default sub-exposure time when creating new plans with this filter.</div>
       </div>
+
+      <!-- AstroBin ID (Optional) -->
+      <div class="mb-3">
+        <label class="form-label">AstroBin Filter ID <small class="text-muted">(optional)</small></label>
+        <input class="form-control" name="astrobin_id" type="number"
+               value="{{ filter.astrobin_id if filter and filter.astrobin_id else '' }}" 
+               min="1" placeholder="e.g., 1955">
+        <div class="form-text">
+          Numeric ID from AstroBin's equipment database URL for CSV export.<br>
+          Example: For <code>app.astrobin.com/equipment/explorer/filter/<strong>1955</strong>/zwo-h-alpha</code>, enter <code>1955</code>.
+        </div>
+      </div>
       
     </div>
     

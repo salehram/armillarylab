@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "brand": "Generic",
+  "description": "Standard filter set with generic names. No AstroBin IDs - configure manually for your specific equipment.",
+  
+  "filters": [
+    {"name": "H", "display_name": "Hydrogen Alpha", "filter_type": "narrowband", "default_exposure": 300, "astrobin_id": null},
+    {"name": "O", "display_name": "Oxygen III", "filter_type": "narrowband", "default_exposure": 300, "astrobin_id": null},
+    {"name": "S", "display_name": "Sulfur II", "filter_type": "narrowband", "default_exposure": 300, "astrobin_id": null},
+    {"name": "L", "display_name": "Luminance", "filter_type": "broadband", "default_exposure": 180, "astrobin_id": null},
+    {"name": "R", "display_name": "Red", "filter_type": "broadband", "default_exposure": 180, "astrobin_id": null},
+    {"name": "G", "display_name": "Green", "filter_type": "broadband", "default_exposure": 180, "astrobin_id": null},
+    {"name": "B", "display_name": "Blue", "filter_type": "broadband", "default_exposure": 180, "astrobin_id": null},
+    {"name": "LP", "display_name": "Light Pollution", "filter_type": "other", "default_exposure": 300, "astrobin_id": null}
+  ]
+}

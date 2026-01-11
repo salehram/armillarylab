@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "brand": "ZWO",
+  "description": "ZWO 1.25\" narrowband (7nm) and LRGB filters with AstroBin equipment database IDs",
+  
+  "filters": [
+    {"name": "H", "display_name": "ZWO H-Alpha 7nm 1.25\"", "filter_type": "narrowband", "default_exposure": 300, "astrobin_id": 1955},
+    {"name": "O", "display_name": "ZWO O-III 7nm 1.25\"", "filter_type": "narrowband", "default_exposure": 300, "astrobin_id": 2707},
+    {"name": "S", "display_name": "ZWO S-II 7nm 1.25\"", "filter_type": "narrowband", "default_exposure": 300, "astrobin_id": 2260},
+    {"name": "L", "display_name": "ZWO Luminance 1.25\"", "filter_type": "broadband", "default_exposure": 180, "astrobin_id": 1958},
+    {"name": "R", "display_name": "ZWO Red 1.25\"", "filter_type": "broadband", "default_exposure": 180, "astrobin_id": 1956},
+    {"name": "G", "display_name": "ZWO Green 1.25\"", "filter_type": "broadband", "default_exposure": 180, "astrobin_id": 1954},
+    {"name": "B", "display_name": "ZWO Blue 1.25\"", "filter_type": "broadband", "default_exposure": 180, "astrobin_id": 1957},
+    {"name": "LP", "display_name": "Optolong L-Pro 1.25\"", "filter_type": "other", "default_exposure": 300, "astrobin_id": 5501}
+  ]
+}

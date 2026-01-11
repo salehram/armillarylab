@@ -1,11 +1,12 @@
 # AstroPlanner – Feature Roadmap  
-*Status: Updated to 2025-12-30 | Version 2.0.0-dev (PostgreSQL Support Branch)*
+*Status: Updated to 2026-01-11 | Version 2.1.0-dev (Equipment Presets & AstroBin Integration)*
 
 This document tracks the major features of the AstroPlanner project, what has been completed, and what remains.  
 It is intended to be version-controlled in Git for transparency, planning, and future development.
 
 **🎉 Version 1.0.0 Release - Complete Feature Set**  
-**🚀 Version 2.0.0-dev - PostgreSQL Support Implementation**
+**🚀 Version 2.0.0-dev - PostgreSQL Support Implementation**  
+**🆕 Version 2.1.0-dev - Equipment Presets & AstroBin Integration**
 
 ---
 
@@ -578,6 +579,7 @@ Create comprehensive documentation and user guide to help new users get started 
 | Enhanced imaging progress & custom filters | ✅ Done | Auto-populated filters, custom filter addition, collapsible UI |
 | Session recommendation engine | 🟡 Pending | AI-driven session optimization |
 | PostgreSQL database support | ✅ Done | Cloud deployment readiness |
+| Equipment presets & AstroBin integration | ✅ Done | Multi-user filter setup, CSV export |
 | Automatic recomputation | 🟡 Pending | After changes to settings |
 | Comprehensive user guide & documentation | 🟡 Pending | Getting started guides, tutorials, and feature documentation |
 | Filter & channel management | 🟡 In Progress | Multi-wheel support, NINA integration |
@@ -676,6 +678,93 @@ palette_filters
 
 ### Status
 **🟡 In Progress - Core implementation complete, testing and refinement ongoing.**
+
+---
+
+## ✅ 15. Equipment Presets & AstroBin Integration (Completed)
+### Summary
+Multi-user equipment configuration system with JSON-based presets and AstroBin CSV export functionality. Enables easy sharing of filter configurations across installations and seamless acquisition data upload to AstroBin.
+
+### Completed Features
+
+#### 15.1 Equipment Preset System
+- **JSON-Based Presets**: Modular configuration files in `config/presets/`
+  - `base.json`: Core palettes, target types, and default filter wheel configuration
+  - `filters/generic.json`: Standard filter set without AstroBin IDs (default)
+  - `filters/zwo.json`: ZWO 1.25" filters with AstroBin equipment database IDs
+- **Flexible Database Initialization**: 
+  - `--mode starter|minimal`: Full setup vs. filters-only initialization
+  - `--filter-preset <name>`: Select which filter preset to use
+  - `--force`: Force re-initialization with data clearing
+- **CLI Preset Management**:
+  - `flask list-presets`: Display available filter presets with details
+  - `flask export-preset <file.json>`: Export current configuration
+  - `flask import-preset <file.json>`: Import with merge or replace options
+- **Web UI Integration**: Settings page with import/export functionality
+  - Export current filters and filter wheels as JSON download
+  - Import from JSON files with merge or replace modes
+  - Download built-in presets directly from the UI
+
+#### 15.2 AstroBin Integration
+- **Filter AstroBin IDs**: Database field to store AstroBin equipment database IDs
+  - Each filter can store its numeric AstroBin ID (e.g., Ha=1955, OIII=2707)
+  - IDs are preserved in preset export/import operations
+- **Per-Target CSV Export**: AstroBin-compatible acquisition CSV export
+  - Date, filter ID, number of subs, duration, binning, gain, sensor cooling
+  - Proper filter name mapping from channel names to base filters
+  - Warning system for filters missing AstroBin IDs
+- **Flexible Export Settings**: Modal dialog with configurable options
+  - Binning (1x1, 2x2, etc.)
+  - Gain setting
+  - Sensor cooling temperature
+  - Default calibration frames (all "0" per AstroBin format)
+  - Default Bortle scale value
+
+#### 15.3 Database Enhancements
+- **Filter Model Updates**: Added `astrobin_id` column to Filter model
+- **Migration Support**: `flask migrate-db` handles schema updates
+- **Filter Form Enhancement**: AstroBin ID input in filter create/edit form
+
+### Technical Implementation
+- **Preset Files**: JSON-based configuration in `config/presets/` directory
+- **CLI Commands**: Click-based commands with comprehensive options
+- **Web Routes**: `/settings/export-preset`, `/settings/import-preset`, `/settings/download-preset/<name>`
+- **AstroBin Export**: `/target/<id>/export-astrobin-csv` route with modal form
+- **Filter Mapping**: Smart mapping from NINA channel names to base filter AstroBin IDs
+
+### User Benefits
+- **Easy Multi-User Setup**: New users can initialize with brand-specific presets
+- **Equipment Sharing**: Export and share filter configurations between users
+- **AstroBin Compatibility**: Direct CSV upload to AstroBin acquisition logs
+- **Flexible Initialization**: Choose between full setup or minimal filters-only mode
+- **Preserve Custom Configs**: Export before updates, import to restore
+
+### CLI Usage Examples
+```bash
+# List available presets
+flask list-presets
+
+# Initialize with ZWO filters (includes AstroBin IDs)
+flask init-db --filter-preset zwo
+
+# Initialize minimal setup (filters only, no palettes/wheels)
+flask init-db --mode minimal --filter-preset generic
+
+# Force reinitialize with different preset
+flask init-db --filter-preset zwo --force
+
+# Export current configuration
+flask export-preset my_equipment.json --include-wheels
+
+# Import configuration (merge with existing)
+flask import-preset shared_filters.json --merge
+
+# Import configuration (replace all)
+flask import-preset new_setup.json --include-wheels
+```
+
+### Status
+**✅ Fully implemented and working.**
 
 ---
 

@@ -226,7 +226,7 @@
               <td>
                 <div class="d-flex gap-1">
                   <a href="{{ url_for('target_detail', target_id=t.id) }}"
-                     class="btn btn-outline-light btn-sm" title="View">
+                     class="btn btn-outline-secondary btn-sm" title="View">
                     <i class="bi bi-eye"></i>
                   </a>
                   <form method="post" action="{{ url_for('clone_target', target_id=t.id) }}"
@@ -238,7 +238,7 @@
                   </form>
                   <form method="post" action="{{ url_for('unarchive_target', target_id=t.id) }}"
                         class="d-inline">
-                    <button class="btn btn-outline-warning btn-sm" type="submit"
+                    <button class="btn btn-warning btn-sm" type="submit"
                             title="Restore to active">
                       <i class="bi bi-arrow-counterclockwise"></i>
                     </button>

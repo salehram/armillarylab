@@ -66,10 +66,10 @@
   </div>
 {% endif %}
 
-<!-- All Targets Table -->
+<!-- Active Targets Table -->
 <div class="card bg-secondary text-light">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <span>All Targets</span>
+    <span><i class="bi bi-crosshair me-2"></i>Active Targets</span>
     <small class="text-muted">Sorted by priority (highest first)</small>
   </div>
   <div class="card-body">
@@ -133,13 +133,19 @@
                 <td>
                   <div class="d-flex gap-1">
                     <a href="{{ url_for('target_detail', target_id=t.id) }}"
-                       class="btn btn-outline-light btn-sm">
-                      <i class="bi bi-eye me-1"></i>View
+                       class="btn btn-outline-light btn-sm" title="View">
+                      <i class="bi bi-eye"></i>
                     </a>
+                    <form method="post" action="{{ url_for('clone_target', target_id=t.id) }}"
+                          class="d-inline">
+                      <button class="btn btn-outline-secondary btn-sm" type="submit" title="Clone">
+                        <i class="bi bi-copy"></i>
+                      </button>
+                    </form>
                     <form method="post"
                           action="{{ url_for('delete_target', target_id=t.id) }}"
                           onsubmit="return confirm('Delete target {{ t.name }} and all its data?');">
-                      <button class="btn btn-outline-danger btn-sm" type="submit">
+                      <button class="btn btn-outline-danger btn-sm" type="submit" title="Delete">
                         <i class="bi bi-trash"></i>
                       </button>
                     </form>
@@ -152,10 +158,107 @@
       </div>
     {% else %}
       <p class="text-muted mb-0">
-        No targets yet. Click <strong>+ New Target</strong> to get started.
+        No active targets yet. Click <strong>+ New Target</strong> to get started.
       </p>
     {% endif %}
   </div>
 </div>
+
+<!-- Archived Targets -->
+{% if archived_summaries %}
+<div class="card bg-secondary text-light mt-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-archive me-2"></i>Archived / Completed Targets</span>
+    <small class="text-muted">{{ archived_summaries|length }} completed project(s)</small>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm table-dark align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Target</th>
+            <th>Type</th>
+            <th>Palette</th>
+            <th>Total Time</th>
+            <th>Completed</th>
+            <th>Notes</th>
+            <th style="width: 200px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in archived_summaries %}
+            {% set t = s.target %}
+            <tr class="table-secondary">
+              <td>
+                <a href="{{ url_for('target_detail', target_id=t.id) }}"
+                   class="text-dark text-decoration-none">
+                  <i class="bi bi-check-circle-fill text-success me-1"></i>{{ t.name }}
+                </a>
+                <div class="small text-secondary">
+                  {{ t.catalog_id or "" }}
+                </div>
+              </td>
+              <td>{{ t.target_type or "N/A" }}</td>
+              <td>
+                {% if s.plan_data %}
+                  {{ s.plan_data.palette }}
+                {% else %}
+                  <span class="text-muted">No plan</span>
+                {% endif %}
+              </td>
+              <td>{{ s.done_total|format_hms_from_minutes }} ({{ s.done_total }} min)</td>
+              <td>
+                {% if s.archived_at_local %}
+                  {{ s.archived_at_local.strftime('%Y-%m-%d') }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>
+                {% if t.completion_notes %}
+                  <span class="text-muted small" title="{{ t.completion_notes }}">
+                    {{ t.completion_notes[:50] }}{% if t.completion_notes|length > 50 %}...{% endif %}
+                  </span>
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="d-flex gap-1">
+                  <a href="{{ url_for('target_detail', target_id=t.id) }}"
+                     class="btn btn-outline-light btn-sm" title="View">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <form method="post" action="{{ url_for('clone_target', target_id=t.id) }}"
+                        class="d-inline">
+                    <button class="btn btn-outline-primary btn-sm" type="submit" 
+                            title="Clone and start fresh">
+                      <i class="bi bi-copy"></i> Clone
+                    </button>
+                  </form>
+                  <form method="post" action="{{ url_for('unarchive_target', target_id=t.id) }}"
+                        class="d-inline">
+                    <button class="btn btn-outline-warning btn-sm" type="submit"
+                            title="Restore to active">
+                      <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                  </form>
+                  <form method="post"
+                        action="{{ url_for('delete_target', target_id=t.id) }}"
+                        onsubmit="return confirm('Delete archived target {{ t.name }} and all its data?');">
+                    <button class="btn btn-outline-danger btn-sm" type="submit" title="Delete permanently">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% endblock %}

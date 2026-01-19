@@ -295,6 +295,11 @@ class Target(db.Model):
 
     # NEW: when this target (i.e. this "project") was created
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Archive/completion status
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    completion_notes = db.Column(db.Text)  # Notes about the completed project
 
     plans = relationship("TargetPlan", back_populates="target",
                          cascade="all, delete-orphan")
@@ -534,14 +539,19 @@ def add_object_mapping(catalog_name, target_type_name):
 def index():
     from collections import defaultdict
 
-    targets = Target.query.order_by(Target.name).all()
+    # Separate active and archived targets
+    active_targets = Target.query.filter(
+        (Target.is_archived == False) | (Target.is_archived == None)
+    ).order_by(Target.name).all()
+    
+    archived_targets = Target.query.filter(Target.is_archived == True).order_by(Target.archived_at.desc()).all()
 
     # Observer location from global config
     lat, lon, elev = get_observer_location()
 
     summaries = []
 
-    for t in targets:
+    for t in active_targets:
         # Latest plan for current preferred palette
         plan = (
             TargetPlan.query
@@ -685,9 +695,43 @@ def index():
     if active:
         tonight_pick = max(active, key=lambda s: s["priority_score"])
 
+    # Build archived summaries with basic info
+    archived_summaries = []
+    for t in archived_targets:
+        plan = (
+            TargetPlan.query
+            .filter_by(target_id=t.id, palette_name=t.preferred_palette)
+            .order_by(TargetPlan.created_at.desc())
+            .first()
+        )
+        
+        if plan:
+            plan_data = json.loads(plan.plan_json)
+            planned_total = float(plan_data.get("total_planned_minutes", 0) or 0)
+        else:
+            plan_data = None
+            planned_total = 0.0
+        
+        # Calculate total done time
+        total_seconds = sum(s.sub_exposure_seconds * s.sub_count for s in t.sessions)
+        done_minutes = total_seconds / 60.0
+        
+        archived_at_local = (t.archived_at.replace(tzinfo=timezone.utc).astimezone(get_local_tz()) if t.archived_at else None)
+        created_local = (t.created_at.replace(tzinfo=timezone.utc).astimezone(get_local_tz()) if t.created_at else None)
+        
+        archived_summaries.append({
+            "target": t,
+            "plan_data": plan_data,
+            "planned_total": round(planned_total, 1),
+            "done_total": round(done_minutes, 1),
+            "archived_at_local": archived_at_local,
+            "created_local": created_local,
+        })
+
     return render_template(
         "index.html",
         target_summaries=summaries,
+        archived_summaries=archived_summaries,
         tonight_pick=tonight_pick,
     )
 
@@ -1053,6 +1097,80 @@ def delete_target(target_id):
 
     flash(f"Target '{target.name}' and all associated data were deleted.", "success")
     return redirect(url_for("index"))
+
+
+@app.route("/target/<int:target_id>/archive", methods=["POST"])
+def archive_target(target_id):
+    """Mark a target as complete/archived."""
+    target = Target.query.get_or_404(target_id)
+    
+    completion_notes = request.form.get("completion_notes", "")
+    
+    target.is_archived = True
+    target.archived_at = datetime.utcnow()
+    target.completion_notes = completion_notes
+    
+    db.session.commit()
+    flash(f"Target '{target.name}' has been marked as complete and archived.", "success")
+    return redirect(url_for("target_detail", target_id=target.id))
+
+
+@app.route("/target/<int:target_id>/unarchive", methods=["POST"])
+def unarchive_target(target_id):
+    """Restore an archived target to active status."""
+    target = Target.query.get_or_404(target_id)
+    
+    target.is_archived = False
+    target.archived_at = None
+    # Keep completion_notes for reference
+    
+    db.session.commit()
+    flash(f"Target '{target.name}' has been restored to active status.", "success")
+    return redirect(url_for("target_detail", target_id=target.id))
+
+
+@app.route("/target/<int:target_id>/clone", methods=["POST"])
+def clone_target(target_id):
+    """Clone an archived target and reset its progress to start fresh."""
+    original = Target.query.get_or_404(target_id)
+    
+    # Create new target with same details
+    new_target = Target(
+        name=f"{original.name} (Copy)",
+        catalog_id=original.catalog_id,
+        target_type=original.target_type,
+        target_type_id=original.target_type_id,
+        ra_hours=original.ra_hours,
+        dec_deg=original.dec_deg,
+        notes=original.notes,
+        pixinsight_workflow=original.pixinsight_workflow,
+        preferred_palette=original.preferred_palette,
+        palette_id=original.palette_id,
+        packup_time_local=original.packup_time_local,
+        override_packup_time=original.override_packup_time,
+        override_min_altitude=original.override_min_altitude,
+        # Don't copy: final_image_filename, is_archived, archived_at, completion_notes
+        # Don't copy: created_at (will be set to now automatically)
+    )
+    
+    db.session.add(new_target)
+    db.session.flush()  # Get the new target ID
+    
+    # Clone all plans but reset progress (no sessions copied)
+    for plan in original.plans:
+        plan_data = json.loads(plan.plan_json)
+        new_plan = TargetPlan(
+            target_id=new_target.id,
+            palette_name=plan.palette_name,
+            palette_id=plan.palette_id,
+            plan_json=plan.plan_json,  # Copy the plan structure
+        )
+        db.session.add(new_plan)
+    
+    db.session.commit()
+    
+    flash(f"Target '{original.name}' has been cloned as '{new_target.name}' with all progress reset.", "success")
+    return redirect(url_for("target_detail", target_id=new_target.id))
 
 
 @app.route("/target/<int:target_id>/edit", methods=["GET", "POST"])

@@ -179,6 +179,19 @@ def migrate(to, target_url, backup, validate):
         click.echo("✗ Source and target database types are the same")
         return
     
+    # Test target connection first
+    click.echo(f"Testing connection to target {to} database...")
+    is_valid, error = target_config.validate_connection()
+    if not is_valid:
+        click.echo(f"✗ Cannot connect to target database: {error}")
+        click.echo(f"\nPlease ensure the target database exists and is accessible.")
+        if to == 'postgresql':
+            click.echo("  1. Create the database: CREATE DATABASE astroplanner;")
+            click.echo("  2. Create the user and grant permissions")
+            click.echo("  3. Verify the connection URL is correct")
+        return
+    click.echo("✓ Target database connection successful")
+    
     # Confirm migration
     if not click.confirm(f"Are you sure you want to migrate from {source_config.db_type} to {to}?"):
         click.echo("Migration cancelled")
@@ -222,6 +235,16 @@ def migrate(to, target_url, backup, validate):
         else:
             click.echo(f"\n✗ Migration failed")
             
+    except ValueError as e:
+        # Schema-related errors with helpful guidance
+        click.echo(f"\n✗ Migration error: {str(e)}")
+        click.echo("\nTo fix this, you need to initialize the target database schema first:")
+        click.echo(f"  1. Set environment: $env:DATABASE_TYPE = '{to}'")
+        if target_url:
+            click.echo(f"  2. Set URL: $env:DATABASE_URL = '{target_url}'")
+        click.echo(f"  3. Initialize schema: flask init-db")
+        click.echo(f"  4. Clear default data (see DATABASE_GUIDE.md)")
+        click.echo(f"  5. Re-run migration: flask db migrate --to {to}" + (f" --target-url \"{target_url}\"" if target_url else ""))
     except Exception as e:
         click.echo(f"\n✗ Migration error: {str(e)}")
 

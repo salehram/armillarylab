@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 import shutil
 
-from sqlalchemy import create_engine, MetaData, Table, select, insert, text, inspect
+from sqlalchemy import create_engine, MetaData, Table, select, insert, text, inspect, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -270,9 +270,26 @@ class DatabaseMigrator:
     
     def prepare_target_schema(self):
         """Ensure target database has the correct schema."""
-        # This would typically involve running migrations
-        # For now, we assume the target database already has the correct schema
-        logger.info("Target schema preparation completed")
+        # Check if tables exist in target
+        inspector = inspect(self.target_engine)
+        existing_tables = inspector.get_table_names()
+        
+        required_tables = ['targets', 'target_plans', 'imaging_sessions', 'filters', 
+                          'palettes', 'target_types', 'global_config', 'filter_wheels',
+                          'filter_wheel_slots', 'object_mappings', 'palette_filters']
+        
+        missing_tables = [t for t in required_tables if t not in existing_tables]
+        
+        if missing_tables:
+            logger.warning(f"Missing tables in target database: {missing_tables}")
+            logger.warning("Please run 'flask init-db' on the target database first to create the schema.")
+            raise ValueError(
+                f"Target database is missing required tables: {missing_tables}. "
+                f"Please initialize the target database schema first by running: "
+                f"DATABASE_TYPE={self.target_config.db_type} flask init-db"
+            )
+        
+        logger.info("Target schema validation completed - all required tables exist")
     
     def validate_database(self, engine) -> Tuple[bool, List[str]]:
         """Validate database integrity and structure."""
@@ -311,7 +328,8 @@ class DatabaseMigrator:
                 for table_name, exported_records in exported_data.items():
                     if table_name in metadata.tables:
                         table = metadata.tables[table_name]
-                        result = conn.execute(select([text('COUNT(*)')]).select_from(table))
+                        # SQLAlchemy 2.0 syntax for count
+                        result = conn.execute(select(func.count()).select_from(table))
                         target_count = result.scalar()
                         
                         count_validation[table_name] = {

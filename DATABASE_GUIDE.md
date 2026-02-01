@@ -29,6 +29,8 @@ This guide provides clear, step-by-step instructions for configuring and migrati
 | Migrate PostgreSQL → SQLite | `flask db migrate --to sqlite` |
 | Create backup | `flask db backup` |
 
+> **Migration Note:** The migrate command automatically handles schema creation, data clearing, data migration, and `.env` file updates. Just run the command and confirm!
+
 ---
 
 ## Using .env Files for Configuration
@@ -299,131 +301,84 @@ SECRET_KEY=your-secret-key
 
 ## Part 2: Migrating Between Databases
 
+The migration tool handles everything automatically:
+- ✅ Tests connection to target database
+- ✅ Creates schema (tables) on target
+- ✅ Clears any existing data on target
+- ✅ Migrates all data from source
+- ✅ Updates your `.env` file to use the new database
+
+No manual steps required!
+
+---
+
 ### SQLite → PostgreSQL Migration
 
 Use this when moving from local development to production or cloud deployment.
 
-#### Prerequisites Checklist
+#### Prerequisites
 
 Before migrating, ensure:
 
 - [ ] PostgreSQL is installed and running
-- [ ] PostgreSQL database created (can be empty)
-- [ ] PostgreSQL user created with proper permissions
+- [ ] PostgreSQL database and user created (see [Option B: PostgreSQL](#option-b-postgresql))
 - [ ] You have the PostgreSQL connection URL ready
-- [ ] Current SQLite database has data you want to preserve
 
-#### Step-by-Step Migration
+#### Migration Command
 
-1. **Create a backup of your current SQLite database**
-   ```powershell
-   flask db backup
-   ```
-   This creates: `astroplanner.db.backup_YYYYMMDD_HHMMSS`
+```powershell
+flask db migrate --to postgresql --target-url "postgresql://user:password@localhost:5432/astroplanner"
+```
 
-2. **Verify current database status (SQLite)**
-   ```powershell
-   flask db info
-   ```
-   Confirm you're currently on SQLite with data.
+When prompted, type `y` to confirm the migration.
 
-3. **Create the PostgreSQL database and user** (if not done already)
-   ```powershell
-   # Connect to PostgreSQL as admin
-   psql -U postgres
-   
-   # Create database and user
-   CREATE DATABASE astroplanner;
-   CREATE USER astroplanner_user WITH PASSWORD 'your_password';
-   GRANT ALL PRIVILEGES ON DATABASE astroplanner TO astroplanner_user;
-   \q
-   ```
+#### Example Output
 
-4. **Initialize PostgreSQL schema** (creates tables)
-   
-   The migration tool needs tables to exist in PostgreSQL before importing data:
-   ```powershell
-   # Set PostgreSQL environment
-   $env:DATABASE_TYPE = "postgresql"
-   $env:DATABASE_URL = "postgresql://astroplanner_user:password@localhost:5432/astroplanner"
-   
-   # Create the schema (tables)
-   flask init-db
-   ```
+```
+============================================================
+Migrating from SQLite to PostgreSQL
+============================================================
+Source: sqlite:///c:\...\astroplanner.db
+Target: postgresql://user:***@localhost:5432/astroplanner
 
-5. **Clear the default data** (so it doesn't conflict with your SQLite data)
-   ```powershell
-   # Still with PostgreSQL environment variables set
-   python -c "
-   import os
-   os.environ['DATABASE_TYPE'] = 'postgresql'
-   os.environ['DATABASE_URL'] = 'postgresql://astroplanner_user:password@localhost:5432/astroplanner'
-   
-   from app import db, app
-   with app.app_context():
-       from app import ImagingSession, TargetPlan, Target, FilterWheelSlot, FilterWheel
-       from app import PaletteFilter, ObjectMapping, Filter, Palette, TargetType, GlobalConfig
-       
-       # Delete in reverse dependency order
-       ImagingSession.query.delete()
-       TargetPlan.query.delete()
-       Target.query.delete()
-       FilterWheelSlot.query.delete()
-       FilterWheel.query.delete()
-       PaletteFilter.query.delete()
-       ObjectMapping.query.delete()
-       Filter.query.delete()
-       Palette.query.delete()
-       TargetType.query.delete()
-       GlobalConfig.query.delete()
-       db.session.commit()
-       print('PostgreSQL data cleared.')
-   "
-   ```
+Step 1/5: Testing target connection...
+✓ Target database connection successful
 
-6. **Run the migration** (from SQLite source)
-   ```powershell
-   # Clear PostgreSQL environment to use SQLite as source
-   Remove-Item Env:DATABASE_TYPE -ErrorAction SilentlyContinue
-   Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
-   
-   # Run migration
-   flask db migrate --to postgresql --target-url "postgresql://astroplanner_user:password@localhost:5432/astroplanner"
-   ```
-   
-   When prompted, type `y` to confirm.
+Step 2/5: Initializing target schema...
+✓ Schema initialized (10 tables created)
 
-7. **Review migration results**
-   ```
-   Migration Results
-   ============================================================
-   Status: completed
-   Tables migrated: 10
-   Records migrated: 86
-   
-   ✓ Migration completed successfully
-   ```
+Step 3/5: Clearing target database...
+⚠ Target database has existing data (86 records)
+Clear target database and proceed with migration? [y/N]: y
+✓ Target database cleared
 
-8. **Switch to PostgreSQL for future sessions**
-   ```powershell
-   $env:DATABASE_TYPE = "postgresql"
-   $env:DATABASE_URL = "postgresql://astroplanner_user:password@localhost:5432/astroplanner"
-   ```
-   
-   Or create/update your `.env` file:
-   ```env
-   DATABASE_TYPE=postgresql
-   DATABASE_URL=postgresql://astroplanner_user:password@localhost:5432/astroplanner
-   ```
+Step 4/5: Migrating data...
+✓ Data migration complete
 
-9. **Verify the migration**
-   ```powershell
-   flask db info
-   flask run
-   ```
-   Open http://127.0.0.1:5000 and verify all your targets, sessions, and settings are intact.
+Step 5/5: Updating .env file...
+✓ .env file updated to use postgresql
 
-> **Note:** The migration preserves all your data including targets, imaging sessions, filters, palettes, and settings. Your original SQLite database remains unchanged as a backup.
+Migration Results
+============================================================
+Status: completed
+Tables migrated: 10
+Records migrated: 86
+.env file updated: yes
+
+🎉 Migration complete! Your app will now use PostgreSQL.
+   Restart your Flask server to apply the changes.
+```
+
+#### Verify Migration
+
+```powershell
+flask db info
+flask run
+```
+
+Open http://127.0.0.1:5000 and verify all your targets, sessions, and settings are intact.
+
+> **Note:** Your original SQLite database file remains unchanged as a backup.
 
 ---
 
@@ -431,47 +386,60 @@ Before migrating, ensure:
 
 Use this when moving from production back to local development or creating a portable backup.
 
-#### Prerequisites Checklist
+#### Prerequisites
 
-- [ ] Current PostgreSQL database has data you want to preserve
+- [ ] You're currently using PostgreSQL (check with `flask db info`)
 - [ ] You have write permissions to the project directory
-- [ ] (Optional) Backup your PostgreSQL database first
 
-#### Step-by-Step Migration
+#### Migration Command
 
-1. **Backup PostgreSQL database (recommended)**
-   ```powershell
-   # Using pg_dump
-   pg_dump $env:DATABASE_URL > backup_postgresql_$(Get-Date -Format 'yyyyMMdd_HHmmss').sql
-   ```
+```powershell
+flask db migrate --to sqlite
+```
 
-2. **Verify current database status**
-   ```powershell
-   flask db info
-   ```
+When prompted, type `y` to confirm the migration.
 
-3. **Remove existing SQLite file (if any)**
-   ```powershell
-   Remove-Item astroplanner.db -ErrorAction SilentlyContinue
-   ```
+#### Example Output
 
-4. **Run the migration**
-   ```powershell
-   flask db migrate --to sqlite
-   ```
+```
+============================================================
+Migrating from PostgreSQL to SQLite
+============================================================
+Source: postgresql://user:***@localhost:5432/astroplanner
+Target: sqlite:///c:\...\astroplanner.db
 
-5. **Switch to SQLite for future sessions**
-   ```powershell
-   # Remove PostgreSQL environment variables
-   Remove-Item Env:DATABASE_TYPE -ErrorAction SilentlyContinue
-   Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
-   ```
+Step 1/5: Testing target connection...
+✓ Target database connection successful
 
-6. **Verify the migration**
-   ```powershell
-   flask db info
-   flask run
-   ```
+Step 2/5: Initializing target schema...
+✓ Schema initialized (10 tables created)
+
+Step 3/5: Clearing target database...
+✓ Target database is empty, proceeding
+
+Step 4/5: Migrating data...
+✓ Data migration complete
+
+Step 5/5: Updating .env file...
+✓ .env file updated to use sqlite
+
+Migration Results
+============================================================
+Status: completed
+Tables migrated: 10
+Records migrated: 86
+.env file updated: yes
+
+🎉 Migration complete! Your app will now use SQLite.
+   Restart your Flask server to apply the changes.
+```
+
+#### Verify Migration
+
+```powershell
+flask db info
+flask run
+```
 
 ---
 

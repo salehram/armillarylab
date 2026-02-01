@@ -152,62 +152,198 @@ def init():
         raise
 
 
+def update_env_file(db_type, db_url=None):
+    """Update .env file with new database configuration."""
+    env_path = Path(current_app.root_path) / '.env'
+    
+    if not env_path.exists():
+        # Create new .env file
+        lines = [
+            "# AstroPlanner Environment Configuration\n",
+            f"DATABASE_TYPE={db_type}\n",
+        ]
+        if db_url:
+            lines.append(f"DATABASE_URL={db_url}\n")
+        env_path.write_text(''.join(lines))
+        return True
+    
+    # Read existing .env file
+    content = env_path.read_text()
+    lines = content.splitlines(keepends=True)
+    
+    new_lines = []
+    found_db_type = False
+    found_db_url = False
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Handle DATABASE_TYPE
+        if stripped.startswith('DATABASE_TYPE=') or stripped.startswith('#DATABASE_TYPE='):
+            if not found_db_type:
+                new_lines.append(f"DATABASE_TYPE={db_type}\n")
+                found_db_type = True
+            # Skip any additional DATABASE_TYPE lines (commented or not)
+            continue
+        
+        # Handle DATABASE_URL
+        if stripped.startswith('DATABASE_URL=') or stripped.startswith('#DATABASE_URL='):
+            if not found_db_url:
+                if db_url:
+                    new_lines.append(f"DATABASE_URL={db_url}\n")
+                elif db_type == 'sqlite':
+                    # Comment out DATABASE_URL for SQLite
+                    new_lines.append(f"#DATABASE_URL=\n")
+                found_db_url = True
+            continue
+        
+        new_lines.append(line)
+    
+    # Add if not found
+    if not found_db_type:
+        new_lines.append(f"DATABASE_TYPE={db_type}\n")
+    if not found_db_url and db_url:
+        new_lines.append(f"DATABASE_URL={db_url}\n")
+    
+    env_path.write_text(''.join(new_lines))
+    return True
+
+
 @db_cli.command()
 @with_appcontext
 @click.option('--to', required=True, type=click.Choice(['sqlite', 'postgresql']), 
               help='Target database type')
-@click.option('--target-url', help='Target database connection URL')
+@click.option('--target-url', help='Target database connection URL (required for PostgreSQL)')
 @click.option('--backup/--no-backup', default=True, help='Create backup before migration')
 @click.option('--validate/--no-validate', default=True, help='Validate data before and after migration')
-def migrate(to, target_url, backup, validate):
-    """Migrate data to a different database type."""
+@click.option('--update-env/--no-update-env', default=True, help='Update .env file after successful migration')
+def migrate(to, target_url, backup, validate, update_env):
+    """Migrate data to a different database type.
+    
+    This command handles the complete migration workflow:
+    1. Validates source and target connections
+    2. Initializes target database schema if needed
+    3. Clears any default data from target
+    4. Migrates all data from source to target
+    5. Updates .env file to use the new database
+    """
+    from app import db
     
     # Get current database configuration
     source_config = get_database_config()
     
     click.echo(f"Migrating from {source_config.db_type} to {to}")
     
-    # Configure target database
+    # For PostgreSQL, require target-url
+    if to == 'postgresql' and not target_url:
+        click.echo("✗ PostgreSQL migration requires --target-url")
+        click.echo("  Example: flask db migrate --to postgresql --target-url \"postgresql://user:pass@localhost:5432/dbname\"")
+        return
+    
+    # Validate different database types
+    if source_config.db_type == to:
+        click.echo("✗ Source and target database types are the same")
+        return
+    
+    # Configure target database temporarily
+    original_db_type = os.environ.get('DATABASE_TYPE')
+    original_db_url = os.environ.get('DATABASE_URL')
+    
     if target_url:
         os.environ['DATABASE_URL'] = target_url
+    elif to == 'sqlite':
+        os.environ.pop('DATABASE_URL', None)
     
     os.environ['DATABASE_TYPE'] = to
     target_config = get_database_config()
     
-    # Validate different database types
-    if source_config.db_type == target_config.db_type:
-        click.echo("✗ Source and target database types are the same")
-        return
-    
-    # Test target connection first
-    click.echo(f"Testing connection to target {to} database...")
+    # Test target connection
+    click.echo(f"\nStep 1: Testing connection to target {to} database...")
     is_valid, error = target_config.validate_connection()
     if not is_valid:
         click.echo(f"✗ Cannot connect to target database: {error}")
-        click.echo(f"\nPlease ensure the target database exists and is accessible.")
         if to == 'postgresql':
-            click.echo("  1. Create the database: CREATE DATABASE astroplanner;")
-            click.echo("  2. Create the user and grant permissions")
-            click.echo("  3. Verify the connection URL is correct")
+            click.echo("\nPlease ensure:")
+            click.echo("  1. PostgreSQL server is running")
+            click.echo("  2. Database exists: CREATE DATABASE astroplanner;")
+            click.echo("  3. User has permissions: GRANT ALL PRIVILEGES...")
+            click.echo("  4. Connection URL is correct")
+        # Restore original env
+        if original_db_type:
+            os.environ['DATABASE_TYPE'] = original_db_type
+        if original_db_url:
+            os.environ['DATABASE_URL'] = original_db_url
         return
     click.echo("✓ Target database connection successful")
     
     # Confirm migration
-    if not click.confirm(f"Are you sure you want to migrate from {source_config.db_type} to {to}?"):
+    click.echo(f"\nThis will migrate all data from {source_config.db_type} to {to}.")
+    if update_env:
+        click.echo("The .env file will be updated to use the new database after migration.")
+    if not click.confirm("Proceed with migration?"):
         click.echo("Migration cancelled")
+        # Restore original env
+        if original_db_type:
+            os.environ['DATABASE_TYPE'] = original_db_type
+        if original_db_url:
+            os.environ['DATABASE_URL'] = original_db_url
         return
     
     try:
-        # Perform migration
-        with click.progressbar(length=100, label="Migrating database") as bar:
-            result = migrate_database(
-                source_config, 
-                target_config,
-                validate_before=validate,
-                validate_after=validate,
-                backup_target=backup
-            )
-            bar.update(100)
+        # Step 2: Initialize target database schema
+        click.echo(f"\nStep 2: Initializing {to} database schema...")
+        from sqlalchemy import create_engine, inspect
+        
+        target_engine = create_engine(target_config.connection_string, **target_config.get_engine_args())
+        inspector = inspect(target_engine)
+        existing_tables = inspector.get_table_names()
+        target_engine.dispose()
+        
+        required_tables = ['targets', 'target_plans', 'imaging_sessions']
+        missing_tables = [t for t in required_tables if t not in existing_tables]
+        
+        if missing_tables:
+            click.echo(f"  Creating schema in {to} database...")
+            # Temporarily switch app to target database to create schema
+            from sqlalchemy import create_engine
+            target_engine = create_engine(target_config.connection_string, **target_config.get_engine_args())
+            db.metadata.create_all(target_engine)
+            target_engine.dispose()
+            click.echo("  ✓ Schema created")
+        else:
+            click.echo("  ✓ Schema already exists")
+        
+        # Step 3: Clear target database data
+        click.echo(f"\nStep 3: Clearing existing data in {to} database...")
+        target_engine = create_engine(target_config.connection_string, **target_config.get_engine_args())
+        
+        from sqlalchemy.orm import Session
+        with Session(target_engine) as session:
+            # Delete in reverse dependency order using raw SQL for reliability
+            tables_to_clear = [
+                'imaging_sessions', 'target_plans', 'targets',
+                'filter_wheel_slots', 'filter_wheels', 
+                'palette_filters', 'object_mappings',
+                'filters', 'palettes', 'target_types', 'global_config'
+            ]
+            for table_name in tables_to_clear:
+                try:
+                    session.execute(db.text(f'DELETE FROM {table_name}'))
+                except Exception:
+                    pass  # Table might not exist
+            session.commit()
+        target_engine.dispose()
+        click.echo("  ✓ Target database cleared")
+        
+        # Step 4: Perform migration
+        click.echo(f"\nStep 4: Migrating data from {source_config.db_type} to {to}...")
+        result = migrate_database(
+            source_config, 
+            target_config,
+            validate_before=validate,
+            validate_after=validate,
+            backup_target=backup
+        )
         
         # Display results
         click.echo("\n" + "=" * 60)
@@ -232,21 +368,36 @@ def migrate(to, target_url, backup, validate):
         
         if result['status'] == 'completed':
             click.echo("\n✓ Migration completed successfully")
+            
+            # Step 5: Update .env file
+            if update_env:
+                click.echo(f"\nStep 5: Updating .env file to use {to}...")
+                try:
+                    update_env_file(to, target_url)
+                    click.echo(f"  ✓ .env file updated")
+                    click.echo(f"\n🎉 Migration complete! Your app is now configured to use {to}.")
+                    click.echo("   Restart your Flask server to use the new database.")
+                except Exception as e:
+                    click.echo(f"  ⚠ Could not update .env file: {e}")
+                    click.echo(f"\n  Please manually update your .env file:")
+                    click.echo(f"    DATABASE_TYPE={to}")
+                    if target_url:
+                        click.echo(f"    DATABASE_URL={target_url}")
         else:
             click.echo(f"\n✗ Migration failed")
+            # Restore original env
+            if original_db_type:
+                os.environ['DATABASE_TYPE'] = original_db_type
+            if original_db_url:
+                os.environ['DATABASE_URL'] = original_db_url
             
-    except ValueError as e:
-        # Schema-related errors with helpful guidance
-        click.echo(f"\n✗ Migration error: {str(e)}")
-        click.echo("\nTo fix this, you need to initialize the target database schema first:")
-        click.echo(f"  1. Set environment: $env:DATABASE_TYPE = '{to}'")
-        if target_url:
-            click.echo(f"  2. Set URL: $env:DATABASE_URL = '{target_url}'")
-        click.echo(f"  3. Initialize schema: flask init-db")
-        click.echo(f"  4. Clear default data (see DATABASE_GUIDE.md)")
-        click.echo(f"  5. Re-run migration: flask db migrate --to {to}" + (f" --target-url \"{target_url}\"" if target_url else ""))
     except Exception as e:
         click.echo(f"\n✗ Migration error: {str(e)}")
+        # Restore original env
+        if original_db_type:
+            os.environ['DATABASE_TYPE'] = original_db_type
+        if original_db_url:
+            os.environ['DATABASE_URL'] = original_db_url
 
 
 @db_cli.command()

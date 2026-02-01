@@ -2,15 +2,15 @@
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
-![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 
-## � Version 1.0.0 - Complete Feature Set
+## 🎉 Version 2.0.0 - Database & Filter Management Release
 
-AstroPlanner v1.0.0 represents a mature, feature-complete astrophotography planning platform with comprehensive target management, session tracking, and telescope integration capabilities.
+AstroPlanner v2.0.0 brings major improvements for production deployment and equipment management, including PostgreSQL support, comprehensive filter management, target archiving, and enhanced dark theme visibility.
 
 ## 🌟 Features
 
@@ -479,8 +479,9 @@ docker-compose up --build
 
 ## 📊 Current Status
 
-### ✅ Completed Features
+### ✅ Completed Features (v2.0.0)
 
+**Core Functionality:**
 - Target-as-project design with creation timestamps
 - Local timezone support with Windows compatibility
 - Database rebuild support with CLI commands
@@ -491,11 +492,16 @@ docker-compose up --build
 - Bidirectional frame/time input functionality
 - Altitude Chart with moon position, meridian flip, current time markers
 - Comprehensive imaging logs and session tracking
-- Enhanced custom filter system with NINA mapping
-- PostgreSQL support for cloud deployment
-- **Equipment preset system with JSON configuration**
-- **AstroBin CSV export with filter ID mapping**
-- **Multi-user setup support via preset import/export**
+
+**New in v2.0.0:**
+- 🗄️ **PostgreSQL Support**: Full production database support with automatic migration
+- 🎛️ **Filter Management System**: Complete filter and filter wheel configuration
+- 📦 **Target Archiving**: Archive completed targets to keep workspace clean
+- 🔗 **Object Mapping**: Cross-reference catalogs with AstroBin integration
+- ⚙️ **Equipment Preset System**: JSON-based configuration sharing
+- 📤 **AstroBin CSV Export**: Filter ID mapping for seamless uploads
+- 👥 **Multi-user Setup Support**: Import/export presets for team use
+- 🎨 **Dark Theme UI Improvements**: Better visibility across all pages
 
 ### 🚧 Roadmap
 

@@ -1,17 +1,89 @@
 version: "3.9"
 
 services:
+  # =============================================================================
+  # AstroPlanner Application
+  # =============================================================================
   astroplanner:
     build: .
+    container_name: astroplanner
     ports:
-      - "5000:5000"
+      - "${PORT:-5000}:5000"
     environment:
-      - SECRET_KEY=change-me
-      - OBSERVER_LAT=24.7136
-      - OBSERVER_LON=46.6753
-      - OBSERVER_ELEV_M=600
-      # For external DB, uncomment and set:
-      # - DATABASE_URL=postgresql+psycopg2://user:pass@postgres/astroplanner
+      # Application Settings
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_DEBUG=${FLASK_DEBUG:-False}
+      - PORT=5000
+      
+      # Database Configuration (SQLite by default, PostgreSQL if enabled)
+      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
+      - DATABASE_URL=${DATABASE_URL:-}
+      
+      # PostgreSQL Settings (when using postgres service below)
+      # Uncomment DATABASE_TYPE and DATABASE_URL below for PostgreSQL
+      # - DATABASE_TYPE=postgresql
+      # - DATABASE_URL=postgresql://astroplanner:astroplanner@postgres:5432/astroplanner
+      
+      # PostgreSQL Connection Pool
+      - POSTGRES_POOL_SIZE=${POSTGRES_POOL_SIZE:-10}
+      - POSTGRES_POOL_TIMEOUT=${POSTGRES_POOL_TIMEOUT:-30}
+      - POSTGRES_POOL_RECYCLE=${POSTGRES_POOL_RECYCLE:-3600}
+      
+      # Observer Location (Riyadh defaults)
+      - OBSERVER_LAT=${OBSERVER_LAT:-24.7136}
+      - OBSERVER_LON=${OBSERVER_LON:-46.6753}
+      - OBSERVER_ELEV_M=${OBSERVER_ELEV_M:-600}
+      - OBSERVER_TZ=${OBSERVER_TZ:-Asia/Riyadh}
+      
+      # Application Features
+      - NINA_INTEGRATION=${NINA_INTEGRATION:-true}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_TO_STDOUT=${LOG_TO_STDOUT:-true}
     volumes:
+      # Persistent data storage
       - ./uploads:/app/uploads
+      - ./instance:/app/instance          # SQLite database location
+      - ./config/presets:/app/config/presets  # Custom presets
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Uncomment to depend on PostgreSQL
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+
+  # =============================================================================
+  # PostgreSQL Database (Optional - uncomment to enable)
+  # =============================================================================
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: astroplanner-db
+  #   environment:
+  #     - POSTGRES_USER=astroplanner
+  #     - POSTGRES_PASSWORD=astroplanner
+  #     - POSTGRES_DB=astroplanner
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U astroplanner -d astroplanner"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 10s
+
+# =============================================================================
+# Named Volumes (uncomment postgres volume if using PostgreSQL)
+# =============================================================================
+# volumes:
+#   postgres_data:

@@ -26,6 +26,7 @@ Welcome to the AstroPlanner documentation. This folder contains detailed guides 
 
 | Document | Description |
 |----------|-------------|
+| [Docker Guide](DOCKER_GUIDE.md) | **Recommended!** Deploy with Docker containers |
 | [Database Guide](DATABASE_GUIDE.md) | SQLite/PostgreSQL setup and migration |
 | [PostgreSQL Deployment](POSTGRESQL_DEPLOYMENT.md) | Production PostgreSQL configuration |
 | [PostgreSQL Summary](POSTGRESQL_SUMMARY.md) | Quick reference for PostgreSQL features |
@@ -45,6 +46,7 @@ Welcome to the AstroPlanner documentation. This folder contains detailed guides 
 ### Common Tasks
 
 - **Initial Setup**: Start with the [README](../README.md), then [Database Guide](DATABASE_GUIDE.md)
+- **Docker Deployment**: See [Docker Guide](DOCKER_GUIDE.md) for containerized setup
 - **Configure Filters**: See [Equipment Presets Guide](PRESETS_GUIDE.md)
 - **Export to NINA**: See [NINA Integration Guide](NINA_INTEGRATION.md)
 - **Upload to AstroBin**: See [AstroBin Export Guide](ASTROBIN_EXPORT.md)

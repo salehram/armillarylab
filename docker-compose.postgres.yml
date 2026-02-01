@@ -1,0 +1,101 @@
+version: "3.9"
+
+# =============================================================================
+# AstroPlanner with PostgreSQL - Production Deployment
+# =============================================================================
+# This docker-compose file sets up AstroPlanner with a PostgreSQL database.
+# 
+# Usage:
+#   docker-compose -f docker-compose.postgres.yml up -d
+#
+# First-time setup:
+#   docker-compose -f docker-compose.postgres.yml up -d
+#   docker-compose -f docker-compose.postgres.yml exec astroplanner flask init-db
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # AstroPlanner Application
+  # ---------------------------------------------------------------------------
+  astroplanner:
+    build: .
+    container_name: astroplanner
+    ports:
+      - "${PORT:-5000}:5000"
+    environment:
+      # Application Settings
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - FLASK_ENV=production
+      - FLASK_DEBUG=False
+      - PORT=5000
+      
+      # PostgreSQL Database Configuration
+      - DATABASE_TYPE=postgresql
+      - DATABASE_URL=postgresql://astroplanner:${POSTGRES_PASSWORD:-astroplanner}@postgres:5432/astroplanner
+      
+      # PostgreSQL Connection Pool (tuned for production)
+      - POSTGRES_POOL_SIZE=${POSTGRES_POOL_SIZE:-20}
+      - POSTGRES_POOL_TIMEOUT=${POSTGRES_POOL_TIMEOUT:-30}
+      - POSTGRES_POOL_RECYCLE=${POSTGRES_POOL_RECYCLE:-3600}
+      
+      # Observer Location (override with your location)
+      - OBSERVER_LAT=${OBSERVER_LAT:-24.7136}
+      - OBSERVER_LON=${OBSERVER_LON:-46.6753}
+      - OBSERVER_ELEV_M=${OBSERVER_ELEV_M:-600}
+      - OBSERVER_TZ=${OBSERVER_TZ:-Asia/Riyadh}
+      
+      # Application Features
+      - NINA_INTEGRATION=true
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      
+      # Security Settings (enable for HTTPS deployments)
+      # - SECURE_SSL_REDIRECT=true
+      # - SESSION_COOKIE_SECURE=true
+      - SESSION_COOKIE_HTTPONLY=true
+      - SESSION_COOKIE_SAMESITE=strict
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_TO_STDOUT=true
+    volumes:
+      - ./uploads:/app/uploads
+      - ./config/presets:/app/config/presets
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: astroplanner-db
+    environment:
+      - POSTGRES_USER=astroplanner
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-astroplanner}
+      - POSTGRES_DB=astroplanner
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U astroplanner -d astroplanner"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# =============================================================================
+# Named Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local

@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.eggs
+*.egg
+.mypy_cache
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.nox
+
+# Virtual environments
+venv
+.venv
+env
+.env.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Database files (will be created in container)
+*.db
+*.db-journal
+*.db.backup*
+instance/
+
+# Documentation (not needed in container)
+docs/
+*.md
+!README.md
+
+# Testing
+tests/
+pytest.ini
+.coverage
+
+# Development files
+*.log
+*.bak
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads directory content (mounted as volume)
+uploads/*
+!uploads/.gitkeep
+
+# Local configuration (use environment variables in container)
+.env
+.env.local
+.env.*.local

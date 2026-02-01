@@ -50,12 +50,14 @@ AstroPlanner v2.0.0 brings major improvements for production deployment and equi
 - **Template System**: Customizable sequence templates with dynamic block generation
 - **Filter Wheel Integration**: Custom filter mapping ensures proper telescope hardware operation
 - **Remaining Frames Export**: Intelligent export of only remaining frames for efficient session continuation
+- **📚 Documentation**: See [NINA Integration Guide](docs/NINA_INTEGRATION.md) for detailed setup instructions
 
 ### 📤 AstroBin Integration
 - **Per-Target CSV Export**: Export acquisition data in AstroBin-compatible CSV format
 - **Filter ID Mapping**: Store AstroBin equipment database IDs for accurate data import
 - **Configurable Export Settings**: Binning, gain, sensor cooling, and Bortle scale options
 - **Smart Filter Mapping**: Automatic mapping from channel names to base filter IDs
+- **📚 Documentation**: See [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) for complete workflow
 
 ### 🔄 Equipment Preset System
 - **JSON-Based Presets**: Modular filter and equipment configuration files
@@ -63,6 +65,7 @@ AstroPlanner v2.0.0 brings major improvements for production deployment and equi
 - **Brand-Specific Presets**: Pre-configured presets for ZWO and other filter brands
 - **CLI & Web Management**: Full preset management via command line and web interface
 - **Export/Import**: Backup and restore equipment configurations
+- **📚 Documentation**: See [Equipment Presets Guide](docs/PRESETS_GUIDE.md) for detailed usage
 
 ### 🌍 Global Configuration & Settings
 - **Observer Location**: Configurable latitude, longitude, and elevation with global defaults
@@ -76,7 +79,19 @@ AstroPlanner v2.0.0 brings major improvements for production deployment and equi
 - **Progress Analytics**: Daily, monthly, and overall imaging statistics with visual indicators
 - **Data Integrity**: Form validation, error handling, and database consistency maintenance
 
-## 🚀 Quick Start
+## � Documentation
+
+Detailed documentation is available in the [docs/](docs/) folder:
+
+| Guide | Description |
+|-------|-------------|
+| [Equipment Presets Guide](docs/PRESETS_GUIDE.md) | Configure and share filter setups using JSON presets |
+| [NINA Integration Guide](docs/NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. |
+| [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV |
+| [Database Guide](docs/DATABASE_GUIDE.md) | SQLite/PostgreSQL setup and migration |
+| [Features Roadmap](docs/FEATURES_ROADMAP.md) | Completed features and future plans |
+
+## �🚀 Quick Start
 
 ### Prerequisites
 
@@ -525,9 +540,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For questions, issues, or feature requests:
 
-1. Check the [FEATURES_ROADMAP.md](FEATURES_ROADMAP.md) for planned development
-2. Open an issue on GitHub
-3. Review existing documentation and code comments
+1. Browse the [docs/](docs/) folder for detailed guides
+2. Check the [Features Roadmap](docs/FEATURES_ROADMAP.md) for planned development
+3. Open an issue on GitHub
+4. Review existing documentation and code comments
 
 ---
 

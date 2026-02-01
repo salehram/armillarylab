@@ -2505,15 +2505,12 @@ def init_db(mode, filter_preset, force):
     # Handle force flag
     if force:
         print("Force flag set - clearing existing data...")
-        FilterWheelSlot.query.delete()
-        FilterWheel.query.delete()
-        Filter.query.delete()
-        Palette.query.delete()
-        TargetType.query.delete()
-        db.session.commit()
-        print("Existing data cleared.")
-    
-    db.create_all()
+        # Drop all tables and recreate - cleanest approach
+        db.drop_all()
+        db.create_all()
+        print("Database schema recreated.")
+    else:
+        db.create_all()
     
     # Create default global config if none exists
     if not GlobalConfig.query.first():

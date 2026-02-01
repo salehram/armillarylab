@@ -206,6 +206,17 @@ If you have existing filters but want to update their AstroBin IDs:
 
 This will update AstroBin IDs for any filters that match the preset's filter names without changing your other filter settings.
 
+> ⚠️ **Important: Name-Based Matching Only**
+> 
+> This feature uses **exact short-code matching**, not smart detection:
+> - Matches on filter `name` field only (e.g., `H`, `O`, `S`, `L`, `R`, `G`, `B`, `LP`)
+> - Does **not** analyze display names or detect filter brands
+> - Case-sensitive: `H` matches, but `h` or `Ha` do not
+> 
+> **Example**: If your filter is named `H` and you apply the "zwo" preset, it gets the ZWO H-Alpha AstroBin ID (1955)—regardless of whether you actually have ZWO filters or another brand.
+>
+> **Best Practice**: Ensure your filter short codes match the preset's codes, or manually set AstroBin IDs for non-matching filters.
+
 ### Export Configuration (Web)
 
 1. Go to **Settings**
@@ -397,7 +408,17 @@ Ensure the preset file is in the correct location:
 
 ### "No filters found to update"
 
-When applying AstroBin IDs, the preset's filter `name` fields must match your existing filter names (H, O, S, etc.).
+When applying AstroBin IDs, the preset's filter `name` fields must **exactly match** your existing filter short codes.
+
+**Common mismatches:**
+| Your Filter Name | Preset Expects | Result |
+|------------------|----------------|--------|
+| `Ha` | `H` | ❌ No match |
+| `h` | `H` | ❌ No match (case-sensitive) |
+| `H-Alpha` | `H` | ❌ No match |
+| `H` | `H` | ✅ Match |
+
+**Solution**: Rename your filters to use standard short codes (`H`, `O`, `S`, `L`, `R`, `G`, `B`, `LP`) or manually set AstroBin IDs.
 
 ### "Filter wheel slot assignment failed"
 

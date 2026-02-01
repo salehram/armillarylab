@@ -31,6 +31,78 @@ This guide provides clear, step-by-step instructions for configuring and migrati
 
 ---
 
+## Using .env Files for Configuration
+
+Instead of setting environment variables manually each time, you can use `.env` files for persistent configuration.
+
+### Available Configuration Files
+
+| File | Purpose |
+|------|--------|
+| `.env.example` | Template with all available options (copy to `.env`) |
+| `.env.production` | Template optimized for production deployment |
+| `.flaskenv` | Flask server settings (auto-loaded) |
+
+### Setup for Development (SQLite)
+
+1. **Copy the example file:**
+   ```powershell
+   # Windows
+   copy .env.example .env
+   
+   # Linux/macOS
+   cp .env.example .env
+   ```
+
+2. **Edit `.env`** - No changes needed for SQLite (default):
+   ```dotenv
+   SECRET_KEY=your-secret-key-here
+   FLASK_ENV=development
+   FLASK_DEBUG=True
+   DATABASE_TYPE=sqlite
+   ```
+
+3. **Run the app** - Settings are automatically loaded:
+   ```powershell
+   flask run
+   ```
+
+### Setup for Production (PostgreSQL)
+
+1. **Copy the production template:**
+   ```powershell
+   copy .env.production .env
+   ```
+
+2. **Edit `.env` with your PostgreSQL credentials:**
+   ```dotenv
+   SECRET_KEY=your-secure-production-key
+   FLASK_ENV=production
+   FLASK_DEBUG=False
+   
+   DATABASE_TYPE=postgresql
+   DATABASE_URL=postgresql://username:password@hostname:5432/astroplanner
+   
+   # Connection pool (adjust based on your needs)
+   POSTGRES_POOL_SIZE=20
+   POSTGRES_POOL_TIMEOUT=30
+   ```
+
+3. **Initialize and run:**
+   ```powershell
+   flask init-db
+   flask run
+   ```
+
+### Important Notes
+
+- **`.env` is gitignored** - Your credentials won't be committed
+- **`.flaskenv` is safe to commit** - Contains only server settings, no secrets
+- **Restart required** - After changing `.env`, restart the Flask server
+- **Environment variables override `.env`** - Manual `$env:VAR` takes precedence
+
+---
+
 ## Part 1: Initial Setup
 
 Choose ONE of the following options based on your use case:

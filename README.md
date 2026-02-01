@@ -315,6 +315,10 @@ astroplanner/
 ├── nina_integration.py    # N.I.N.A. export functionality
 ├── time_utils.py          # Time formatting and parsing utilities
 ├── requirements.txt       # Python dependencies
+├── .flaskenv              # Flask server settings (auto-loaded)
+├── .env.example           # Environment template for development
+├── .env.production        # Environment template for production
+├── DATABASE_GUIDE.md      # Database setup and migration guide
 ├── FEATURES_ROADMAP.md    # Feature development roadmap
 ├── config/                # Configuration modules
 │   ├── database.py        # Database configuration
@@ -339,15 +343,64 @@ astroplanner/
 ├── static/                # Static assets (CSS, JS, fonts)
 ├── dev/                   # Virtual environment
 ├── uploads/               # File uploads directory
-└── astroplanner.db        # SQLite database
+└── astroplanner.db        # SQLite database (created after init)
 ```
 
 ## ⚙️ Configuration
+
+### Configuration Files
+
+AstroPlanner uses several configuration files for different environments:
+
+| File | Purpose | Auto-loaded |
+|------|---------|-------------|
+| `.flaskenv` | Flask server settings (host, port, debug mode) | ✅ Yes (by Flask) |
+| `.env` | Your local environment settings (create from `.env.example`) | ✅ Yes (with python-dotenv) |
+| `.env.example` | Template for development settings | ❌ No (reference only) |
+| `.env.production` | Template for production deployment | ❌ No (reference only) |
+
+#### `.flaskenv` - Flask Server Settings
+
+This file is **auto-loaded by Flask** and controls how the development server runs:
+
+```dotenv
+FLASK_APP=app.py
+FLASK_RUN_HOST=0.0.0.0
+FLASK_RUN_PORT=5000
+FLASK_ENV=development
+FLASK_DEBUG=True
+```
+
+#### `.env.example` - Development Template
+
+Copy this file to `.env` for local development:
+
+```bash
+# Windows
+copy .env.example .env
+
+# Linux/macOS
+cp .env.example .env
+```
+
+Then edit `.env` with your settings (database, secret key, etc.).
+
+#### `.env.production` - Production Template
+
+Use this as a reference when deploying to production. Contains:
+- PostgreSQL configuration
+- Security settings (SSL, secure cookies)
+- Production-appropriate pool sizes
+
+> ⚠️ **Never commit `.env` files with real credentials to version control!**
+
+For detailed database configuration using these files, see [DATABASE_GUIDE.md](DATABASE_GUIDE.md).
 
 ### Environment Variables
 
 - `SECRET_KEY`: Flask secret key (defaults to 'dev-secret-key')
 - `DATABASE_URL`: Database connection string (defaults to SQLite)
+- `DATABASE_TYPE`: Database type - `sqlite` or `postgresql` (defaults to SQLite)
 - `UPLOAD_FOLDER`: File upload directory (defaults to ./uploads)
 - `OBSERVER_TZ`: Observer timezone (defaults to UTC+3)
 

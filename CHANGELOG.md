@@ -5,6 +5,100 @@ All notable changes to AstroPlanner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-02-01
+
+### 🎉 Version 2.0.0 - PostgreSQL Support & Equipment Management
+
+**AstroPlanner v2.0.0** is a major release introducing PostgreSQL database support for production deployments, comprehensive filter and filter wheel management, target archiving, and enhanced astronomy chart features.
+
+### ✨ Major New Features
+
+#### PostgreSQL Database Support
+- **Dual Database Engine**: Runtime selection between SQLite (development) and PostgreSQL (production)
+- **Automated Migration Tool**: Seamless bidirectional data migration between SQLite ↔ PostgreSQL
+- **Connection Pooling**: Optimized PostgreSQL connection pooling for production workloads
+- **Cloud-Ready**: Designed for deployment on Heroku, Railway, Render, and other cloud platforms
+- **Environment Configuration**: Flexible `.env` file based configuration with sensible defaults
+
+#### Filter & Filter Wheel Management
+- **Filter Database**: Comprehensive filter management with types (narrowband, broadband, other)
+- **Filter Wheels**: Multi-wheel support with slot configuration and NINA profile mapping
+- **AstroBin Integration**: Filter AstroBin IDs for equipment CSV export compatibility
+- **Bulk Updates**: Apply filter presets (generic, ZWO) with automatic AstroBin ID population
+
+#### Target Archive System
+- **Archive Completed Targets**: Mark finished projects as complete with notes
+- **Clone Targets**: Duplicate archived targets to start new imaging projects
+- **Archive View**: Separate view for completed/archived targets with restoration capability
+- **Completion Tracking**: Record completion date and notes for project history
+
+#### Enhanced Astronomy Charts
+- **Moon Altitude Curve**: Visualize moon altitude alongside target altitude
+- **Moon Rise/Set Indicators**: Clear markers showing moon visibility windows
+- **Meridian Flip Marker**: Visual indicator for German Equatorial Mount flip timing
+- **Improved Legend**: Better chart organization and readability
+
+### 🔧 Improvements
+
+#### Database Management CLI
+- `flask db info` - Display current database configuration and status
+- `flask db migrate` - Automated migration with 5-step workflow:
+  1. Test target connection
+  2. Initialize target schema
+  3. Clear target data (with confirmation)
+  4. Migrate all data
+  5. Update `.env` file automatically
+- `flask db backup` - Create timestamped database backups
+- `flask init-db --force` - Clean database re-initialization
+
+#### UI/UX Improvements
+- **Fixed Text Visibility**: Page subtitles now use `text-info` for better dark theme visibility
+- **Button Contrast**: Edit buttons use `btn-outline-secondary` for consistent visibility
+- **Archived Targets Section**: Clear visual separation with improved button styling
+
+#### Documentation
+- **DATABASE_GUIDE.md**: Comprehensive guide for SQLite and PostgreSQL setup
+- **DEPLOYMENT_SECURITY_PLAN.md**: Security considerations for production deployment
+- **POSTGRESQL_DEPLOYMENT.md**: Step-by-step cloud deployment guide
+- **Updated README**: Added configuration file documentation
+
+### 🐛 Bug Fixes
+
+- Fixed SQLAlchemy 2.0 count query syntax in migration tool
+- Fixed `init-db --force` to properly drop all tables before recreation
+- Fixed filter wheel edit button visibility (btn-outline-light → btn-outline-secondary)
+- Fixed migration schema validation to check table existence
+- Fixed test imports to match actual module API
+
+### 📋 Technical Details
+
+#### New Dependencies
+- `psycopg2-binary` - PostgreSQL adapter for Python
+- `python-dotenv` - Environment file management (already included)
+
+#### Database Schema Changes
+- Added `is_archived`, `archived_at`, `completion_notes` columns to targets table
+- Added `astrobin_id` column to filters table
+- New tables: `filter_wheels`, `filter_wheel_slots`, `palette_filters`
+
+#### Configuration Files
+- `.env.example` - Template for development configuration
+- `.env.production` - Template for production PostgreSQL configuration
+- `.flaskenv` - Flask server settings (auto-loaded)
+
+### 📝 Migration from v1.0.0
+
+1. **Backup your database**: `flask db backup`
+2. **Update dependencies**: `pip install -r requirements.txt`
+3. **Initialize new schema**: `flask init-db` (preserves existing data for SQLite)
+4. **Optional PostgreSQL migration**: See DATABASE_GUIDE.md
+
+### 🔒 License Change
+
+- Changed from Apache 2.0 to MIT License for broader compatibility
+
+---
+
 ## [1.0.0] - 2025-12-27
 
 ### 🎉 Version 1.0.0 - Complete Feature Set Release

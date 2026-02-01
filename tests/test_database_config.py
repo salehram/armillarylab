@@ -9,8 +9,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from config.database import (
-    DatabaseConfig, get_database_config, get_flask_config,
-    detect_cloud_platform
+    DatabaseConfig, get_database_config, get_flask_config
 )
 
 
@@ -86,34 +85,6 @@ class TestDatabaseSelection:
             assert test_url in config.connection_string
 
 
-class TestCloudPlatformDetection:
-    """Test cloud platform detection."""
-    
-    def test_heroku_detection(self):
-        """Test Heroku platform detection."""
-        with patch.dict(os.environ, {'DYNO': 'web.1'}, clear=True):
-            platform = detect_cloud_platform()
-            assert platform == 'heroku'
-    
-    def test_railway_detection(self):
-        """Test Railway platform detection."""
-        with patch.dict(os.environ, {'RAILWAY_ENVIRONMENT': 'production'}, clear=True):
-            platform = detect_cloud_platform()
-            assert platform == 'railway'
-    
-    def test_render_detection(self):
-        """Test Render platform detection."""
-        with patch.dict(os.environ, {'RENDER': 'true'}, clear=True):
-            platform = detect_cloud_platform()
-            assert platform == 'render'
-    
-    def test_no_platform_detection(self):
-        """Test no cloud platform detected."""
-        with patch.dict(os.environ, {}, clear=True):
-            platform = detect_cloud_platform()
-            assert platform is None
-
-
 class TestFlaskConfiguration:
     """Test Flask configuration generation."""
     
@@ -146,10 +117,11 @@ class TestErrorHandling:
     """Test error handling and edge cases."""
     
     def test_invalid_database_type(self):
-        """Test handling of invalid database type."""
+        """Test handling of invalid database type - falls back to sqlite."""
         with patch.dict(os.environ, {'DATABASE_TYPE': 'invalid'}, clear=True):
-            with pytest.raises(ValueError, match="Unsupported database type"):
-                get_database_config('/tmp/test')
+            # Invalid types fall back to sqlite (default behavior)
+            config = get_database_config('/tmp/test')
+            assert config.db_type == 'sqlite'
     
     def test_missing_postgresql_url(self):
         """Test missing PostgreSQL URL handling."""

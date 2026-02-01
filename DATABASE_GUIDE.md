@@ -308,10 +308,10 @@ Use this when moving from local development to production or cloud deployment.
 Before migrating, ensure:
 
 - [ ] PostgreSQL is installed and running
-- [ ] Target database exists and is empty
+- [ ] PostgreSQL database created (can be empty)
+- [ ] PostgreSQL user created with proper permissions
 - [ ] You have the PostgreSQL connection URL ready
 - [ ] Current SQLite database has data you want to preserve
-- [ ] You've created a backup of your SQLite database
 
 #### Step-by-Step Migration
 
@@ -321,57 +321,109 @@ Before migrating, ensure:
    ```
    This creates: `astroplanner.db.backup_YYYYMMDD_HHMMSS`
 
-2. **Verify current database status**
+2. **Verify current database status (SQLite)**
    ```powershell
    flask db info
    ```
    Confirm you're currently on SQLite with data.
 
-3. **Prepare the PostgreSQL database**
+3. **Create the PostgreSQL database and user** (if not done already)
    ```powershell
-   # Connect to PostgreSQL
+   # Connect to PostgreSQL as admin
    psql -U postgres
    
-   # Create fresh database (if not done already)
-   DROP DATABASE IF EXISTS astroplanner;
+   # Create database and user
    CREATE DATABASE astroplanner;
+   CREATE USER astroplanner_user WITH PASSWORD 'your_password';
    GRANT ALL PRIVILEGES ON DATABASE astroplanner TO astroplanner_user;
    \q
    ```
 
-4. **Run the migration**
+4. **Initialize PostgreSQL schema** (creates tables)
+   
+   The migration tool needs tables to exist in PostgreSQL before importing data:
    ```powershell
+   # Set PostgreSQL environment
+   $env:DATABASE_TYPE = "postgresql"
+   $env:DATABASE_URL = "postgresql://astroplanner_user:password@localhost:5432/astroplanner"
+   
+   # Create the schema (tables)
+   flask init-db
+   ```
+
+5. **Clear the default data** (so it doesn't conflict with your SQLite data)
+   ```powershell
+   # Still with PostgreSQL environment variables set
+   python -c "
+   import os
+   os.environ['DATABASE_TYPE'] = 'postgresql'
+   os.environ['DATABASE_URL'] = 'postgresql://astroplanner_user:password@localhost:5432/astroplanner'
+   
+   from app import db, app
+   with app.app_context():
+       from app import ImagingSession, TargetPlan, Target, FilterWheelSlot, FilterWheel
+       from app import PaletteFilter, ObjectMapping, Filter, Palette, TargetType, GlobalConfig
+       
+       # Delete in reverse dependency order
+       ImagingSession.query.delete()
+       TargetPlan.query.delete()
+       Target.query.delete()
+       FilterWheelSlot.query.delete()
+       FilterWheel.query.delete()
+       PaletteFilter.query.delete()
+       ObjectMapping.query.delete()
+       Filter.query.delete()
+       Palette.query.delete()
+       TargetType.query.delete()
+       GlobalConfig.query.delete()
+       db.session.commit()
+       print('PostgreSQL data cleared.')
+   "
+   ```
+
+6. **Run the migration** (from SQLite source)
+   ```powershell
+   # Clear PostgreSQL environment to use SQLite as source
+   Remove-Item Env:DATABASE_TYPE -ErrorAction SilentlyContinue
+   Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+   
+   # Run migration
    flask db migrate --to postgresql --target-url "postgresql://astroplanner_user:password@localhost:5432/astroplanner"
    ```
    
-   Options:
-   - `--backup` / `--no-backup`: Create backup before migration (default: yes)
-   - `--validate` / `--no-validate`: Validate data before/after migration (default: yes)
+   When prompted, type `y` to confirm.
 
-5. **Review migration results**
+7. **Review migration results**
    ```
    Migration Results
    ============================================================
    Status: completed
    Tables migrated: 10
-   Records migrated: 156
-   Backup created: astroplanner.db.backup_20260201_143052
+   Records migrated: 86
    
    ✓ Migration completed successfully
    ```
 
-6. **Switch to PostgreSQL for future sessions**
+8. **Switch to PostgreSQL for future sessions**
    ```powershell
    $env:DATABASE_TYPE = "postgresql"
    $env:DATABASE_URL = "postgresql://astroplanner_user:password@localhost:5432/astroplanner"
    ```
+   
+   Or create/update your `.env` file:
+   ```env
+   DATABASE_TYPE=postgresql
+   DATABASE_URL=postgresql://astroplanner_user:password@localhost:5432/astroplanner
+   ```
 
-7. **Verify the migration**
+9. **Verify the migration**
    ```powershell
    flask db info
    flask run
    ```
-   Check the application to ensure all data is intact.
+   Open http://127.0.0.1:5000 and verify all your targets, sessions, and settings are intact.
+
+> **Note:** The migration preserves all your data including targets, imaging sessions, filters, palettes, and settings. Your original SQLite database remains unchanged as a backup.
 
 ---
 

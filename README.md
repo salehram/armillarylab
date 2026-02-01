@@ -79,12 +79,13 @@ AstroPlanner v2.0.0 brings major improvements for production deployment and equi
 - **Progress Analytics**: Daily, monthly, and overall imaging statistics with visual indicators
 - **Data Integrity**: Form validation, error handling, and database consistency maintenance
 
-## � Documentation
+## 📚 Documentation
 
 Detailed documentation is available in the [docs/](docs/) folder:
 
 | Guide | Description |
 |-------|-------------|
+| [Palette & Filter Guide](docs/PALETTE_FILTER_GUIDE.md) | **Start here!** Understand palettes, filters, and target plans |
 | [Equipment Presets Guide](docs/PRESETS_GUIDE.md) | Configure and share filter setups using JSON presets |
 | [NINA Integration Guide](docs/NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. |
 | [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV |

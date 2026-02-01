@@ -17,6 +17,7 @@ Welcome to the AstroPlanner documentation. This folder contains detailed guides 
 
 | Document | Description |
 |----------|-------------|
+| [Palette & Filter Guide](PALETTE_FILTER_GUIDE.md) | **Start here!** Understand palettes, filters, and target plans |
 | [Equipment Presets Guide](PRESETS_GUIDE.md) | Configure and share filter setups using JSON presets |
 | [NINA Integration Guide](NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. |
 | [AstroBin Export Guide](ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV |

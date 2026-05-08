@@ -1,7 +1,7 @@
-# AstroPlanner – Feature Roadmap  
+# ArmillaryLab – Feature Roadmap  
 *Status: Updated to 2026-01-11 | Version 2.1.0-dev (Equipment Presets & AstroBin Integration)*
 
-This document tracks the major features of the AstroPlanner project, what has been completed, and what remains.  
+This document tracks the major features of the ArmillaryLab project, what has been completed, and what remains.  
 It is intended to be version-controlled in Git for transparency, planning, and future development.
 
 **🎉 Version 1.0.0 Release - Complete Feature Set**  
@@ -486,7 +486,7 @@ Not started.
 
 ## 🟡 13. Comprehensive User Guide & Documentation (Pending)
 ### Summary
-Create comprehensive documentation and user guide to help new users get started with AstroPlanner and understand all available features and workflows.
+Create comprehensive documentation and user guide to help new users get started with ArmillaryLab and understand all available features and workflows.
 
 ### Required Features
 - **Getting Started Guide**: Step-by-step tutorial for first-time users

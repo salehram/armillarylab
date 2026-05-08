@@ -1,6 +1,6 @@
 # Docker Deployment Guide
 
-This guide explains how to deploy AstroPlanner using Docker containers, with support for both SQLite (simple) and PostgreSQL (production) databases.
+This guide explains how to deploy ArmillaryLab using Docker containers, with support for both SQLite (simple) and PostgreSQL (production) databases.
 
 ---
 
@@ -28,14 +28,14 @@ This guide explains how to deploy AstroPlanner using Docker containers, with sup
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/astroplanner.git
-cd astroplanner
+git clone https://github.com/yourusername/armillarylab.git
+cd armillarylab
 
 # Start with default settings
 docker-compose up -d
 
 # Initialize the database
-docker-compose exec astroplanner flask init-db
+docker-compose exec armillarylab flask init-db
 
 # Access at http://localhost:5000
 ```
@@ -106,7 +106,7 @@ Best for single-user setups or local development.
 version: "3.9"
 
 services:
-  astroplanner:
+  armillarylab:
     build: .
     ports:
       - "5000:5000"
@@ -128,10 +128,10 @@ services:
 docker-compose up -d
 
 # Initialize database
-docker-compose exec astroplanner flask init-db
+docker-compose exec armillarylab flask init-db
 
 # View logs
-docker-compose logs -f astroplanner
+docker-compose logs -f armillarylab
 
 # Stop
 docker-compose down
@@ -139,7 +139,7 @@ docker-compose down
 
 ### Data Persistence
 
-SQLite data is stored in `./instance/astroplanner.db` on the host.
+SQLite data is stored in `./instance/armillarylab.db` on the host.
 
 ---
 
@@ -154,7 +154,7 @@ Recommended for production and multi-user scenarios.
 docker-compose -f docker-compose.postgres.yml up -d
 
 # Initialize database
-docker-compose -f docker-compose.postgres.yml exec astroplanner flask init-db
+docker-compose -f docker-compose.postgres.yml exec armillarylab flask init-db
 
 # Check status
 docker-compose -f docker-compose.postgres.yml ps
@@ -193,10 +193,10 @@ If using an external database (RDS, Cloud SQL, etc.):
 
 ```yaml
 services:
-  astroplanner:
+  armillarylab:
     environment:
       - DATABASE_TYPE=postgresql
-      - DATABASE_URL=postgresql://user:pass@your-host:5432/astroplanner
+      - DATABASE_URL=postgresql://user:pass@your-host:5432/armillarylab
 ```
 
 ---
@@ -218,7 +218,7 @@ Example nginx configuration:
 ```nginx
 server {
     listen 80;
-    server_name astroplanner.yourdomain.com;
+    server_name armillarylab.yourdomain.com;
     
     location / {
         proxy_pass http://localhost:5000;
@@ -246,7 +246,7 @@ environment:
 
 ```yaml
 services:
-  astroplanner:
+  armillarylab:
     deploy:
       resources:
         limits:
@@ -266,10 +266,10 @@ View logs:
 docker-compose logs -f
 
 # App only
-docker-compose logs -f astroplanner
+docker-compose logs -f armillarylab
 
 # Last 100 lines
-docker-compose logs --tail=100 astroplanner
+docker-compose logs --tail=100 armillarylab
 ```
 
 ---
@@ -282,10 +282,10 @@ docker-compose logs --tail=100 astroplanner
 
 ```bash
 # Copy the database file
-docker-compose exec astroplanner cp /app/instance/astroplanner.db /app/uploads/backup.db
+docker-compose exec armillarylab cp /app/instance/armillarylab.db /app/uploads/backup.db
 
 # Or from host
-cp ./instance/astroplanner.db ./backups/astroplanner_$(date +%Y%m%d).db
+cp ./instance/armillarylab.db ./backups/armillarylab_$(date +%Y%m%d).db
 ```
 
 #### PostgreSQL Backup
@@ -293,10 +293,10 @@ cp ./instance/astroplanner.db ./backups/astroplanner_$(date +%Y%m%d).db
 ```bash
 # Using pg_dump
 docker-compose -f docker-compose.postgres.yml exec postgres \
-  pg_dump -U astroplanner astroplanner > backup_$(date +%Y%m%d).sql
+  pg_dump -U armillarylab armillarylab > backup_$(date +%Y%m%d).sql
 
 # Using Flask CLI
-docker-compose -f docker-compose.postgres.yml exec astroplanner \
+docker-compose -f docker-compose.postgres.yml exec armillarylab \
   flask db backup
 ```
 
@@ -309,7 +309,7 @@ docker-compose -f docker-compose.postgres.yml exec astroplanner \
 docker-compose down
 
 # Replace database
-cp ./backups/astroplanner_backup.db ./instance/astroplanner.db
+cp ./backups/armillarylab_backup.db ./instance/armillarylab.db
 
 # Start again
 docker-compose up -d
@@ -320,7 +320,7 @@ docker-compose up -d
 ```bash
 # Restore from SQL dump
 docker-compose -f docker-compose.postgres.yml exec -T postgres \
-  psql -U astroplanner astroplanner < backup.sql
+  psql -U armillarylab armillarylab < backup.sql
 ```
 
 ### Updates
@@ -334,7 +334,7 @@ docker-compose build
 docker-compose up -d
 
 # Run any migrations if needed
-docker-compose exec astroplanner flask db upgrade
+docker-compose exec armillarylab flask db upgrade
 ```
 
 ### Database Migration (SQLite → PostgreSQL)
@@ -344,8 +344,8 @@ docker-compose exec astroplanner flask db upgrade
 docker-compose -f docker-compose.postgres.yml up -d postgres
 
 # 2. Export from SQLite
-docker-compose exec astroplanner flask db migrate --to postgresql \
-  --target-url postgresql://astroplanner:password@postgres:5432/astroplanner
+docker-compose exec armillarylab flask db migrate --to postgresql \
+  --target-url postgresql://armillarylab:password@postgres:5432/armillarylab
 
 # 3. Switch to PostgreSQL compose file
 docker-compose down
@@ -360,7 +360,7 @@ docker-compose -f docker-compose.postgres.yml up -d
 
 ```bash
 # Check logs
-docker-compose logs astroplanner
+docker-compose logs armillarylab
 
 # Check container status
 docker-compose ps
@@ -386,7 +386,7 @@ docker-compose -f docker-compose.postgres.yml logs postgres
 sudo chown -R 1000:1000 ./uploads ./instance
 
 # Or run with current user
-docker-compose run --user $(id -u):$(id -g) astroplanner flask init-db
+docker-compose run --user $(id -u):$(id -g) armillarylab flask init-db
 ```
 
 ### Out of memory
@@ -401,10 +401,10 @@ CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "2", "
 
 ```bash
 # Test manually
-docker-compose exec astroplanner curl -f http://localhost:5000/
+docker-compose exec armillarylab curl -f http://localhost:5000/
 
 # Check app logs
-docker-compose logs --tail=50 astroplanner
+docker-compose logs --tail=50 armillarylab
 ```
 
 ### Port already in use
@@ -423,7 +423,7 @@ ports:
 ## File Structure
 
 ```
-astroplanner/
+armillarylab/
 ├── Dockerfile                    # Container build instructions
 ├── docker-compose.yml            # SQLite deployment (default)
 ├── docker-compose.postgres.yml   # PostgreSQL deployment

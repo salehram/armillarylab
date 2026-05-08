@@ -216,6 +216,6 @@ def build_nina_sequence_from_blocks(
     target_container["Items"]["$values"] = new_t_items
 
     # Give the sequence a nice name
-    template["Name"] = f"AstroPlanner – {target_name}"
+    template["Name"] = f"ArmillaryLab – {target_name}"
 
     return template

@@ -32,7 +32,7 @@ from cli import register_cli_commands
 
 # Application version
 APP_VERSION = "2.0.0-dev"
-APP_NAME = "AstroPlanner"
+APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -931,7 +931,7 @@ def export_nina_sequence(target_id):
     )
 
     # --- RETURN AS DOWNLOAD ---
-    filename = f"AstroPlanner_{target.name.replace(' ', '_')}.json"
+    filename = f"ArmillaryLab_{target.name.replace(' ', '_')}.json"
     buf = io.BytesIO(json.dumps(seq_json, indent=2).encode("utf-8"))
 
     return send_file(
@@ -1672,7 +1672,7 @@ def export_preset_web():
     
     export_data = {
         "preset_name": "Custom Export",
-        "description": "Exported from AstroPlanner",
+        "description": "Exported from ArmillaryLab",
         "filters": []
     }
     
@@ -1712,7 +1712,7 @@ def export_preset_web():
     output.write(json.dumps(export_data, indent=2).encode('utf-8'))
     output.seek(0)
     
-    filename = f"astroplanner_preset_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    filename = f"armillarylab_preset_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     return send_file(output, mimetype='application/json', as_attachment=True, download_name=filename)
 
 

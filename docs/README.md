@@ -1,6 +1,6 @@
-# AstroPlanner Documentation
+# ArmillaryLab Documentation
 
-Welcome to the AstroPlanner documentation. This folder contains detailed guides for various features and deployment scenarios.
+Welcome to the ArmillaryLab documentation. This folder contains detailed guides for various features and deployment scenarios.
 
 ---
 

@@ -1,6 +1,6 @@
-# AstroPlanner Equipment Presets Guide
+# ArmillaryLab Equipment Presets Guide
 
-This guide explains the Equipment Preset System in AstroPlanner, which allows you to save, share, and reuse filter configurations and filter wheel setups across different installations or with other users.
+This guide explains the Equipment Preset System in ArmillaryLab, which allows you to save, share, and reuse filter configurations and filter wheel setups across different installations or with other users.
 
 ---
 
@@ -39,7 +39,7 @@ The preset system solves several common problems:
 
 ## Built-in Presets
 
-AstroPlanner includes several built-in presets in the `config/presets/` directory:
+ArmillaryLab includes several built-in presets in the `config/presets/` directory:
 
 ### Base Preset (`config/presets/base.json`)
 

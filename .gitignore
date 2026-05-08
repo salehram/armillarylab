@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 # SQLite database files
-astroplanner.db
+armillarylab.db
 *.db
 
 # C extensions

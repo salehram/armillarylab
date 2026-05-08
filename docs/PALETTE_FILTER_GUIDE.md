@@ -1,6 +1,6 @@
 # Palette & Filter Management Guide
 
-This guide explains the comprehensive palette and filter management system in AstroPlanner. Understanding these concepts is essential for effectively planning your astrophotography sessions.
+This guide explains the comprehensive palette and filter management system in ArmillaryLab. Understanding these concepts is essential for effectively planning your astrophotography sessions.
 
 ---
 
@@ -72,7 +72,7 @@ These are the actual glass filters you own:
 
 ### 2. Filters Are Defined in the App
 
-AstroPlanner stores filter definitions with:
+ArmillaryLab stores filter definitions with:
 - **Short code** (H, O, S, L, R, G, B)
 - **Display name** (Hydrogen Alpha, Oxygen III)
 - **Type** (narrowband, broadband)
@@ -191,7 +191,7 @@ Weights are **relative**, not absolute—they're normalized to sum to 1.0.
 
 ### Filter Definition
 
-Each filter in AstroPlanner has:
+Each filter in ArmillaryLab has:
 
 | Field | Description | Example |
 |-------|-------------|---------|
@@ -205,7 +205,7 @@ Each filter in AstroPlanner has:
 
 ### Built-in Filters
 
-AstroPlanner includes these default filters:
+ArmillaryLab includes these default filters:
 
 | Code | Display Name | Type | Default Exposure |
 |------|--------------|------|------------------|
@@ -242,7 +242,7 @@ AstroPlanner includes these default filters:
 
 ### What Is a Filter Wheel Profile?
 
-A filter wheel profile maps your **physical hardware** to AstroPlanner:
+A filter wheel profile maps your **physical hardware** to ArmillaryLab:
 - Which filter is in which position
 - What NINA calls each filter
 - Only **one wheel can be active** at a time
@@ -250,7 +250,7 @@ A filter wheel profile maps your **physical hardware** to AstroPlanner:
 ### Why Filter Wheels Matter
 
 For NINA export to work correctly:
-1. AstroPlanner needs to know filter positions
+1. ArmillaryLab needs to know filter positions
 2. Filter names must match NINA's expectations
 3. Positions must be 0-indexed (matching NINA)
 
@@ -285,7 +285,7 @@ For NINA export to work correctly:
 
 NINA uses specific filter names. Common mappings:
 
-| AstroPlanner | NINA Name |
+| ArmillaryLab | NINA Name |
 |--------------|-----------|
 | H | Ha, H-Alpha |
 | O | OIII, O-III |
@@ -507,7 +507,7 @@ All "H" variants map to the same physical Ha filter.
 
 **Solution**:
 1. Check your NINA profile filter assignments
-2. Update AstroPlanner wheel to match
+2. Update ArmillaryLab wheel to match
 3. Verify NINA Names are correct
 
 ### "Custom channel not exporting correctly"

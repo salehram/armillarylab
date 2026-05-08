@@ -1,6 +1,6 @@
 # NINA Integration Guide
 
-This guide explains how AstroPlanner integrates with [N.I.N.A. (Nighttime Imaging 'N' Astronomy)](https://nighttime-imaging.eu/), the popular open-source astrophotography software, to export imaging sequences directly to NINA's Advanced Sequencer.
+This guide explains how ArmillaryLab integrates with [N.I.N.A. (Nighttime Imaging 'N' Astronomy)](https://nighttime-imaging.eu/), the popular open-source astrophotography software, to export imaging sequences directly to NINA's Advanced Sequencer.
 
 ---
 
@@ -17,18 +17,18 @@ This guide explains how AstroPlanner integrates with [N.I.N.A. (Nighttime Imagin
 
 ## Overview
 
-AstroPlanner can export your remaining imaging exposures directly to NINA's Advanced Sequencer format. This allows you to:
+ArmillaryLab can export your remaining imaging exposures directly to NINA's Advanced Sequencer format. This allows you to:
 
-- **Seamless Workflow**: Plan in AstroPlanner → Export → Import in NINA → Image
+- **Seamless Workflow**: Plan in ArmillaryLab → Export → Import in NINA → Image
 - **Accurate Progress Tracking**: Only export remaining subs, not the full plan
-- **Proper Filter Mapping**: AstroPlanner filter names map to your actual NINA filter wheel positions
+- **Proper Filter Mapping**: ArmillaryLab filter names map to your actual NINA filter wheel positions
 - **Time Savings**: No manual sequence creation needed
 
 ### What Gets Exported?
 
 | Component | Description |
 |-----------|-------------|
-| **Target Name** | Sequence named "AstroPlanner – [Target Name]" |
+| **Target Name** | Sequence named "ArmillaryLab – [Target Name]" |
 | **Camera Cooling** | Set to -10°C (default, template-configurable) |
 | **Filter Changes** | Proper filter wheel position switching |
 | **Exposures** | Remaining frames at specified exposure times |
@@ -42,7 +42,7 @@ AstroPlanner can export your remaining imaging exposures directly to NINA's Adva
 
 ```
 ┌─────────────────────┐
-│   AstroPlanner      │
+│   ArmillaryLab      │
 │   Target Plan       │
 │   (channels +       │
 │   progress data)    │
@@ -72,7 +72,7 @@ AstroPlanner can export your remaining imaging exposures directly to NINA's Adva
           ▼
 ┌─────────────────────┐
 │  Download           │
-│  AstroPlanner_      │
+│  ArmillaryLab_      │
 │  [Target].json      │
 └─────────────────────┘
 ```
@@ -94,7 +94,7 @@ Only channels with `Remaining Frames > 0` are included in the export.
 
 ## Setting Up Filter Wheel Configuration
 
-For NINA export to work correctly, your AstroPlanner filter wheel must match your physical equipment configuration in NINA.
+For NINA export to work correctly, your ArmillaryLab filter wheel must match your physical equipment configuration in NINA.
 
 ### Step 1: Configure Your Filter Wheel
 
@@ -109,12 +109,12 @@ For NINA export to work correctly, your AstroPlanner filter wheel must match you
 
 Each slot must have:
 - **Position**: Wheel position (0-based, matching NINA)
-- **Filter**: The AstroPlanner filter to assign
+- **Filter**: The ArmillaryLab filter to assign
 - **NINA Name**: The exact filter name as it appears in NINA
 
 Example 8-Slot Configuration:
 
-| Position | AstroPlanner Filter | NINA Name |
+| Position | ArmillaryLab Filter | NINA Name |
 |----------|---------------------|-----------|
 | 0 | LP | LP |
 | 1 | L | L |
@@ -138,7 +138,7 @@ Example 8-Slot Configuration:
 
 The **NINA Name** field is crucial—it must match exactly what NINA expects:
 
-| AstroPlanner Code | Common NINA Names |
+| ArmillaryLab Code | Common NINA Names |
 |-------------------|-------------------|
 | H | Ha, H-Alpha, Halpha |
 | O | OIII, O-III, O3 |
@@ -168,7 +168,7 @@ The exported file contains a complete NINA Advanced Sequencer sequence:
 
 ```json
 {
-  "Name": "AstroPlanner – M31",
+  "Name": "ArmillaryLab – M31",
   "Items": {
     "$values": [
       // Start: Camera cooling to -10°C
@@ -197,12 +197,12 @@ The exported file contains a complete NINA Advanced Sequencer sequence:
 
 ## Template Customization
 
-AstroPlanner uses a template file (`nina_template.json`) to generate exports. You can customize this template for your specific setup.
+ArmillaryLab uses a template file (`nina_template.json`) to generate exports. You can customize this template for your specific setup.
 
 ### Template Location
 
 ```
-astroplanner/
+armillarylab/
 ├── nina_template.json    ← Main template file
 ├── nina_integration.py   ← Export logic
 └── ...
@@ -250,7 +250,7 @@ The template defines the sequence structure with placeholder values:
 ### Creating a Custom Template
 
 1. **Export from NINA**: Create your ideal sequence in NINA, then save it
-2. **Copy to AstroPlanner**: Replace `nina_template.json` with your exported file
+2. **Copy to ArmillaryLab**: Replace `nina_template.json` with your exported file
 3. **Preserve Structure**: Ensure these elements exist:
    - StartAreaContainer (first item)
    - TargetAreaContainer (second item) with:
@@ -274,7 +274,7 @@ The template defines the sequence structure with placeholder values:
 
 ## Custom Filters and NINA Export
 
-When you create custom filters in AstroPlanner (like separate HDR channels), you can map them to standard NINA filters.
+When you create custom filters in ArmillaryLab (like separate HDR channels), you can map them to standard NINA filters.
 
 ### Example: HDR Channels
 
@@ -323,7 +323,7 @@ This ensures the export uses the correct filter wheel position.
 
 **Solution**:
 - Verify positions are 0-based (first slot = position 0)
-- Check NINA's filter wheel settings match AstroPlanner positions
+- Check NINA's filter wheel settings match ArmillaryLab positions
 - Use the same position numbering scheme in both applications
 
 ### Export file won't import in NINA
@@ -333,7 +333,7 @@ This ensures the export uses the correct filter wheel position.
 **Solution**:
 1. Export a fresh template from your current NINA version
 2. Replace `nina_template.json` with the new template
-3. Restart AstroPlanner
+3. Restart ArmillaryLab
 4. Try exporting again
 
 ### Wrong filter names in exported sequence
@@ -343,7 +343,7 @@ This ensures the export uses the correct filter wheel position.
 **Solution**:
 1. Open NINA → Equipment → Filter Wheel
 2. Note the exact filter names shown
-3. In AstroPlanner, edit filter wheel slots
+3. In ArmillaryLab, edit filter wheel slots
 4. Set NINA Name to match exactly (case-sensitive)
 
 ---
@@ -352,7 +352,7 @@ This ensures the export uses the correct filter wheel position.
 
 ### Keep Configurations Synchronized
 
-- When you change filters in NINA, update AstroPlanner
+- When you change filters in NINA, update ArmillaryLab
 - When adding new filters, configure both systems
 
 ### Use Descriptive NINA Names

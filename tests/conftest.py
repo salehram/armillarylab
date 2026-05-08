@@ -37,7 +37,7 @@ class TestDatabaseConfig:
         # Use environment variable or default test database
         test_db_url = os.getenv(
             'TEST_DATABASE_URL',
-            'postgresql://test:test@localhost:5432/test_astroplanner'
+            'postgresql://test:test@localhost:5432/test_armillarylab'
         )
         
         config = DatabaseConfig()

@@ -228,7 +228,7 @@ class DatabaseMigrator:
     
     def _get_table_export_order(self, metadata) -> List[str]:
         """Get table names in export order (dependencies first)."""
-        # For AstroPlanner, the dependency order is:
+        # For ArmillaryLab, the dependency order is:
         # 1. Independent tables (no foreign keys)
         # 2. Tables with foreign keys to independent tables
         # 3. Tables with foreign keys to dependent tables

@@ -1,6 +1,6 @@
 # AstroBin Export Guide
 
-This guide explains how to export your imaging sessions from AstroPlanner in a format compatible with [AstroBin](https://www.astrobin.com/), the premier astrophotography image hosting platform.
+This guide explains how to export your imaging sessions from ArmillaryLab in a format compatible with [AstroBin](https://www.astrobin.com/), the premier astrophotography image hosting platform.
 
 ---
 
@@ -18,7 +18,7 @@ This guide explains how to export your imaging sessions from AstroPlanner in a f
 
 ## Overview
 
-AstroPlanner can export your imaging sessions as CSV files that can be directly imported into AstroBin's acquisition data system. This provides:
+ArmillaryLab can export your imaging sessions as CSV files that can be directly imported into AstroBin's acquisition data system. This provides:
 
 - **Accurate Equipment Tracking**: Filter IDs link to AstroBin's equipment database
 - **Session Consolidation**: Multiple sessions with the same filter are combined
@@ -92,7 +92,7 @@ For best results, configure AstroBin Equipment IDs for your filters. This ensure
 4. Look at the URL: `https://www.astrobin.com/equipment/filter/1955/`
 5. The ID is the number at the end: **1955**
 
-### Configuring Filter IDs in AstroPlanner
+### Configuring Filter IDs in ArmillaryLab
 
 #### Method 1: Apply from Preset
 
@@ -186,7 +186,7 @@ date,filter,number,duration,binning,gain,sensorCooling
 1. After upload, go to the image's edit page
 2. Find **Acquisition** section
 3. Look for **Import CSV** or **Import acquisition data**
-4. Select the CSV file exported from AstroPlanner
+4. Select the CSV file exported from ArmillaryLab
 5. Click **Import**
 
 ### Step 3: Verify Data
@@ -209,7 +209,7 @@ The imported data links to your equipment profile:
 
 ### Understanding Channel Mapping
 
-When you create custom filter channels (like separate HDR channels), AstroPlanner intelligently maps them to base filters for export.
+When you create custom filter channels (like separate HDR channels), ArmillaryLab intelligently maps them to base filters for export.
 
 ### Example: HDR Workflow
 
@@ -221,7 +221,7 @@ You might have:
 | O_1 | OIII standard | O | 2707 |
 | O_2 | OIII long | O | 2707 |
 
-AstroPlanner automatically:
+ArmillaryLab automatically:
 1. Maps H_1 and H_2 sessions to filter "H"
 2. Uses AstroBin ID 1955 for H
 3. Consolidates sessions by date and base filter
@@ -231,7 +231,7 @@ AstroPlanner automatically:
 1. When you create a custom channel, you assign a "NINA Filter"
 2. This NINA Filter links to your base filter
 3. During export:
-   - AstroPlanner reads the channel → NINA Filter mapping
+   - ArmillaryLab reads the channel → NINA Filter mapping
    - Looks up the AstroBin ID for that filter
    - Exports with the correct ID
 
@@ -254,7 +254,7 @@ To check your channel mappings:
 
 ### During Imaging
 
-1. **Log All Sessions**: Record every imaging session in AstroPlanner
+1. **Log All Sessions**: Record every imaging session in ArmillaryLab
 2. **Be Consistent**: Use the same gain/cooling settings when possible
 3. **Track Calibration**: Note dark/flat/bias counts for complete data
 

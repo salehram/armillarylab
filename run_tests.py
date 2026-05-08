@@ -1,5 +1,5 @@
 """
-Test Runner Script for AstroPlanner
+Test Runner Script for ArmillaryLab
 
 Provides convenient test execution with proper environment setup
 for both SQLite and PostgreSQL database testing.
@@ -71,7 +71,7 @@ def run_tests(test_type='all', database='all', verbose=False, coverage=False):
 
 def main():
     """Main test runner function."""
-    parser = argparse.ArgumentParser(description='Run AstroPlanner tests')
+    parser = argparse.ArgumentParser(description='Run ArmillaryLab tests')
     
     parser.add_argument(
         '--type', '-t',
@@ -129,7 +129,7 @@ def main():
 
 def print_setup_instructions():
     """Print test environment setup instructions."""
-    print("AstroPlanner Test Environment Setup")
+    print("ArmillaryLab Test Environment Setup")
     print("=" * 40)
     print()
     print("1. Install test dependencies:")

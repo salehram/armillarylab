@@ -1,6 +1,6 @@
 # PostgreSQL Deployment Guide
 
-This guide covers deploying AstroPlanner with PostgreSQL support across different environments.
+This guide covers deploying ArmillaryLab with PostgreSQL support across different environments.
 
 ## Quick Start
 
@@ -19,15 +19,15 @@ This guide covers deploying AstroPlanner with PostgreSQL support across differen
 
 2. **Create Database**
    ```bash
-   sudo -u postgres createdb astroplanner
-   sudo -u postgres createuser astroplanner_user
-   sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE astroplanner TO astroplanner_user;"
+   sudo -u postgres createdb armillarylab
+   sudo -u postgres createuser armillarylab_user
+   sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE armillarylab TO armillarylab_user;"
    ```
 
 3. **Configure Environment**
    ```bash
    export DATABASE_TYPE=postgresql
-   export DATABASE_URL=postgresql://astroplanner_user:password@localhost:5432/astroplanner
+   export DATABASE_URL=postgresql://armillarylab_user:password@localhost:5432/armillarylab
    ```
 
 4. **Initialize Database**
@@ -117,14 +117,14 @@ flask db info
          - "5000:5000"
        environment:
          - DATABASE_TYPE=postgresql
-         - DATABASE_URL=postgresql://postgres:password@db:5432/astroplanner
+         - DATABASE_URL=postgresql://postgres:password@db:5432/armillarylab
        depends_on:
          - db
      
      db:
        image: postgres:15
        environment:
-         - POSTGRES_DB=astroplanner
+         - POSTGRES_DB=armillarylab
          - POSTGRES_PASSWORD=password
        volumes:
          - postgres_data:/var/lib/postgresql/data
@@ -256,7 +256,7 @@ heroku logs --tail
 docker-compose logs -f app
 
 # Direct server
-tail -f /var/log/astroplanner.log
+tail -f /var/log/armillarylab.log
 ```
 
 ## Troubleshooting

@@ -1,6 +1,6 @@
-# AstroPlanner Database Configuration Guide
+# ArmillaryLab Database Configuration Guide
 
-This guide provides clear, step-by-step instructions for configuring and migrating databases in AstroPlanner. The application supports both **SQLite** (default, for development/local use) and **PostgreSQL** (recommended for production/cloud deployment).
+This guide provides clear, step-by-step instructions for configuring and migrating databases in ArmillaryLab. The application supports both **SQLite** (default, for development/local use) and **PostgreSQL** (recommended for production/cloud deployment).
 
 ---
 
@@ -83,7 +83,7 @@ Instead of setting environment variables manually each time, you can use `.env` 
    FLASK_DEBUG=False
    
    DATABASE_TYPE=postgresql
-   DATABASE_URL=postgresql://username:password@hostname:5432/astroplanner
+   DATABASE_URL=postgresql://username:password@hostname:5432/armillarylab
    
    # Connection pool (adjust based on your needs)
    POSTGRES_POOL_SIZE=20
@@ -155,11 +155,11 @@ SQLite is the default database and requires **zero configuration**. Perfect for:
    Expected output:
    ```
    Database Type: sqlite
-   Connection String: sqlite:///c:\...\astroplanner\astroplanner.db
+   Connection String: sqlite:///c:\...\armillarylab\armillarylab.db
    ✓ Connection successful
    ```
 
-**Database location:** `astroplanner.db` in the project root directory.
+**Database location:** `armillarylab.db` in the project root directory.
 
 ---
 
@@ -204,9 +204,9 @@ Before you begin, ensure you have:
    psql -U postgres
    
    # Create database and user
-   CREATE DATABASE astroplanner;
-   CREATE USER astroplanner_user WITH PASSWORD 'your_secure_password';
-   GRANT ALL PRIVILEGES ON DATABASE astroplanner TO astroplanner_user;
+   CREATE DATABASE armillarylab;
+   CREATE USER armillarylab_user WITH PASSWORD 'your_secure_password';
+   GRANT ALL PRIVILEGES ON DATABASE armillarylab TO armillarylab_user;
    
    # Exit
    \q
@@ -219,19 +219,19 @@ Before you begin, ensure you have:
    **Windows PowerShell:**
    ```powershell
    $env:DATABASE_TYPE = "postgresql"
-   $env:DATABASE_URL = "postgresql://astroplanner_user:your_secure_password@localhost:5432/astroplanner"
+   $env:DATABASE_URL = "postgresql://armillarylab_user:your_secure_password@localhost:5432/armillarylab"
    ```
 
    **Windows CMD:**
    ```cmd
    set DATABASE_TYPE=postgresql
-   set DATABASE_URL=postgresql://astroplanner_user:your_secure_password@localhost:5432/astroplanner
+   set DATABASE_URL=postgresql://armillarylab_user:your_secure_password@localhost:5432/armillarylab
    ```
 
    **Linux/macOS:**
    ```bash
    export DATABASE_TYPE=postgresql
-   export DATABASE_URL=postgresql://astroplanner_user:your_secure_password@localhost:5432/astroplanner
+   export DATABASE_URL=postgresql://armillarylab_user:your_secure_password@localhost:5432/armillarylab
    ```
 
    **Or using individual components (alternative):**
@@ -239,8 +239,8 @@ Before you begin, ensure you have:
    $env:DATABASE_TYPE = "postgresql"
    $env:DB_HOST = "localhost"
    $env:DB_PORT = "5432"
-   $env:DB_NAME = "astroplanner"
-   $env:DB_USER = "astroplanner_user"
+   $env:DB_NAME = "armillarylab"
+   $env:DB_USER = "armillarylab_user"
    $env:DB_PASSWORD = "your_secure_password"
    ```
 
@@ -252,7 +252,7 @@ Before you begin, ensure you have:
    Expected output:
    ```
    Database Type: postgresql
-   Connection String: postgresql://astroplanner_user:***@localhost:5432/astroplanner
+   Connection String: postgresql://armillarylab_user:***@localhost:5432/armillarylab
    
    PostgreSQL Configuration:
      Pool Size: 10
@@ -280,12 +280,12 @@ Before you begin, ensure you have:
 2. Click "Environment Variables"
 3. Add new User variables:
    - `DATABASE_TYPE` = `postgresql`
-   - `DATABASE_URL` = `postgresql://user:pass@localhost:5432/astroplanner`
+   - `DATABASE_URL` = `postgresql://user:pass@localhost:5432/armillarylab`
 
 **Linux/macOS (.bashrc or .zshrc):**
 ```bash
 echo 'export DATABASE_TYPE=postgresql' >> ~/.bashrc
-echo 'export DATABASE_URL=postgresql://user:pass@localhost:5432/astroplanner' >> ~/.bashrc
+echo 'export DATABASE_URL=postgresql://user:pass@localhost:5432/armillarylab' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -293,7 +293,7 @@ source ~/.bashrc
 Create a `.env` file in the project root:
 ```env
 DATABASE_TYPE=postgresql
-DATABASE_URL=postgresql://astroplanner_user:your_password@localhost:5432/astroplanner
+DATABASE_URL=postgresql://armillarylab_user:your_password@localhost:5432/armillarylab
 SECRET_KEY=your-secret-key
 ```
 
@@ -327,7 +327,7 @@ Before migrating, ensure:
 #### Migration Command
 
 ```powershell
-flask db migrate --to postgresql --target-url "postgresql://user:password@localhost:5432/astroplanner"
+flask db migrate --to postgresql --target-url "postgresql://user:password@localhost:5432/armillarylab"
 ```
 
 When prompted, type `y` to confirm the migration.
@@ -338,8 +338,8 @@ When prompted, type `y` to confirm the migration.
 ============================================================
 Migrating from SQLite to PostgreSQL
 ============================================================
-Source: sqlite:///c:\...\astroplanner.db
-Target: postgresql://user:***@localhost:5432/astroplanner
+Source: sqlite:///c:\...\armillarylab.db
+Target: postgresql://user:***@localhost:5432/armillarylab
 
 Step 1/5: Testing target connection...
 ✓ Target database connection successful
@@ -405,8 +405,8 @@ When prompted, type `y` to confirm the migration.
 ============================================================
 Migrating from PostgreSQL to SQLite
 ============================================================
-Source: postgresql://user:***@localhost:5432/astroplanner
-Target: sqlite:///c:\...\astroplanner.db
+Source: postgresql://user:***@localhost:5432/armillarylab
+Target: sqlite:///c:\...\armillarylab.db
 
 Step 1/5: Testing target connection...
 ✓ Target database connection successful
@@ -460,8 +460,8 @@ If not using `DATABASE_URL`, you can specify components individually:
 |----------|-------------|---------|
 | `DB_HOST` | PostgreSQL server hostname | `localhost` |
 | `DB_PORT` | PostgreSQL server port | `5432` |
-| `DB_NAME` | Database name | `astroplanner` |
-| `DB_USER` | Database username | `astroplanner` |
+| `DB_NAME` | Database name | `armillarylab` |
+| `DB_USER` | Database username | `armillarylab` |
 | `DB_PASSWORD` | Database password | (none) |
 | `DB_SSL_MODE` | SSL connection mode | `prefer` |
 
@@ -478,7 +478,7 @@ If not using `DATABASE_URL`, you can specify components individually:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SQLITE_PATH` | Custom path to SQLite file | `astroplanner.db` |
+| `SQLITE_PATH` | Custom path to SQLite file | `armillarylab.db` |
 | `SQLITE_TIMEOUT` | Connection timeout (seconds) | `20` |
 | `SQLITE_WAL_MODE` | Enable WAL mode | `true` |
 
@@ -505,7 +505,7 @@ If not using `DATABASE_URL`, you can specify components individually:
 2. Check connection details:
    ```powershell
    # Test direct connection
-   psql -U astroplanner_user -h localhost -d astroplanner
+   psql -U armillarylab_user -h localhost -d armillarylab
    ```
 
 3. Verify firewall allows port 5432
@@ -514,7 +514,7 @@ If not using `DATABASE_URL`, you can specify components individually:
 
 **Solution:**
 ```powershell
-psql -U postgres -c "CREATE DATABASE astroplanner;"
+psql -U postgres -c "CREATE DATABASE armillarylab;"
 ```
 
 #### "Authentication Failed"
@@ -524,7 +524,7 @@ psql -U postgres -c "CREATE DATABASE astroplanner;"
 2. Check PostgreSQL authentication settings (`pg_hba.conf`)
 3. Ensure user has proper permissions:
    ```sql
-   GRANT ALL PRIVILEGES ON DATABASE astroplanner TO astroplanner_user;
+   GRANT ALL PRIVILEGES ON DATABASE armillarylab TO armillarylab_user;
    ```
 
 #### Migration Shows "0 records migrated"
@@ -566,7 +566,7 @@ python -c "from config.database import get_database_config; c = get_database_con
 python -c "import os; print('DATABASE_TYPE:', os.getenv('DATABASE_TYPE')); print('DATABASE_URL:', os.getenv('DATABASE_URL'))"
 
 # Test PostgreSQL connection directly
-psql "postgresql://user:pass@localhost:5432/astroplanner" -c "SELECT 1;"
+psql "postgresql://user:pass@localhost:5432/armillarylab" -c "SELECT 1;"
 ```
 
 ### Getting Help

@@ -36,7 +36,7 @@ python app.py
 ```bash
 docker run -e DATABASE_TYPE=postgresql \
            -e DATABASE_URL=postgresql://user:password@host/db \
-           astroplanner:latest
+           armillarylab:latest
 ```
 **Security Level**: Medium (visible in docker inspect)
 **Complexity**: Low
@@ -71,8 +71,8 @@ gcloud secrets create db-connection-string \
   --data-file=<(echo "postgresql://user:pass@host/db")
 
 # Deploy Cloud Run service
-gcloud run deploy astroplanner \
-  --image gcr.io/project/astroplanner \
+gcloud run deploy armillarylab \
+  --image gcr.io/project/armillarylab \
   --update-secrets DATABASE_URL=db-connection-string:latest
 ```
 **Security Level**: Very High (GCP managed encryption, IAM controls)
@@ -162,7 +162,7 @@ gcloud run deploy astroplanner \
 
 ## File Structure (Future)
 ```
-astroplanner/
+armillarylab/
 ├── deploy/
 │   ├── local/
 │   │   ├── run-with-env.sh

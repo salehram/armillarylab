@@ -28,7 +28,7 @@ def info():
     db_config = get_database_config()
     
     click.echo("=" * 60)
-    click.echo("AstroPlanner Database Configuration")
+    click.echo("ArmillaryLab Database Configuration")
     click.echo("=" * 60)
     click.echo(f"Database Type: {db_config.db_type}")
     click.echo(f"Connection String: {db_config.connection_string}")
@@ -159,7 +159,7 @@ def update_env_file(db_type, db_url=None):
     if not env_path.exists():
         # Create new .env file
         lines = [
-            "# AstroPlanner Environment Configuration\n",
+            "# ArmillaryLab Environment Configuration\n",
             f"DATABASE_TYPE={db_type}\n",
         ]
         if db_url:
@@ -265,7 +265,7 @@ def migrate(to, target_url, backup, validate, update_env):
         if to == 'postgresql':
             click.echo("\nPlease ensure:")
             click.echo("  1. PostgreSQL server is running")
-            click.echo("  2. Database exists: CREATE DATABASE astroplanner;")
+            click.echo("  2. Database exists: CREATE DATABASE armillarylab;")
             click.echo("  3. User has permissions: GRANT ALL PRIVILEGES...")
             click.echo("  4. Connection URL is correct")
         # Restore original env

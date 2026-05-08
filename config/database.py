@@ -72,8 +72,8 @@ class DatabaseConfig:
         # Build from individual components
         host = os.getenv('DB_HOST', 'localhost')
         port = os.getenv('DB_PORT', '5432')
-        database = os.getenv('DB_NAME', 'astroplanner')
-        username = os.getenv('DB_USER', 'astroplanner')
+        database = os.getenv('DB_NAME', 'armillarylab')
+        username = os.getenv('DB_USER', 'armillarylab')
         password = os.getenv('DB_PASSWORD', '')
         
         # Handle SSL mode
@@ -107,9 +107,9 @@ class DatabaseConfig:
         if self.base_dir:
             from pathlib import Path
             base_path = Path(self.base_dir) if isinstance(self.base_dir, str) else self.base_dir
-            db_path = base_path / 'astroplanner.db'
+            db_path = base_path / 'armillarylab.db'
         else:
-            db_path = 'astroplanner.db'
+            db_path = 'armillarylab.db'
         
         return f'sqlite:///{db_path}'
     

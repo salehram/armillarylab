@@ -1,4 +1,4 @@
-# AstroPlanner
+# ArmillaryLab
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
@@ -10,7 +10,7 @@ A comprehensive web-based tool for planning astrophotography sessions and managi
 
 ## 🎉 Version 2.0.0 - Database & Filter Management Release
 
-AstroPlanner v2.0.0 brings major improvements for production deployment and equipment management, including PostgreSQL support, comprehensive filter management, target archiving, and enhanced dark theme visibility.
+ArmillaryLab v2.0.0 brings major improvements for production deployment and equipment management, including PostgreSQL support, comprehensive filter management, target archiving, and enhanced dark theme visibility.
 
 ## 🌟 Features
 
@@ -103,8 +103,8 @@ Detailed documentation is available in the [docs/](docs/) folder:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/astroplanner.git
-   cd astroplanner
+   git clone https://github.com/salehram/armillarylab.git
+   cd armillarylab
    ```
 
 2. **Create and activate virtual environment**
@@ -138,7 +138,7 @@ Detailed documentation is available in the [docs/](docs/) folder:
 
 ## 🖥️ Command Line Interface (CLI)
 
-AstroPlanner provides comprehensive CLI commands for database management, equipment configuration, and system administration.
+ArmillaryLab provides comprehensive CLI commands for database management, equipment configuration, and system administration.
 
 ### Database Commands
 
@@ -324,7 +324,7 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 ## 🗂️ Project Structure
 
 ```
-astroplanner/
+armillarylab/
 ├── app.py                 # Main Flask application
 ├── astro_utils.py         # Astronomical calculations
 ├── cli.py                 # CLI command definitions
@@ -359,14 +359,14 @@ astroplanner/
 ├── static/                # Static assets (CSS, JS, fonts)
 ├── dev/                   # Virtual environment
 ├── uploads/               # File uploads directory
-└── astroplanner.db        # SQLite database (created after init)
+└── armillarylab.db        # SQLite database (created after init)
 ```
 
 ## ⚙️ Configuration
 
 ### Configuration Files
 
-AstroPlanner uses several configuration files for different environments:
+ArmillaryLab uses several configuration files for different environments:
 
 | File | Purpose | Auto-loaded |
 |------|---------|-------------|
@@ -422,7 +422,7 @@ For detailed database configuration using these files, see [DATABASE_GUIDE.md](D
 
 ### Equipment Presets
 
-AstroPlanner supports JSON-based equipment presets for easy configuration sharing:
+ArmillaryLab supports JSON-based equipment presets for easy configuration sharing:
 
 **Creating Custom Presets:**
 1. Export your current configuration: `flask export-preset my_filters.json --include-wheels`

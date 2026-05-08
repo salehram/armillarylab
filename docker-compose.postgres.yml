@@ -1,25 +1,25 @@
 version: "3.9"
 
 # =============================================================================
-# AstroPlanner with PostgreSQL - Production Deployment
+# ArmillaryLab with PostgreSQL - Production Deployment
 # =============================================================================
-# This docker-compose file sets up AstroPlanner with a PostgreSQL database.
+# This docker-compose file sets up ArmillaryLab with a PostgreSQL database.
 # 
 # Usage:
 #   docker-compose -f docker-compose.postgres.yml up -d
 #
 # First-time setup:
 #   docker-compose -f docker-compose.postgres.yml up -d
-#   docker-compose -f docker-compose.postgres.yml exec astroplanner flask init-db
+#   docker-compose -f docker-compose.postgres.yml exec armillarylab flask init-db
 # =============================================================================
 
 services:
   # ---------------------------------------------------------------------------
-  # AstroPlanner Application
+  # ArmillaryLab Application
   # ---------------------------------------------------------------------------
-  astroplanner:
+  armillarylab:
     build: .
-    container_name: astroplanner
+    container_name: armillarylab
     ports:
       - "${PORT:-5000}:5000"
     environment:
@@ -31,7 +31,7 @@ services:
       
       # PostgreSQL Database Configuration
       - DATABASE_TYPE=postgresql
-      - DATABASE_URL=postgresql://astroplanner:${POSTGRES_PASSWORD:-astroplanner}@postgres:5432/astroplanner
+      - DATABASE_URL=postgresql://armillarylab:${POSTGRES_PASSWORD:-armillarylab}@postgres:5432/armillarylab
       
       # PostgreSQL Connection Pool (tuned for production)
       - POSTGRES_POOL_SIZE=${POSTGRES_POOL_SIZE:-20}
@@ -76,18 +76,18 @@ services:
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
-    container_name: astroplanner-db
+    container_name: armillarylab-db
     environment:
-      - POSTGRES_USER=astroplanner
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-astroplanner}
-      - POSTGRES_DB=astroplanner
+      - POSTGRES_USER=armillarylab
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-armillarylab}
+      - POSTGRES_DB=armillarylab
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U astroplanner -d astroplanner"]
+      test: ["CMD-SHELL", "pg_isready -U armillarylab -d armillarylab"]
       interval: 10s
       timeout: 5s
       retries: 5

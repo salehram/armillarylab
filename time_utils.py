@@ -1,5 +1,5 @@
 """
-Time formatting and parsing utilities for the AstroPlanner application.
+Time formatting and parsing utilities for the ArmillaryLab application.
 Handles conversion between minutes, seconds, and H:M:S format.
 """
 

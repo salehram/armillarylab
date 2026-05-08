@@ -1,15 +1,31 @@
 # Changelog
 
-All notable changes to AstroPlanner will be documented in this file.
+All notable changes to ArmillaryLab will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+> **Project rename**: Versions 1.0.0 and 2.0.0 shipped under the previous project name **AstroPlanner**. The project was renamed to **ArmillaryLab** in 2026 to avoid conflict with an unrelated existing product. Historical version labels in this file refer to the project's name at the time of release.
+
+## [Unreleased] - Project rename
+
+### Changed
+
+- Renamed the project from **AstroPlanner** to **ArmillaryLab** across code, config, Docker, documentation, and the SQLite database file (`astroplanner.db` to `armillarylab.db`).
+- Updated default PostgreSQL DB name and role to `armillarylab` in [config/database.py](../config/database.py); existing PG deployments can keep using their current names by setting `DATABASE_URL` explicitly.
+- Updated Docker Compose service/container names and PostgreSQL service defaults.
+- Updated the GitHub repository URL references in `README.md`.
+
+### Notes
+
+- No data migration required; the SQLite file rename preserves all data unchanged.
+- The GitHub redirect from the old repo URL keeps existing remotes working until they are updated with `git remote set-url`.
 
 ## [2.0.0] - 2026-02-01
 
 ### 🎉 Version 2.0.0 - PostgreSQL Support & Equipment Management
 
-**AstroPlanner v2.0.0** is a major release introducing PostgreSQL database support for production deployments, comprehensive filter and filter wheel management, target archiving, and enhanced astronomy chart features.
+**AstroPlanner v2.0.0** (released under the project's previous name) is a major release introducing PostgreSQL database support for production deployments, comprehensive filter and filter wheel management, target archiving, and enhanced astronomy chart features.
 
 ### ✨ Major New Features
 
@@ -103,7 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎉 Version 1.0.0 - Complete Feature Set Release
 
-**AstroPlanner v1.0.0** represents a mature, feature-complete astrophotography planning platform with comprehensive target management, session tracking, telescope integration, and advanced progress management capabilities.
+**AstroPlanner v1.0.0** (released under the project's previous name) represents a mature, feature-complete astrophotography planning platform with comprehensive target management, session tracking, telescope integration, and advanced progress management capabilities.
 
 ### ✅ Complete Feature Set
 

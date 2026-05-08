@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>ArmillaryLab - Astrophotography Planner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <link
     href="{{ url_for('static', filename='css/bootstrap.min.css') }}"
     rel="stylesheet"
@@ -42,7 +43,21 @@
       text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
       font-weight: 500;
     }
-    
+
+    .navbar-milkyway .navbar-brand {
+      display: inline-flex;
+      align-items: center;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    .navbar-milkyway .navbar-brand img {
+      height: 44px;
+      width: auto;
+      display: block;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+    }
+
     .navbar-milkyway .nav-link:hover {
       background-color: rgba(255, 255, 255, 0.1);
       border-radius: 4px;
@@ -52,7 +67,9 @@
 <body class="bg-dark text-light">
 <nav class="navbar navbar-expand-lg navbar-dark navbar-milkyway mb-4">
   <div class="container-fluid">
-    <a class="navbar-brand" href="{{ url_for('index') }}">{{ app_name }}</a>
+    <a class="navbar-brand" href="{{ url_for('index') }}" aria-label="{{ app_name }} home">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="{{ app_name }}">
+    </a>
     <div class="navbar-nav ms-auto">
       <a class="nav-link" href="{{ url_for('imaging_logs') }}">
         <i class="bi bi-journal-text me-1"></i>Imaging Logs

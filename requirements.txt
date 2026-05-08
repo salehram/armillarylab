@@ -28,3 +28,8 @@ python-dotenv>=1.2.1
 pytest>=8.3.4
 pytest-flask>=1.3.0
 pytest-cov>=6.0.0
+
+# Branding Asset Builder (optional, only needed to re-run branding/_make_assets.py)
+# The runtime app does not import Pillow; static/img/logo.png and
+# static/favicon.ico are pre-built and committed to the repository.
+Pillow>=11.0.0

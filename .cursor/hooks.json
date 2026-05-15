@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "type": "prompt",
+        "prompt": "Before finishing, check whether you modified any of these key project files during this session: app.py (models, routes, helpers, database schema), templates/*.html, astro_utils.py, time_utils.py, nina_integration.py, config/*.py (database.py, migration.py), requirements.txt, or .env.example. If you did, you MUST update .cursor/rules/project-reference.mdc to reflect those changes — including new/changed models or columns (which define the database schema), routes, templates, env vars, helper functions, migration logic, or dependencies. If you only made minor edits (CSS tweaks, copy changes, bug fixes within existing functions) that don't change the project's structure or API surface, no update is needed. Here is the hook input: $ARGUMENTS",
+        "timeout": 30,
+        "loop_limit": 1
+      }
+    ]
+  }
+}

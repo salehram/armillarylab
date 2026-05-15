@@ -1,0 +1,348 @@
+---
+description: >-
+  Comprehensive ArmillaryLab project reference — architecture, models, routes,
+  templates, utilities, config, and conventions. Agents MUST read this before
+  any non-trivial task to avoid redundant exploration. Update this file when
+  new models, routes, templates, or major features are added.
+alwaysApply: true
+---
+
+# ArmillaryLab — Project Reference Cache
+
+> **Last updated:** 2026-05-15
+> **Purpose:** Save agent discovery time and token cost. Read this FIRST, explore SECOND.
+> **Maintenance:** When you add/change models, routes, templates, or config — update the relevant section here before committing.
+
+---
+
+## 1. Tech Stack
+
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| Backend | Flask 3.x | Single-module app (`app.py`) |
+| ORM | SQLAlchemy 2.x + Flask-SQLAlchemy 3.x | All models in `app.py` |
+| Database | SQLite (dev) / PostgreSQL (prod) | Configured via `DATABASE_URL` env var |
+| Migrations | Custom `config/migration.py` | ALTER TABLE based, not Alembic |
+| Astronomy | astropy 6.x + astroplan 0.10+ | Window/altitude calculations |
+| Templates | Jinja2 (Flask built-in) | Dark-themed Bootstrap 5 |
+| Charts | Chart.js (vendored UMD) | Altitude-over-night plot |
+| Frontend | Bootstrap 5 + Bootstrap Icons | No custom CSS/JS files — all inline |
+| Server | gunicorn (prod), Flask dev server (dev) | Port 5000 |
+| Container | Docker + docker-compose | Single `web` service |
+
+---
+
+## 2. Directory Structure
+
+```
+astroplanner/
+├── app.py                    # Flask app: models + ALL routes + helpers
+├── astro_utils.py            # compute_target_window() — core astronomy
+├── time_utils.py             # utc_to_local() helper
+├── nina_integration.py       # NINA XML sequence + filter profile parsing
+├── cli.py                    # Dev server entry: python cli.py
+├── config/
+│   ├── database.py           # configure_app() — DB URI + engine options
+│   └── migration.py          # run_migrations() — schema diffing + ALTER TABLE
+├── templates/                # 16 Jinja2 templates (see §6)
+├── static/
+│   ├── css/                  # bootstrap.min.css, bootstrap-icons.min.css
+│   ├── js/                   # bootstrap.bundle.min.js, chart.umd.js
+│   ├── fonts/                # bootstrap-icons.woff, .woff2
+│   └── images/               # armillarylab-logo.png, favicon.ico
+├── tests/
+│   ├── __init__.py
+│   └── test_app.py           # pytest suite (~15 tests)
+├── uploads/                  # User-uploaded final images (gitignored)
+├── requirements.txt          # 11 dependencies
+├── .env / .env.example       # Observer config, DB URL, secrets
+├── Dockerfile                # python:3.12-slim, gunicorn
+├── docker-compose.yml        # Single web service, volume mounts
+├── run_tests.py              # pytest runner script
+└── README.md
+```
+
+---
+
+## 3. Database Models (all in `app.py`)
+
+### Filter (`filters`)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | |
+| name | String(32), unique, not null | Short code: "H", "O", "S", "L", "R", "G", "B" |
+| display_name | String(64) | "Hydrogen Alpha", etc. |
+| astrobin_filter_id | Integer | AstroBin API filter ID |
+
+Relationships: `palette_entries` → PaletteFilter, `wheel_slots` → FilterWheelSlot
+
+### Palette (`palettes`)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | |
+| name | String(32), unique, not null | "SHO", "LRGB", etc. |
+| display_name | String(64) | |
+| is_active | Boolean, default True | |
+
+Relationships: `filters` → PaletteFilter (cascade all, delete-orphan), `targets` → Target
+
+### PaletteFilter (`palette_filters`)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | |
+| palette_id | Integer FK → palettes.id | |
+| filter_id | Integer FK → filters.id | |
+| weight | Float, default 1.0 | Relative weight for time allocation |
+| default_sub_exposure_seconds | Float, default 300 | |
+
+### FilterWheel (`filter_wheels`)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | |
+| name | String(64), not null | |
+| slot_count | Integer, not null, default 7 | |
+| is_active | Boolean, default True | |
+
+Relationships: `slots` → FilterWheelSlot (cascade all, delete-orphan)
+
+### FilterWheelSlot (`filter_wheel_slots`)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | |
+| wheel_id | Integer FK → filter_wheels.id | |
+| position | Integer, not null | 1-based slot number |
+| filter_id | Integer FK → filters.id (nullable) | |
+| nina_filter_name | String(64) | NINA-specific name |
+| physical_filter_brand | String(128) | |
+| notes | Text | |
+
+### Target (`targets`)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | |
+| name | String(128), not null | |
+| catalog_id | String(64) | e.g. "NGC 7000" |
+| target_type | String(64) | "Nebula", "Galaxy", etc. |
+| ra_hours | Float, not null | Right ascension 0-24 |
+| dec_deg | Float, not null | Declination -90 to +90 |
+| notes | Text | Editable inline on detail page |
+| pixinsight_workflow | Text | Editable inline on detail page |
+| preferred_palette | String(64), default "SHO" | |
+| palette_id | Integer FK → palettes.id | |
+| packup_time_local | String(5), default "01:00" | HH:MM format |
+| override_packup_time | String(5) | Per-target override |
+| override_min_altitude | Float | Per-target override |
+| final_image_filename | String(256) | |
+| created_at | DateTime, default utcnow | |
+| is_archived | Boolean, default False | |
+| archived_at | DateTime | |
+| completion_notes | Text | |
+
+Relationships: `plans` → TargetPlan (cascade all, delete-orphan), `sessions` → ImagingSession (cascade all, delete-orphan), `palette` → Palette
+
+### TargetPlan (`target_plans`)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | |
+| target_id | Integer FK → targets.id | |
+| plan_json | Text, not null | JSON: channels, minutes, sub-exposure, weights |
+| created_at | DateTime, default utcnow | |
+
+### ImagingSession (`imaging_sessions`)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | |
+| target_id | Integer FK → targets.id | |
+| date | Date, not null | |
+| channel | String(32), not null | Filter channel used |
+| sub_exposure_seconds | Float, not null | |
+| sub_count | Integer, not null | |
+| notes | Text | |
+
+---
+
+## 4. Routes (all in `app.py`)
+
+### Dashboard & Browsing
+| URL | Methods | Function | Purpose |
+|-----|---------|----------|---------|
+| `/` | GET | `index()` | Home — active target cards with window info. Sortable: name/type/created/progress/remaining/window |
+| `/archived` | GET | `archived_targets()` | Lists completed/archived targets |
+| `/imaging-logs` | GET | `imaging_logs()` | Cross-target session log grouped by date |
+
+### Target CRUD
+| URL | Methods | Function | Purpose |
+|-----|---------|----------|---------|
+| `/target/new` | GET, POST | `new_target()` | Create target + initial plan from palette |
+| `/target/<id>` | GET | `target_detail(id)` | Main detail page — plan, window, chart, sessions, notes |
+| `/target/<id>/edit` | GET, POST | `edit_target(id)` | Full target edit form |
+| `/target/<id>/delete` | POST | `delete_target(id)` | Delete target + cascade |
+| `/target/<id>/settings` | GET, POST | `target_settings(id)` | Per-target overrides (packup, min altitude) |
+| `/target/<id>/archive` | POST | `archive_target(id)` | Mark complete |
+| `/target/<id>/unarchive` | POST | `unarchive_target(id)` | Restore to active |
+| `/target/<id>/clone` | POST | `clone_target(id)` | Deep-clone target + latest plan |
+
+### Target AJAX APIs
+| URL | Methods | Function | Purpose |
+|-----|---------|----------|---------|
+| `/target/<id>/update-notes` | POST | `update_target_notes(id)` | JSON: `{notes}` → save, return `{ok, notes}` |
+| `/target/<id>/update-pixinsight-workflow` | POST | `update_target_pixinsight_workflow(id)` | JSON: `{pixinsight_workflow}` → save |
+
+### Plan Management
+| URL | Methods | Function | Purpose |
+|-----|---------|----------|---------|
+| `/target/<id>/plan/new` | POST | `new_plan(id)` | Create plan from chosen palette |
+| `/target/<id>/plan/update` | POST | `update_plan(id)` | Save plan: per-channel minutes/subexp, custom filters, removals |
+
+### Imaging Sessions
+| URL | Methods | Function | Purpose |
+|-----|---------|----------|---------|
+| `/target/<id>/progress/add` | POST | `add_progress(id)` | Add ImagingSession |
+| `/session/<id>/edit` | GET, POST | `edit_session(id)` | Edit session form |
+| `/session/<id>/delete` | POST | `delete_session(id)` | Delete session |
+
+### Export
+| URL | Methods | Function | Purpose |
+|-----|---------|----------|---------|
+| `/target/<id>/export/nina` | POST | `export_nina_sequence(id)` | Download NINA XML sequence |
+| `/target/<id>/export/astrobin-csv` | POST | `export_astrobin_csv(id)` | Download AstroBin CSV |
+
+### Image Upload
+| URL | Methods | Function | Purpose |
+|-----|---------|----------|---------|
+| `/target/<id>/upload-image` | POST | `upload_final_image(id)` | Upload/replace final image |
+| `/uploads/<filename>` | GET | `uploaded_file(filename)` | Serve uploaded images |
+
+### Filter/Palette/Wheel CRUD
+| URL | Methods | Function | Purpose |
+|-----|---------|----------|---------|
+| `/filters` | GET | `filter_list()` | List all filters |
+| `/filter/new` | GET, POST | `new_filter()` | Create filter |
+| `/filter/<id>/edit` | GET, POST | `edit_filter(id)` | Edit filter |
+| `/filter/<id>/delete` | POST | `delete_filter(id)` | Delete filter |
+| `/palettes` | GET | `palette_list()` | List all palettes |
+| `/palette/new` | GET, POST | `new_palette()` | Create palette with filter assignments |
+| `/palette/<id>/edit` | GET, POST | `edit_palette(id)` | Edit palette |
+| `/palette/<id>/delete` | POST | `delete_palette(id)` | Delete palette |
+| `/filter-wheels` | GET | `filter_wheel_list()` | List filter wheels |
+| `/filter-wheel/new` | GET, POST | `new_filter_wheel()` | Create wheel with N slots |
+| `/filter-wheel/<id>/edit` | GET, POST | `edit_filter_wheel(id)` | Edit wheel + slot assignments |
+| `/filter-wheel/<id>/delete` | POST | `delete_filter_wheel(id)` | Delete wheel |
+
+### Settings & APIs
+| URL | Methods | Function | Purpose |
+|-----|---------|----------|---------|
+| `/settings` | GET, POST | `settings()` | Global config — reads/writes .env directly |
+| `/api/filters` | GET | `api_filters()` | JSON list of all filters |
+| `/api/target/<id>/window` | GET | `api_target_window(id)` | JSON window info for target |
+| `/health` | GET | `health_check()` | Returns `{"status": "healthy"}` |
+
+### Error Handlers
+- **404**: Renders `404.html` or JSON
+- **500**: Renders `500.html` or JSON
+
+---
+
+## 5. Utility Modules
+
+### `astro_utils.py` — `compute_target_window()`
+Core function. Takes RA/Dec + observer params, returns dict with:
+- Sunset, dark start/end, meridian transit (local + UTC strings)
+- Effective imaging window start/end after altitude constraint
+- `altitude_profile`: list of `{time_label, alt_deg}` at 5-min intervals (sunset→dawn)
+- `moon_altitude_profile`: same for moon
+- `moon_rise_local`, `moon_set_local`
+- `total_minutes`, `min_altitude_deg`, `midpoint_altitude_deg`
+- Uses astropy Observer, EarthLocation, pytz for timezone conversion
+
+### `time_utils.py` — `utc_to_local(utc_dt, tz_name)`
+Converts UTC datetime to local timezone. Falls back to env `OBSERVER_TZ`.
+
+### `nina_integration.py`
+- `generate_nina_sequence(target, plan_data, remaining_by_channel)` → NINA XML string
+- `get_nina_filters_from_profile(profile_path)` → list of `{name, position}`
+
+### `config/database.py` — `configure_app(app)`
+Sets `SQLALCHEMY_DATABASE_URI` from env, configures pool for PostgreSQL or SQLite.
+
+### `config/migration.py` — `run_migrations(app)`
+Schema diffing: checks existing tables/columns against expected schema, runs ALTER TABLE to add missing columns. Handles both SQLite and PostgreSQL.
+
+---
+
+## 6. Templates
+
+| Template | Extends | Key Purpose | Key Variables |
+|----------|---------|-------------|---------------|
+| `base.html` | — | Root layout, navbar, flash messages, dark theme | — |
+| `index.html` | base | Target dashboard with sort controls | `targets`, `window_map`, `sort`, `dir` |
+| `target_detail.html` | base | Main target page (plan, chart, sessions, notes) | `target`, `plan_data`, `window_info`, `progress_*`, `palettes`, `astrobin_filter_map` |
+| `target_form.html` | base | Create/edit target form | `target`, `global_config`, `palettes` |
+| `target_settings.html` | base | Per-target overrides | `target`, `global_config` |
+| `edit_session.html` | base | Edit imaging session | `session` |
+| `imaging_logs.html` | base | Cross-target session logs | `sessions_by_date`, `all_sessions`, `targets`, `total_integration_seconds` |
+| `archived_targets.html` | base | Completed targets list | `targets` |
+| `settings.html` | base | Global .env settings form | `config` |
+| `filters.html` | base | Filter list | `filters` |
+| `filter_form.html` | base | Create/edit filter | `filter` |
+| `palettes.html` | base | Palette list with filter details | `palettes` |
+| `palette_form.html` | base | Create/edit palette | `palette`, `filters` |
+| `filter_wheels.html` | base | Filter wheel list | `wheels` |
+| `filter_wheel_form.html` | base | Create/edit wheel + slots | `wheel`, `filters` |
+| `404.html` / `500.html` | base | Error pages | — |
+
+### `target_detail.html` Inline JavaScript (largest JS block)
+- Plan calculations: `recalcFrames()`, frame/time/status badges
+- H:M:S conversion: `parseHMS()`, `minutesToHMS()`, `formatHMS()`
+- Altitude chart: Chart.js with 5 custom plugins (moon bar, window shading, current time line, meridian line, moon rise/set lines)
+- Inline notes/workflow editing: `toggleNotesEdit()`, `saveNotes()`, `togglePixiEdit()`, `savePixiWorkflow()`
+- Custom filter addition + auto-calculation
+- Filter removal handling
+- Auto-refresh current time marker every 60s
+
+---
+
+## 7. Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OBSERVER_LAT` | — | Observer latitude (decimal degrees) |
+| `OBSERVER_LON` | — | Observer longitude (decimal degrees) |
+| `OBSERVER_ELEVATION` | `0` | Elevation in meters |
+| `OBSERVER_TZ` | `UTC` | IANA timezone (e.g. `Asia/Amman`) |
+| `DEFAULT_MIN_ALTITUDE_DEG` | `30` | Min altitude for imaging window |
+| `DEFAULT_PACKUP_TIME_LOCAL` | `01:00` | Default pack-up time HH:MM |
+| `NINA_PROFILE_PATH` | — | Path to NINA profile XML |
+| `NINA_SEQUENCE_DIR` | — | Output dir for NINA sequences |
+| `SECRET_KEY` | `dev-secret-key-change-me` | Flask session secret |
+| `DATABASE_URL` | `sqlite:///astroplanner.db` | SQLAlchemy connection string |
+
+---
+
+## 8. Helper Functions in `app.py`
+
+- `get_global_config()` → dict of all env vars for observer/imaging config
+- `get_palettes_with_filters()` → list of palette dicts with nested filter info
+- Template filter: `format_hms_from_minutes(value)` → "HH:MM:SS" string
+
+---
+
+## 9. Testing
+
+- **Framework**: pytest
+- **Run**: `python run_tests.py` or `pytest tests/ -v`
+- **Fixture**: In-memory SQLite, seeds SHO palette with H/O/S filters
+- **Coverage**: ~15 tests covering CRUD for targets, sessions, filters, palettes, archive/clone flow, settings page, health check, 404
+
+---
+
+## 10. Conventions & Patterns
+
+- **All models and routes in `app.py`** — no blueprints, no separate models package
+- **Dark theme throughout** — `bg-dark text-light` body, `bg-secondary` cards
+- **No custom CSS/JS files** — all styling via Bootstrap utilities, all JS inline in templates
+- **AJAX for inline edits** — Notes and PixInsight workflow use fetch() + JSON endpoints
+- **Forms use POST with redirect** — standard PRG pattern for all non-AJAX forms
+- **`.env` is the config store** — settings page reads/writes `.env` directly
+- **Migrations are manual** — `config/migration.py` diffs schema, not Alembic
+- **Cascade deletes** — Target deletion cascades to plans + sessions

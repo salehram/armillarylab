@@ -33,6 +33,12 @@ git pull
 git branch -D rename/armillarylab 2>$null                                  # only if you ever had this branch locally; harmless if not
 ```
 
+If `git pull` refuses with **untracked files would be overwritten**,
+move those paths aside (for example rename `uploads` or `armillarylab.db`),
+then run `git pull` again. Resolve any edited tracked files (for example
+`.gitignore`) with `git restore <file>` if you only want to match
+`origin/main`.
+
 Your two open feature branches (`postgresql-support`,
 `feature/filter-channel-management`) do **not** need any special
 handling. Next time you work on either, just rebase it on top of the new
@@ -74,10 +80,14 @@ already correct in the renamed code.
 ## 6. (Optional, once-per-machine) refresh the dev venv
 
 If you want to run tests or rebuild branding assets on this machine,
-install the optional dev deps that were added during the rename:
+install the optional dev deps that were added during the rename.
+
+Use the `Scripts` folder from **your** virtualenv at the repo root (this
+machine may use `venv` rather than `dev`):
 
 ```powershell
-.\dev\Scripts\pip.exe install -r requirements.txt
+.\venv\Scripts\pip.exe install -r requirements.txt
+# or:  .\dev\Scripts\pip.exe install -r requirements.txt
 ```
 
 This pulls in `pytest`, `pytest-flask`, `pytest-cov`, and `Pillow` (the
@@ -87,9 +97,10 @@ last one is only needed to re-run `branding/_make_assets.py`).
 
 ```powershell
 $env:FLASK_APP='app.py'
-.\dev\Scripts\flask.exe db info                                            # should print "ArmillaryLab Database Configuration" and the armillarylab.db path
-.\dev\Scripts\flask.exe run                                                # then open http://127.0.0.1:5000/ and confirm the new logo and title
+.\venv\Scripts\flask.exe db info                                          # should print "ArmillaryLab Database Configuration" and the armillarylab.db path
+.\venv\Scripts\flask.exe run                                              # then open http://127.0.0.1:5000/ and confirm the new logo and title
 ```
+(Substitute `dev` for `venv` if that is what you use.)
 
 ## Rollback (if anything goes wrong)
 

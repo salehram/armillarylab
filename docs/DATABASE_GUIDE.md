@@ -100,8 +100,8 @@ Instead of setting environment variables manually each time, you can use `.env` 
 
 - **`.env` is gitignored** - Your credentials won't be committed
 - **`.flaskenv` is safe to commit** - Contains only server settings, no secrets
-- **Restart required** - After changing `.env`, restart the Flask server
-- **Environment variables override `.env`** - Manual `$env:VAR` takes precedence
+- **New terminal required after `.env` changes** - python-dotenv does NOT override environment variables that already exist in the current process. If you change a value in `.env`, you must **close and reopen your terminal** for the new value to take effect. Simply saving the file is not enough — the old value is cached in the shell session.
+- **Environment variables override `.env`** - Manual `$env:VAR` or system-level variables take precedence over `.env` values
 
 ---
 
@@ -371,7 +371,10 @@ Records migrated: 86
 
 #### Verify Migration
 
+> **Important:** Close your current terminal and open a fresh one before verifying. The migration updated your `.env` file, but python-dotenv won't override the old `DATABASE_TYPE` value that's already cached in your current shell session.
+
 ```powershell
+# Open a NEW terminal first, then:
 flask db info
 flask run
 ```
@@ -436,7 +439,10 @@ Records migrated: 86
 
 #### Verify Migration
 
+> **Important:** Close your current terminal and open a fresh one before verifying. The migration updated your `.env` file, but python-dotenv won't override the old `DATABASE_TYPE` value that's already cached in your current shell session.
+
 ```powershell
+# Open a NEW terminal first, then:
 flask db info
 flask run
 ```
@@ -534,6 +540,33 @@ psql -U postgres -c "CREATE DATABASE armillarylab;"
 2. Source database path is wrong
 3. Tables exist but are empty
 
+#### `flask db info` Shows Wrong Database After Migration
+
+**Symptoms:** You migrated (e.g., PostgreSQL → SQLite), `.env` shows `DATABASE_TYPE=sqlite`, but `flask db info` still reports PostgreSQL.
+
+**Cause:** python-dotenv does not override environment variables that already exist in the current shell session. When you ran `flask` earlier in the same terminal, the old `DATABASE_TYPE` value was loaded into the process. Even though `.env` was updated by the migration, the old value is still cached.
+
+**Fix:** Close your terminal and open a new one:
+```powershell
+# Close this terminal, open a fresh one, then:
+flask db info
+```
+
+Or force the value in the current session without restarting:
+```powershell
+# PowerShell
+$env:DATABASE_TYPE = "sqlite"
+flask db info
+
+# CMD
+set DATABASE_TYPE=sqlite
+flask db info
+
+# Linux/macOS
+export DATABASE_TYPE=sqlite
+flask db info
+```
+
 #### Environment Variables Not Working
 
 **Windows PowerShell:**
@@ -550,8 +583,8 @@ echo $env:DATABASE_TYPE
 ```
 
 **Persistent issues:**
-- Restart terminal after setting system environment variables
-- Use `.env` file with python-dotenv for consistent configuration
+- Close and reopen your terminal after changing `.env` — python-dotenv won't override values already loaded in the session
+- System-level environment variables always take precedence over `.env` — remove them if they conflict
 
 ### Debug Commands
 

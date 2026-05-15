@@ -530,25 +530,65 @@
 
     <!-- NOTES -->
     <div class="card bg-secondary text-light">
-      <div class="card-header">Notes</div>
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Notes</span>
+        <button type="button" class="btn btn-sm btn-outline-light" id="notes-edit-btn"
+                onclick="toggleNotesEdit(true)">
+          <i class="bi bi-pencil me-1"></i>Edit
+        </button>
+      </div>
       <div class="card-body">
-        {% if target.notes %}
-          <pre class="mb-0" style="white-space: pre-wrap;">{{ target.notes }}</pre>
-        {% else %}
-          <p class="text-muted mb-0">No notes yet.</p>
-        {% endif %}
+        <div id="notes-display">
+          {% if target.notes %}
+            <pre class="mb-0" style="white-space: pre-wrap;">{{ target.notes }}</pre>
+          {% else %}
+            <p class="text-muted mb-0">No notes yet.</p>
+          {% endif %}
+        </div>
+        <div id="notes-editor" style="display: none;">
+          <textarea class="form-control bg-dark text-light mb-2" id="notes-textarea"
+                    rows="6" placeholder="Add your notes here...">{{ target.notes or '' }}</textarea>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-primary" onclick="saveNotes()">
+              <i class="bi bi-floppy me-1"></i>Save
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleNotesEdit(false)">
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- PIXINSIGHT WORKFLOW -->
     <div class="card bg-secondary text-light">
-      <div class="card-header">PixInsight Workflow</div>
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>PixInsight Workflow</span>
+        <button type="button" class="btn btn-sm btn-outline-light" id="pixi-edit-btn"
+                onclick="togglePixiEdit(true)">
+          <i class="bi bi-pencil me-1"></i>Edit
+        </button>
+      </div>
       <div class="card-body">
-        {% if target.pixinsight_workflow %}
-          <pre class="mb-0" style="white-space: pre-wrap;">{{ target.pixinsight_workflow }}</pre>
-        {% else %}
-          <p class="text-muted mb-0">No workflow documented yet.</p>
-        {% endif %}
+        <div id="pixi-display">
+          {% if target.pixinsight_workflow %}
+            <pre class="mb-0" style="white-space: pre-wrap;">{{ target.pixinsight_workflow }}</pre>
+          {% else %}
+            <p class="text-muted mb-0">No workflow documented yet.</p>
+          {% endif %}
+        </div>
+        <div id="pixi-editor" style="display: none;">
+          <textarea class="form-control bg-dark text-light mb-2" id="pixi-textarea"
+                    rows="6" placeholder="Document your PixInsight workflow here...">{{ target.pixinsight_workflow or '' }}</textarea>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-primary" onclick="savePixiWorkflow()">
+              <i class="bi bi-floppy me-1"></i>Save
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="togglePixiEdit(false)">
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1118,6 +1158,7 @@ document.addEventListener("DOMContentLoaded", function () {
             display: true,
             position: 'top',
             labels: {
+              color: '#e0e0e0',
               boxWidth: 12,
               font: {
                 size: 11
@@ -1178,7 +1219,11 @@ document.addEventListener("DOMContentLoaded", function () {
           y: {
             title: {
               display: true,
-              text: "Altitude (°)"
+              text: "Altitude (°)",
+              color: '#e0e0e0'
+            },
+            ticks: {
+              color: '#c0c0c0'
             },
             suggestedMin: 0,
             suggestedMax: 90,
@@ -1187,23 +1232,27 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (context.tick.value === minAltitude) {
                   return 'rgba(244, 67, 54, 0.3)';
                 }
-                return 'rgba(0, 0, 0, 0.1)';
+                return 'rgba(255, 255, 255, 0.1)';
               }
             }
           },
           x: {
             title: {
               display: true,
-              text: "Local Time"
+              text: "Local Time",
+              color: '#e0e0e0'
+            },
+            ticks: {
+              color: '#c0c0c0'
             },
             grid: {
               color: function(context) {
                 const timeLabel = altitudeData[context.index]?.time_label;
                 if (timeLabel) {
                   const isWithinWindow = timeLabel >= startTime && timeLabel <= endTime;
-                  return isWithinWindow ? 'rgba(76, 175, 80, 0.2)' : 'rgba(158, 158, 158, 0.1)';
+                  return isWithinWindow ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 255, 255, 0.08)';
                 }
-                return 'rgba(0, 0, 0, 0.1)';
+                return 'rgba(255, 255, 255, 0.08)';
               }
             }
           }
@@ -2040,6 +2089,72 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
   });
+
+  // Inline notes editing
+  window.toggleNotesEdit = function(editing) {
+    document.getElementById('notes-display').style.display = editing ? 'none' : '';
+    document.getElementById('notes-editor').style.display = editing ? '' : 'none';
+    document.getElementById('notes-edit-btn').style.display = editing ? 'none' : '';
+    if (!editing) {
+      document.getElementById('notes-textarea').value = document.getElementById('notes-display').querySelector('pre')?.textContent || '';
+    }
+  };
+
+  window.saveNotes = function() {
+    const text = document.getElementById('notes-textarea').value;
+    fetch("{{ url_for('update_target_notes', target_id=target.id) }}", {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({notes: text})
+    })
+    .then(r => r.json())
+    .then(data => {
+      const display = document.getElementById('notes-display');
+      if (data.notes) {
+        display.innerHTML = '<pre class="mb-0" style="white-space: pre-wrap;">' + escapeHtml(data.notes) + '</pre>';
+      } else {
+        display.innerHTML = '<p class="text-muted mb-0">No notes yet.</p>';
+      }
+      toggleNotesEdit(false);
+    })
+    .catch(err => alert('Failed to save notes: ' + err));
+  };
+
+  // Inline PixInsight workflow editing
+  window.togglePixiEdit = function(editing) {
+    document.getElementById('pixi-display').style.display = editing ? 'none' : '';
+    document.getElementById('pixi-editor').style.display = editing ? '' : 'none';
+    document.getElementById('pixi-edit-btn').style.display = editing ? 'none' : '';
+    if (!editing) {
+      document.getElementById('pixi-textarea').value = document.getElementById('pixi-display').querySelector('pre')?.textContent || '';
+    }
+  };
+
+  window.savePixiWorkflow = function() {
+    const text = document.getElementById('pixi-textarea').value;
+    fetch("{{ url_for('update_target_pixinsight_workflow', target_id=target.id) }}", {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pixinsight_workflow: text})
+    })
+    .then(r => r.json())
+    .then(data => {
+      const display = document.getElementById('pixi-display');
+      if (data.pixinsight_workflow) {
+        display.innerHTML = '<pre class="mb-0" style="white-space: pre-wrap;">' + escapeHtml(data.pixinsight_workflow) + '</pre>';
+      } else {
+        display.innerHTML = '<p class="text-muted mb-0">No workflow documented yet.</p>';
+      }
+      togglePixiEdit(false);
+    })
+    .catch(err => alert('Failed to save workflow: ' + err));
+  };
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
 
   // Custom filter toggle functionality
   const customFilterToggleBtn = document.getElementById('customFilterToggleBtn');

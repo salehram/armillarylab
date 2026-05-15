@@ -1198,6 +1198,28 @@ def edit_target(target_id):
     return render_template("target_form.html", target=target, global_config=global_config, palettes=palettes)
 
 
+@app.route("/target/<int:target_id>/update-notes", methods=["POST"])
+def update_target_notes(target_id):
+    target = Target.query.get_or_404(target_id)
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    target.notes = data.get("notes", "")
+    db.session.commit()
+    return jsonify({"ok": True, "notes": target.notes})
+
+
+@app.route("/target/<int:target_id>/update-pixinsight-workflow", methods=["POST"])
+def update_target_pixinsight_workflow(target_id):
+    target = Target.query.get_or_404(target_id)
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    target.pixinsight_workflow = data.get("pixinsight_workflow", "")
+    db.session.commit()
+    return jsonify({"ok": True, "pixinsight_workflow": target.pixinsight_workflow})
+
+
 @app.route("/target/<int:target_id>/plan/new", methods=["POST"])
 def new_plan(target_id):
     target = Target.query.get_or_404(target_id)

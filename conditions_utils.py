@@ -191,12 +191,22 @@ def _pick_current_hour(hourly: dict, tz_name: str = "Asia/Riyadh") -> dict | Non
     if idx is None:
         idx = 0
 
+    w = hourly["wind_speed_10m"][idx]
+    g = hourly["wind_gusts_10m"][idx]
+    gust_factor = None
+    try:
+        if w is not None and g is not None and float(w) > 0.05:
+            gust_factor = round(float(g) / float(w), 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass
+
     return {
         "temperature_c": hourly["temperature_2m"][idx],
         "humidity_pct": hourly["relative_humidity_2m"][idx],
         "cloud_cover_pct": hourly["cloud_cover"][idx],
-        "wind_speed_kmh": hourly["wind_speed_10m"][idx],
-        "wind_gusts_kmh": hourly["wind_gusts_10m"][idx],
+        "wind_speed_kmh": w,
+        "wind_gusts_kmh": g,
+        "gust_factor": gust_factor,
     }
 
 
@@ -233,6 +243,26 @@ def _aggregate_window_hours(
         vals = [hourly[key][i] for i in indices if hourly[key][i] is not None]
         return round(min(vals), 1) if vals else 0
 
+    # Peak gust + when it happens (local hour labels from Open-Meteo)
+    peak_gust_val = 0.0
+    peak_gust_time = None
+    for i in indices:
+        g = hourly["wind_gusts_10m"][i]
+        if g is not None and float(g) > peak_gust_val:
+            peak_gust_val = float(g)
+            peak_gust_time = times[i] if i < len(times) else None
+
+    gusts_max = round(peak_gust_val, 1) if peak_gust_val else _max("wind_gusts_10m")
+    wind_max = _max("wind_speed_10m")
+    window_gust_factor = None
+    try:
+        if wind_max and wind_max > 0.05:
+            window_gust_factor = round(gusts_max / wind_max, 2)
+    except (TypeError, ZeroDivisionError):
+        pass
+
+    gust_hour_stats = _gust_hour_stats(hourly, indices)
+
     return {
         "temp_min_c": _min("temperature_2m"),
         "temp_max_c": _max("temperature_2m"),
@@ -240,9 +270,203 @@ def _aggregate_window_hours(
         "cloud_cover_avg_pct": _avg("cloud_cover"),
         "cloud_cover_max_pct": _max("cloud_cover"),
         "wind_avg_kmh": _avg("wind_speed_10m"),
-        "wind_max_kmh": _max("wind_speed_10m"),
-        "gusts_max_kmh": _max("wind_gusts_10m"),
+        "wind_max_kmh": wind_max,
+        "gusts_avg_kmh": _avg("wind_gusts_10m"),
+        "gusts_max_kmh": gusts_max,
+        "gust_factor": window_gust_factor,
+        "peak_gust_local": _format_hour_label(peak_gust_time),
         "hours": len(indices),
+        "gust_hour_stats": gust_hour_stats,
+    }
+
+
+def _gust_hour_stats(hourly: dict, indices: list[int]) -> dict | None:
+    """Count how many *forecast hours* in the imaging window exceed gust / spiky thresholds.
+
+    Open-Meteo supplies one wind + one gust value per hour — this is "how many hours look
+    rough," not individual gust events within an hour.
+    """
+    if not indices:
+        return None
+
+    winds = hourly.get("wind_speed_10m", [])
+    gusts = hourly.get("wind_gusts_10m", [])
+
+    n_ge_35 = 0
+    n_ge_45 = 0
+    n_spiky = 0
+    t = len(indices)
+
+    for i in indices:
+        if i >= len(gusts) or gusts[i] is None:
+            continue
+        try:
+            gv = float(gusts[i])
+        except (TypeError, ValueError):
+            continue
+        w = winds[i] if i < len(winds) else None
+        if gv >= 45:
+            n_ge_45 += 1
+        if gv >= 35:
+            n_ge_35 += 1
+        try:
+            if w is not None and float(w) > 0.05 and gv / float(w) >= 1.5:
+                n_spiky += 1
+        except (TypeError, ValueError, ZeroDivisionError):
+            pass
+
+    pct_rough = round(100.0 * n_ge_35 / t) if t else 0
+    if n_ge_35 == 0:
+        freq_hint = (
+            "Few — no window hours reach ≥35 km/h model gusts (per-hour peaks)."
+        )
+    elif pct_rough >= 60:
+        freq_hint = "Many — most window hours show ≥35 km/h gusts in the model."
+    elif pct_rough >= 30:
+        freq_hint = "Some — a mix of calmer and gustier hours (≥35 km/h)."
+    else:
+        freq_hint = "Occasional — only a minority of hours are ≥35 km/h gusts."
+
+    summary = (
+        f"{n_ge_35} of {t} window hour(s) have model gusts ≥35 km/h; "
+        f"{n_ge_45} hour(s) ≥45 km/h; "
+        f"{n_spiky} hour(s) with gust ≥1.5× that hour's wind (spiky vs sustained)."
+    )
+
+    return {
+        "window_hours": t,
+        "hours_gust_ge_35": n_ge_35,
+        "hours_gust_ge_45": n_ge_45,
+        "hours_spiky_ratio_ge_1_5": n_spiky,
+        "rough_hours_pct": int(pct_rough),
+        "frequency_hint": freq_hint,
+        "summary": summary,
+    }
+
+
+def _format_hour_label(iso_local: str | None) -> str | None:
+    """Short label for Open-Meteo local hour, e.g. '2026-05-16T02:00' -> 'Sat 02:00'."""
+    if not iso_local:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(iso_local.replace("Z", "+00:00"))
+        return dt.strftime("%a %H:%M")
+    except (ValueError, TypeError):
+        return iso_local[-5:] if len(iso_local) >= 5 else iso_local
+
+
+def _kmh_to_mph(kmh: float) -> int:
+    return int(round(kmh * 0.621371))
+
+
+def compute_wind_session_advice(
+    weather: dict | None,
+    window_weather: dict | None,
+) -> dict | None:
+    """Summarize wind/gusts for go / caution / marginal / skip decisions (Open-Meteo 10 m).
+
+    Thresholds are conservative defaults for long-exposure imaging; adjust later if needed.
+    Uses the higher of *now* gusts and *window* peak gust when both exist.
+    """
+    candidates: list[tuple[float, str]] = []
+    if weather:
+        g = weather.get("wind_gusts_kmh")
+        if g is not None:
+            try:
+                candidates.append((float(g), "now"))
+            except (TypeError, ValueError):
+                pass
+    peak_in_window = None
+    if window_weather:
+        gmax = window_weather.get("gusts_max_kmh")
+        if gmax is not None:
+            try:
+                peak_in_window = float(gmax)
+                candidates.append((peak_in_window, "window"))
+            except (TypeError, ValueError):
+                pass
+
+    if not candidates:
+        return None
+
+    worst_gust = max(c[0] for c in candidates)
+    worst_mph = _kmh_to_mph(worst_gust)
+
+    gf_window = window_weather.get("gust_factor") if window_weather else None
+    gf_now = weather.get("gust_factor") if weather else None
+    spike_note = None
+    try:
+        if gf_window is not None and float(gf_window) >= 1.85:
+            spike_note = (
+                f"Gusts run about {gf_window:.1f}× the strongest hourly wind in your window — "
+                "intermittent spikes may shake the mount even if averages look tame."
+            )
+        elif gf_now is not None and float(gf_now) >= 1.85 and not window_weather:
+            spike_note = (
+                f"Right now gusts are about {gf_now:.1f}× sustained wind — watch for sudden spikes."
+            )
+    except (TypeError, ValueError):
+        pass
+
+    # Bands (km/h, 10 m): tuning for typical portable equatorial mounts
+    if worst_gust < 25:
+        verdict = "go"
+        title = "Wind/gusts: favorable"
+        detail = (
+            f"Peak gusts around {worst_gust:.0f} km/h ({worst_mph} mph) — usually fine for most rigs. "
+            "Still secure cables and dew shields."
+        )
+    elif worst_gust < 35:
+        verdict = "caution"
+        title = "Wind/gusts: moderate"
+        detail = (
+            f"Peak gusts near {worst_gust:.0f} km/h ({worst_mph} mph). "
+            "Usable for many setups; avoid long subs if you see star drift or vibration."
+        )
+    elif worst_gust < 45:
+        verdict = "marginal"
+        title = "Wind/gusts: challenging"
+        detail = (
+            f"Peak gusts near {worst_gust:.0f} km/h ({worst_mph} mph). "
+            "High risk of blurred frames or guiding issues; consider shorter exposures or waiting for a calmer night."
+        )
+    else:
+        verdict = "skip"
+        title = "Wind/gusts: poor — consider skipping"
+        detail = (
+            f"Peak gusts reach ~{worst_gust:.0f} km/h ({worst_mph} mph). "
+            "Strong gusts often ruin subs and guiding; skipping is usually the safer call unless your site is very sheltered."
+        )
+
+    notes: list[str] = []
+    if spike_note:
+        notes.append(spike_note)
+    if window_weather:
+        pl = window_weather.get("peak_gust_local")
+        if pl:
+            notes.append(f"Strongest gust in your imaging window is modeled near {pl} (local).")
+
+    now_gust_val = None
+    if weather and weather.get("wind_gusts_kmh") is not None:
+        try:
+            now_gust_val = float(weather["wind_gusts_kmh"])
+        except (TypeError, ValueError):
+            pass
+    if peak_in_window is not None and (now_gust_val is None or peak_in_window >= now_gust_val):
+        worst_gust_source = "window"
+    else:
+        worst_gust_source = "now"
+
+    return {
+        "verdict": verdict,
+        "title": title,
+        "detail": detail,
+        "worst_gust_kmh": round(worst_gust, 1),
+        "worst_gust_mph": worst_mph,
+        "worst_gust_source": worst_gust_source,
+        "gust_factor_window": gf_window,
+        "gust_factor_now": gf_now,
+        "notes": notes or None,
     }
 
 
@@ -538,6 +762,7 @@ def get_tonight_conditions(
 
     moon_illum = moon["illumination_pct"] if moon else 50.0
     suggestion = suggest_tonight_channel(plan_data, moon_illum, progress_by_channel)
+    wind_session = compute_wind_session_advice(weather, window_weather)
 
     message = None
     if status == "offline":
@@ -555,6 +780,7 @@ def get_tonight_conditions(
         "astro": astro,
         "window_weather": window_weather,
         "window_astro": window_astro,
+        "wind_session": wind_session,
         "suggestion": suggestion,
         "message": message,
     }

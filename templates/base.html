@@ -117,6 +117,35 @@
       font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
       color: #8888aa; margin-bottom: 6px; font-weight: 600;
     }
+    .conditions-popup .cp-nav-tabs {
+      border-bottom: 1px solid rgba(255,255,255,.12);
+      margin: 0 0 8px 0;
+    }
+    .conditions-popup .cp-nav-tabs .nav-item { margin-bottom: -1px; }
+    .conditions-popup .cp-nav-tabs .nav-link {
+      color: #9e9eb8;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: .35rem .65rem;
+      font-size: .78rem;
+      background: transparent;
+    }
+    .conditions-popup .cp-nav-tabs .nav-link:hover {
+      color: #e0e0e0;
+      border-color: transparent;
+    }
+    .conditions-popup .cp-nav-tabs .nav-link.active {
+      color: #fff;
+      background: transparent;
+      border-bottom-color: #0d6efd;
+    }
+    .cp-tab-content { min-height: 120px; }
+    /* Readable secondary text on dark popup (Bootstrap .text-muted is too dim here) */
+    .conditions-popup .cp-readable-note {
+      font-size: .72rem;
+      line-height: 1.4;
+      color: #c8d4e8;
+    }
     @media (max-width: 640px) {
       .conditions-popup.cp-wide { width: 340px; }
       .cp-columns { flex-direction: column; gap: 8px; }
@@ -241,38 +270,51 @@
     return '<span class="cp-badge '+(m[s]||'cp-badge-offline')+'">'+(label[s]||s)+'</span>';
   }
 
-  function render(d){
-    status.innerHTML = badge(d.status);
-    let h = '';
+  function windSessionBox(ws){
+    if (!ws) return '';
+    var vc = {go:'success', caution:'warning', marginal:'info', skip:'danger'};
+    var bc = vc[ws.verdict] || 'secondary';
+    var notes = '';
+    if (ws.notes && ws.notes.length){
+      notes = '<ul style="margin:6px 0 0 1rem;padding:0;font-size:.72rem;color:#a8b4c8;">';
+      for (var i = 0; i < ws.notes.length; i++) notes += '<li style="margin-bottom:4px;">'+ws.notes[i]+'</li>';
+      notes += '</ul>';
+    }
+    return '<div class="cp-section cp-wind-session border-start border-4 border-'+bc+' ps-2 ms-1" style="background:rgba(255,255,255,.03);border-radius:4px;padding:8px 8px 8px 10px;">'
+      + '<div class="cp-label"><i class="bi bi-wind me-1"></i>Go / skip (wind &amp; gusts)</div>'
+      + '<div style="font-size:.82rem;font-weight:600;margin-bottom:4px;">'+ws.title+'</div>'
+      + '<div style="font-size:.75rem;color:#c8d0e0;line-height:1.35;">'+ws.detail+'</div>'
+      + '<div style="font-size:.72rem;color:#8a96ae;margin-top:6px;">Peak gust ~'+ws.worst_gust_kmh+' km/h ('+ws.worst_gust_mph+' mph)'
+      + (ws.worst_gust_source === 'window' ? ' — driven by your imaging window forecast' : ' — from current hour')
+      + '</div>' + notes + '</div>';
+  }
 
+  function buildOverviewTab(d){
+    var h = '';
     if (d.location) {
       h += '<div style="padding:0 0 6px;font-size:.75rem;color:#7a7a9e;"><i class="bi bi-geo-alt me-1"></i>Observer: '+d.location.lat+'&deg;, '+d.location.lon+'&deg;</div>';
     }
-
     if (d.moon) {
       h += '<div class="cp-section"><div class="cp-label"><i class="bi bi-moon me-1"></i>Moon</div>';
       h += '<div style="padding:2px 0;">'+d.moon.emoji+' '+d.moon.phase_name+' <span style="color:#9e9eb8;margin-left:6px;">'+d.moon.illumination_pct+'% lit</span></div>';
       h += '<div style="padding:2px 0;">Next full moon <span style="color:#9e9eb8;margin-left:6px;">'+d.moon.next_full_moon+' ('+d.moon.days_to_full+'d)</span></div>';
       h += '</div>';
     }
-
     var hasWindow = d.window_weather || d.window_astro;
-
-    popup.classList.toggle('cp-wide', hasWindow);
-
     if (hasWindow) {
       h += '<div class="cp-columns">';
       h += '<div class="cp-col">';
       h += '<div class="cp-col-title"><i class="bi bi-clock me-1"></i>Right Now</div>';
     }
-
     if (d.weather) {
       h += '<div class="cp-section"><div class="cp-label"><i class="bi bi-cloud-sun me-1"></i>Weather</div>';
       h += '<div class="cp-row"><span>Temp</span><span>'+d.weather.temperature_c+'&deg;C</span></div>';
       h += '<div class="cp-row"><span>Humidity</span><span>'+d.weather.humidity_pct+'%</span></div>';
       h += '<div class="cp-row"><span>Clouds</span><span>'+d.weather.cloud_cover_pct+'%</span></div>';
       h += '<div class="cp-row"><span>Wind</span><span>'+d.weather.wind_speed_kmh+' km/h</span></div>';
-      if (d.weather.wind_gusts_kmh) h += '<div class="cp-row"><span>Gusts</span><span>'+d.weather.wind_gusts_kmh+' km/h</span></div>';
+      if (d.weather.wind_gusts_kmh != null && d.weather.wind_gusts_kmh !== '') {
+        h += '<div class="cp-row"><span>Gusts</span><span>'+d.weather.wind_gusts_kmh+' km/h</span></div>';
+      }
       h += '</div>';
     }
     if (d.astro) {
@@ -282,9 +324,8 @@
       h += '<div class="cp-row"><span>Transparency</span><span>'+d.astro.transparency_label+'</span></div>';
       h += '</div>';
     }
-
     if (hasWindow) {
-      h += '</div>'; // close left cp-col
+      h += '</div>';
       h += '<div class="cp-col-divider"></div>';
       h += '<div class="cp-col">';
       h += '<div class="cp-col-title"><i class="bi bi-stars me-1"></i>Imaging Window</div>';
@@ -295,8 +336,8 @@
         h += '<div class="cp-row"><span>Humidity</span><span>avg '+ww.humidity_avg_pct+'%</span></div>';
         h += '<div class="cp-row"><span>Clouds</span><span>avg '+ww.cloud_cover_avg_pct+'%</span></div>';
         if (ww.cloud_cover_max_pct > ww.cloud_cover_avg_pct) h += '<div class="cp-row"><span></span><span>max '+ww.cloud_cover_max_pct+'%</span></div>';
-        h += '<div class="cp-row"><span>Wind</span><span>avg '+ww.wind_avg_kmh+' km/h</span></div>';
-        h += '<div class="cp-row"><span>Gusts</span><span>max '+ww.gusts_max_kmh+' km/h</span></div>';
+        h += '<div class="cp-row"><span>Wind</span><span>avg '+ww.wind_avg_kmh+' · max '+ww.wind_max_kmh+' km/h</span></div>';
+        h += '<div class="cp-row"><span>Gusts (max)</span><span>'+ww.gusts_max_kmh+' km/h</span></div>';
         h += '</div>';
       }
       if (d.window_astro) {
@@ -307,22 +348,114 @@
         h += '<div class="cp-row"><span>Transparency</span><span>'+wa.transparency_avg_label+'</span></div>';
         h += '</div>';
       }
-      h += '</div>'; // close right cp-col
-      h += '</div>'; // close cp-columns
+      h += '</div>';
+      h += '</div>';
     }
-
     if (d.suggestion) {
       h += '<div class="cp-section" style="margin-top:8px;"><div class="cp-label"><i class="bi bi-lightbulb me-1"></i>Suggested Channel</div>';
       h += '<div class="cp-suggestion"><strong>'+d.suggestion.channel_label+'</strong> ('+d.suggestion.channel+')<br><small style="color:#a8b4c8;">'+d.suggestion.reason+'</small></div>';
       h += '</div>';
     }
-
+    if (d.wind_session) {
+      h += '<div style="margin-top:10px;">' + windSessionBox(d.wind_session) + '</div>';
+    }
     if (d.message) {
       h += '<div class="cp-section"><small class="text-muted"><i class="bi bi-info-circle me-1"></i>'+d.message+'</small></div>';
     }
-
     if (!h) h = '<div class="text-muted text-center py-3">No data available</div>';
-    body.innerHTML = h;
+    return h;
+  }
+
+  function buildWindTab(d){
+    var h = '';
+    if (!d.wind_session && (d.weather || d.window_weather)) {
+      h += '<div class="small mb-3 cp-readable-note"><i class="bi bi-info-circle me-1"></i>No summary verdict — gust data incomplete.</div>';
+    }
+
+    function windCurrentHourHtml(w){
+      var s = '';
+      s += '<div class="cp-section"><div class="cp-label"><i class="bi bi-clock me-1"></i>Current hour (model)</div>';
+      s += '<div class="cp-row"><span>Wind</span><span>'+w.wind_speed_kmh+' km/h</span></div>';
+      if (w.wind_gusts_kmh != null && w.wind_gusts_kmh !== '') {
+        s += '<div class="cp-row"><span>Gusts</span><span>'+w.wind_gusts_kmh+' km/h</span></div>';
+      }
+      if (w.gust_factor) {
+        s += '<div class="cp-row"><span>Gust ÷ wind</span><span>'+w.gust_factor+'×</span></div>';
+      }
+      s += '<p class="small mt-2 mb-0 cp-readable-note">Open-Meteo reports one wind and one max-gust value per hour — not clock times of gusts inside the hour.</p>';
+      s += '</div>';
+      return s;
+    }
+
+    function windImagingMetricsHtml(ww){
+      var s = '';
+      s += '<div class="cp-section"><div class="cp-label"><i class="bi bi-stars me-1"></i>Imaging window</div>';
+      s += '<div class="cp-row"><span>Wind</span><span>avg '+ww.wind_avg_kmh+' · max '+ww.wind_max_kmh+' km/h</span></div>';
+      s += '<div class="cp-row"><span>Gusts</span><span>avg '+ww.gusts_avg_kmh+' · max '+ww.gusts_max_kmh+' km/h</span></div>';
+      if (ww.gust_factor) {
+        s += '<div class="cp-row"><span>Max gust ÷ max wind</span><span>'+ww.gust_factor+'×</span></div>';
+      }
+      if (ww.peak_gust_local) {
+        s += '<div class="cp-row"><span>Strongest gust hour</span><span>'+ww.peak_gust_local+' local</span></div>';
+      }
+      s += '</div>';
+      return s;
+    }
+
+    var hasBothWindCols = d.weather && d.window_weather;
+    if (hasBothWindCols) {
+      h += '<div class="cp-columns">';
+      h += '<div class="cp-col">' + windCurrentHourHtml(d.weather) + '</div>';
+      h += '<div class="cp-col-divider"></div>';
+      h += '<div class="cp-col">' + windImagingMetricsHtml(d.window_weather) + '</div>';
+      h += '</div>';
+    } else {
+      if (d.weather) h += windCurrentHourHtml(d.weather);
+      if (d.window_weather) h += windImagingMetricsHtml(d.window_weather);
+    }
+
+    if (d.window_weather && d.window_weather.gust_hour_stats) {
+      var ww = d.window_weather;
+      var gh = ww.gust_hour_stats;
+      h += '<div class="cp-section cp-wind-gust-full" style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.1);">';
+      h += '<div class="cp-label"><i class="bi bi-bar-chart me-1"></i>Gusty hours (forecast)</div>';
+      h += '<p class="small mb-2" style="color:#d2dae8;font-size:.78rem;line-height:1.35;">'+gh.frequency_hint+'</p>';
+      h += '<p class="small mb-2 cp-readable-note">'+gh.summary+'</p>';
+      h += '<div class="cp-row"><span>Hours gust ≥35 km/h</span><span>'+gh.hours_gust_ge_35+' / '+gh.window_hours+'</span></div>';
+      h += '<div class="cp-row"><span>Hours gust ≥45 km/h</span><span>'+gh.hours_gust_ge_45+' / '+gh.window_hours+'</span></div>';
+      h += '<div class="cp-row"><span>Spiky hours (gust ≥1.5× wind)</span><span>'+gh.hours_spiky_ratio_ge_1_5+' / '+gh.window_hours+'</span></div>';
+      h += '</div>';
+    }
+
+    if (!h) {
+      h = '<div class="text-muted text-center py-3">No wind or gust forecast. Open the Overview tab or check your connection.</div>';
+    }
+    return h;
+  }
+
+  function render(d){
+    status.innerHTML = badge(d.status);
+    var hasWindow = d.window_weather || d.window_astro;
+    popup.classList.toggle('cp-wide', hasWindow);
+
+    var overviewHtml = buildOverviewTab(d);
+    var windHtml = buildWindTab(d);
+
+    var tabsHtml = ''
+      + '<ul class="nav nav-tabs cp-nav-tabs" role="tablist">'
+      + '<li class="nav-item" role="presentation">'
+      + '<button class="nav-link active" id="cp-tab-overview" data-bs-toggle="tab" data-bs-target="#cp-pane-overview" type="button" role="tab" aria-selected="true">Overview</button>'
+      + '</li>'
+      + '<li class="nav-item" role="presentation">'
+      + '<button class="nav-link" id="cp-tab-wind" data-bs-toggle="tab" data-bs-target="#cp-pane-wind" type="button" role="tab" aria-selected="false"><i class="bi bi-wind me-1"></i>Wind</button>'
+      + '</li>'
+      + '</ul>'
+      + '<div class="tab-content cp-tab-content" id="cpTabPanes">'
+      + '<div class="tab-pane fade show active" id="cp-pane-overview" role="tabpanel">' + overviewHtml + '</div>'
+      + '<div class="tab-pane fade" id="cp-pane-wind" role="tabpanel">' + windHtml + '</div>'
+      + '</div>';
+
+    body.innerHTML = tabsHtml;
   }
 })();
 </script>

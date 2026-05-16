@@ -117,10 +117,24 @@ def compute_target_window(
         return dt.strftime("%H:%M")
 
     def tp(t_astropy: Time | None):
+        """Convert astroplan/astropy Time to (utc, local) datetimes, or (None, None) if invalid.
+
+        Moon rise/set, meridian, etc. can be *masked* when the event does not occur in range
+        (e.g. moon circumpolar, target never up). ``to_datetime()`` may then yield a numpy
+        masked value that is not a ``datetime`` — treat as missing.
+        """
         if t_astropy is None:
             return None, None
-        dt_utc = t_astropy.to_datetime(timezone=datetime.timezone.utc)
-        dt_local = dt_utc.astimezone(local_tz)
+        try:
+            dt_utc = t_astropy.to_datetime(timezone=datetime.timezone.utc)
+        except (ValueError, TypeError, AttributeError):
+            return None, None
+        if not hasattr(dt_utc, "astimezone"):
+            return None, None
+        try:
+            dt_local = dt_utc.astimezone(local_tz)
+        except (ValueError, TypeError, OSError, OverflowError):
+            return None, None
         return dt_utc, dt_local
 
     # Twilight and sunset
@@ -153,9 +167,10 @@ def compute_target_window(
     sunset_utc, sunset_local = tp(sunset)
     dark_start_utc, dark_start_local = tp(dark_start)
     dark_end_utc, dark_end_local = tp(dark_end)
-    meridian_utc, meridian_local = tp(meridian) if meridian else (None, None)
-    moon_rise_utc, moon_rise_local = tp(moon_rise) if moon_rise else (None, None)
-    moon_set_utc, moon_set_local = tp(moon_set) if moon_set else (None, None)
+    # Do not gate on ``if meridian`` — masked Time can be truthy yet not convert to datetime.
+    meridian_utc, meridian_local = tp(meridian)
+    moon_rise_utc, moon_rise_local = tp(moon_rise)
+    moon_set_utc, moon_set_local = tp(moon_set)
 
     # Pack-up time (local)
     if packup_time_local:

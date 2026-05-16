@@ -9,7 +9,7 @@ alwaysApply: true
 
 # ArmillaryLab — Project Reference Cache
 
-> **Last updated:** 2026-05-15
+> **Last updated:** 2026-05-16
 > **Purpose:** Save agent discovery time and token cost. Read this FIRST, explore SECOND.
 > **Maintenance:** MANDATORY — before committing, if you modified app.py (models/routes/helpers/database schema), any template, astro_utils.py, time_utils.py, nina_integration.py, config/*.py, requirements.txt, or .env.example in a way that changes the project's structure or API surface (new/removed/renamed models, columns, routes, templates, env vars, dependencies), you MUST update the relevant section(s) below and bump the "Last updated" date. A stop-hook also enforces this as a safety net.
 
@@ -38,6 +38,7 @@ alwaysApply: true
 astroplanner/
 ├── app.py                    # Flask app: ALL models + ALL routes + helpers
 ├── astro_utils.py            # compute_target_window() — core astronomy
+├── conditions_utils.py       # Night conditions: moon phase, weather, seeing, channel suggestion
 ├── time_utils.py             # utc_to_local() + template filter registration
 ├── nina_integration.py       # NINA XML sequence + filter profile parsing
 ├── cli.py                    # Dev server entry: python cli.py
@@ -54,6 +55,8 @@ astroplanner/
 │   ├── __init__.py
 │   └── test_app.py           # pytest suite (~15 tests)
 ├── uploads/                  # User-uploaded final images (gitignored)
+├── cache/                    # Weather/seeing forecast cache (gitignored)
+│   └── conditions/           # JSON cache files keyed by lat/lon
 ├── requirements.txt          # 11 dependencies
 ├── .env / .env.example       # Observer config, DB URL, secrets
 ├── Dockerfile                # python:3.12-slim, gunicorn
@@ -290,6 +293,7 @@ Relationships: `plans` → TargetPlan (cascade all, delete-orphan), `sessions` �
 | `/api/resolve` | GET | `api_resolve()` | Resolve catalog name → RA/Dec + target type |
 | `/api/palette-recommendation` | GET | `api_palette_recommendation()` | Recommend palette for a target type |
 | `/api/target/<id>/window` | GET | `api_target_window(id)` | JSON window info for target |
+| `/api/conditions/<id>` | GET | `api_conditions(id)` | Moon phase, weather, seeing, channel suggestion (3-tier fallback) |
 | `/api/active-wheel` | GET | `api_active_wheel()` | JSON active filter wheel + slots |
 | `/health` | GET | `health_check()` | Returns `{"status": "healthy"}` |
 
@@ -314,6 +318,15 @@ Core function. Takes RA/Dec + observer params, returns dict with:
 ### `time_utils.py`
 - `utc_to_local(utc_dt, tz_name)` — converts UTC datetime to local timezone
 - `register_time_filters(app)` — registers Jinja2 template filters including `format_hms_from_minutes`
+
+### `conditions_utils.py` — Night Conditions
+Moon phase, weather, seeing, and channel suggestion with caching + offline fallback:
+- `compute_moon_info(tz_name)` → dict with phase_name, illumination_pct, emoji, next_full_moon, days_to_full (fully offline via astroplan)
+- `fetch_openmeteo(lat, lon)` → 5-day hourly forecast from Open-Meteo (temp, humidity, clouds, wind)
+- `fetch_7timer(lat, lon)` → 72h astronomical forecast from 7Timer (seeing, transparency)
+- `suggest_tonight_channel(plan_data, moon_illum_pct, progress_by_channel)` → weighted scoring: `score = moon_weight * remaining_ratio`; Ha=1.0 (strongest NB), SII=0.7, OIII=0.3 (weakest NB), broadband=0.2 at full moon; all 1.0 at new moon
+- `get_tonight_conditions(lat, lon, elev, tz_name, plan_data, progress_by_channel)` → orchestrator with 3-tier fallback (online → cache → offline moon → error)
+- Cache: JSON files in `cache/conditions/`, keyed by lat/lon, max age 6h for weather
 
 ### `nina_integration.py`
 - `generate_nina_sequence(target, plan_data, remaining_by_channel)` → NINA XML string

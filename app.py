@@ -1636,6 +1636,67 @@ def api_target_window(target_id):
     return jsonify(window_info)
 
 
+@app.route("/api/conditions/<int:target_id>")
+def api_conditions(target_id):
+    """Night conditions: moon phase, weather, seeing, channel suggestion."""
+    from conditions_utils import get_tonight_conditions
+    from collections import defaultdict
+
+    lat, lon, elev = get_observer_location()
+    config = get_global_config()
+    tz_name = config.timezone_name or os.environ.get("OBSERVER_TZ", "Asia/Riyadh")
+
+    plan_data = None
+    progress_by_channel = None
+    window_start_local = None
+    window_end_local = None
+    window_start_utc = None
+    window_end_utc = None
+
+    if target_id > 0:
+        target = Target.query.get(target_id)
+        if target:
+            plan = (
+                TargetPlan.query
+                .filter_by(target_id=target.id, palette_name=target.preferred_palette)
+                .order_by(TargetPlan.created_at.desc())
+                .first()
+            )
+            plan_data = json.loads(plan.plan_json) if plan else None
+
+            progress_by_channel = defaultdict(float)
+            for s in target.sessions:
+                progress_by_channel[s.channel] += (s.sub_exposure_seconds * s.sub_count) / 60.0
+            progress_by_channel = dict(progress_by_channel)
+
+            packup_time = parse_time_str(get_effective_packup_time(target))
+            window_info = compute_target_window(
+                ra_hours=target.ra_hours,
+                dec_deg=target.dec_deg,
+                latitude_deg=lat,
+                longitude_deg=lon,
+                elevation_m=elev,
+                packup_time_local=packup_time,
+                min_altitude_deg=get_effective_min_altitude(target),
+            )
+            if window_info.get("deps_available"):
+                window_start_local = window_info.get("start_time_local")
+                window_end_local = window_info.get("end_time_local")
+                window_start_utc = window_info.get("start_time_utc")
+                window_end_utc = window_info.get("end_time_utc")
+
+    result = get_tonight_conditions(
+        lat, lon, elev, tz_name,
+        plan_data=plan_data,
+        progress_by_channel=progress_by_channel,
+        window_start_local=window_start_local,
+        window_end_local=window_end_local,
+        window_start_utc=window_start_utc,
+        window_end_utc=window_end_utc,
+    )
+    return jsonify(result)
+
+
 @app.route("/settings", methods=["GET", "POST"])
 def global_settings():
     """Manage global configuration settings."""

@@ -62,6 +62,66 @@
       background-color: rgba(255, 255, 255, 0.1);
       border-radius: 4px;
     }
+
+    /* Night-conditions popup */
+    .conditions-wrapper { position: relative; }
+    .conditions-popup {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      width: 340px;
+      margin-top: 6px;
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 10px;
+      background: #1e1e2e;
+      box-shadow: 0 8px 32px rgba(0,0,0,.55);
+      z-index: 9999;
+      color: #e0e0e0;
+      font-size: .875rem;
+    }
+    .conditions-popup.show { display: block; }
+    .conditions-popup .cp-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px 8px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .conditions-popup .cp-header h6 { margin: 0; font-size: .9rem; }
+    .conditions-popup .cp-body { padding: 10px 16px 14px; }
+    .conditions-popup .cp-section { margin-bottom: 10px; }
+    .conditions-popup .cp-section:last-child { margin-bottom: 0; }
+    .conditions-popup .cp-label {
+      font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
+      color: #9e9eb8; margin-bottom: 2px;
+    }
+    .conditions-popup .cp-row {
+      display: flex; justify-content: space-between; padding: 2px 0;
+    }
+    .cp-badge {
+      display: inline-block; font-size: .7rem; padding: 1px 7px;
+      border-radius: 8px; font-weight: 600;
+    }
+    .cp-badge-online  { background: #198754; color: #fff; }
+    .cp-badge-cached  { background: #ffc107; color: #000; }
+    .cp-badge-offline { background: #6c757d; color: #fff; }
+    .cp-suggestion {
+      background: rgba(13,110,253,.12); border: 1px solid rgba(13,110,253,.25);
+      border-radius: 6px; padding: 8px 10px; margin-top: 4px;
+    }
+    .cp-spinner { text-align: center; padding: 30px 0; }
+    .conditions-popup.cp-wide { width: 580px; }
+    .cp-columns { display: flex; gap: 16px; }
+    .cp-col { flex: 1; min-width: 0; }
+    .cp-col-divider { width: 1px; background: rgba(255,255,255,.08); flex-shrink: 0; }
+    .cp-col-title {
+      font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
+      color: #8888aa; margin-bottom: 6px; font-weight: 600;
+    }
+    @media (max-width: 640px) {
+      .conditions-popup.cp-wide { width: 340px; }
+      .cp-columns { flex-direction: column; gap: 8px; }
+      .cp-col-divider { width: auto; height: 1px; }
+    }
   </style>
 </head>
 <body class="bg-dark text-light">
@@ -86,6 +146,20 @@
       <a class="nav-link" href="{{ url_for('global_settings') }}">
         <i class="bi bi-gear me-1"></i>Settings
       </a>
+      <div class="conditions-wrapper d-inline-block">
+        <a class="nav-link" href="#" id="conditionsToggle" title="Night Conditions">
+          <i class="bi bi-moon-stars"></i>
+        </a>
+        <div class="conditions-popup" id="conditionsPopup">
+          <div class="cp-header">
+            <h6><i class="bi bi-moon-stars me-1"></i>Night Conditions</h6>
+            <span id="cpStatus"></span>
+          </div>
+          <div class="cp-body" id="cpBody">
+            <div class="cp-spinner"><div class="spinner-border spinner-border-sm text-light" role="status"></div> Loading&hellip;</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </nav>
@@ -120,5 +194,137 @@
 </footer>
 
 <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+<script>
+(function(){
+  const toggle = document.getElementById('conditionsToggle');
+  const popup  = document.getElementById('conditionsPopup');
+  const body   = document.getElementById('cpBody');
+  const status = document.getElementById('cpStatus');
+  if (!toggle) return;
+
+  let loaded = false;
+
+  toggle.addEventListener('click', function(e){
+    e.preventDefault();
+    const isOpen = popup.classList.contains('show');
+    popup.classList.toggle('show');
+    if (!isOpen && !loaded) fetchConditions();
+  });
+
+  document.addEventListener('click', function(e){
+    if (!popup.contains(e.target) && e.target !== toggle && !toggle.contains(e.target))
+      popup.classList.remove('show');
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') popup.classList.remove('show');
+  });
+
+  function fetchConditions(){
+    const el = document.getElementById('currentTargetId');
+    const tid = el ? el.dataset.targetId : '0';
+    const cacheKey = 'cp_' + tid;
+    const cached = sessionStorage.getItem(cacheKey);
+    const cacheAge = sessionStorage.getItem(cacheKey + '_ts');
+    if (cached && cacheAge && (Date.now() - parseInt(cacheAge)) < 600000) {
+      render(JSON.parse(cached)); loaded = true; return;
+    }
+
+    fetch('/api/conditions/' + tid)
+      .then(r => r.json())
+      .then(d => { sessionStorage.setItem(cacheKey, JSON.stringify(d)); sessionStorage.setItem(cacheKey + '_ts', Date.now().toString()); render(d); loaded = true; })
+      .catch(() => render({status:'offline', message:'Could not reach the server. Check your connection.'}));
+  }
+
+  function badge(s){
+    const m = {online:'cp-badge-online', cached:'cp-badge-cached'};
+    const label = {online:'Live', cached:'Cached', offline_moon:'Offline', offline:'Offline'};
+    return '<span class="cp-badge '+(m[s]||'cp-badge-offline')+'">'+(label[s]||s)+'</span>';
+  }
+
+  function render(d){
+    status.innerHTML = badge(d.status);
+    let h = '';
+
+    if (d.location) {
+      h += '<div style="padding:0 0 6px;font-size:.75rem;color:#7a7a9e;"><i class="bi bi-geo-alt me-1"></i>Observer: '+d.location.lat+'&deg;, '+d.location.lon+'&deg;</div>';
+    }
+
+    if (d.moon) {
+      h += '<div class="cp-section"><div class="cp-label"><i class="bi bi-moon me-1"></i>Moon</div>';
+      h += '<div class="cp-row"><span>'+d.moon.emoji+' '+d.moon.phase_name+'</span><span>'+d.moon.illumination_pct+'% lit</span></div>';
+      h += '<div class="cp-row"><span>Next full moon</span><span>'+d.moon.next_full_moon+' ('+d.moon.days_to_full+'d)</span></div>';
+      h += '</div>';
+    }
+
+    var hasWindow = d.window_weather || d.window_astro;
+
+    popup.classList.toggle('cp-wide', hasWindow);
+
+    if (hasWindow) {
+      h += '<div class="cp-columns">';
+      h += '<div class="cp-col">';
+      h += '<div class="cp-col-title"><i class="bi bi-clock me-1"></i>Right Now</div>';
+    }
+
+    if (d.weather) {
+      h += '<div class="cp-section"><div class="cp-label"><i class="bi bi-cloud-sun me-1"></i>Weather</div>';
+      h += '<div class="cp-row"><span>Temp</span><span>'+d.weather.temperature_c+'&deg;C</span></div>';
+      h += '<div class="cp-row"><span>Humidity</span><span>'+d.weather.humidity_pct+'%</span></div>';
+      h += '<div class="cp-row"><span>Clouds</span><span>'+d.weather.cloud_cover_pct+'%</span></div>';
+      h += '<div class="cp-row"><span>Wind</span><span>'+d.weather.wind_speed_kmh+' km/h</span></div>';
+      if (d.weather.wind_gusts_kmh) h += '<div class="cp-row"><span>Gusts</span><span>'+d.weather.wind_gusts_kmh+' km/h</span></div>';
+      h += '</div>';
+    }
+    if (d.astro) {
+      h += '<div class="cp-section"><div class="cp-label"><i class="bi bi-eye me-1"></i>Seeing</div>';
+      h += '<div class="cp-row"><span>Seeing</span><span>'+d.astro.seeing_arcsec+'</span></div>';
+      h += '<div class="cp-row"><span>Quality</span><span>'+d.astro.seeing_label+'</span></div>';
+      h += '<div class="cp-row"><span>Transp.</span><span>'+d.astro.transparency_label+'</span></div>';
+      h += '</div>';
+    }
+
+    if (hasWindow) {
+      h += '</div>'; // close left cp-col
+      h += '<div class="cp-col-divider"></div>';
+      h += '<div class="cp-col">';
+      h += '<div class="cp-col-title"><i class="bi bi-stars me-1"></i>Imaging Window</div>';
+      if (d.window_weather) {
+        var ww = d.window_weather;
+        h += '<div class="cp-section"><div class="cp-label">Weather ('+ww.hours+'h)</div>';
+        h += '<div class="cp-row"><span>Temp</span><span>'+ww.temp_min_c+'–'+ww.temp_max_c+'&deg;C</span></div>';
+        h += '<div class="cp-row"><span>Humidity</span><span>avg '+ww.humidity_avg_pct+'%</span></div>';
+        h += '<div class="cp-row"><span>Clouds</span><span>avg '+ww.cloud_cover_avg_pct+'%</span></div>';
+        if (ww.cloud_cover_max_pct > ww.cloud_cover_avg_pct) h += '<div class="cp-row"><span></span><span>max '+ww.cloud_cover_max_pct+'%</span></div>';
+        h += '<div class="cp-row"><span>Wind</span><span>avg '+ww.wind_avg_kmh+' km/h</span></div>';
+        h += '<div class="cp-row"><span>Gusts</span><span>max '+ww.gusts_max_kmh+' km/h</span></div>';
+        h += '</div>';
+      }
+      if (d.window_astro) {
+        var wa = d.window_astro;
+        h += '<div class="cp-section"><div class="cp-label">Seeing ('+wa.points+' pts)</div>';
+        h += '<div class="cp-row"><span>Avg</span><span>'+wa.seeing_avg+' ('+wa.seeing_avg_label+')</span></div>';
+        h += '<div class="cp-row"><span>Worst</span><span>'+wa.seeing_worst+' ('+wa.seeing_worst_label+')</span></div>';
+        h += '<div class="cp-row"><span>Transp.</span><span>'+wa.transparency_avg_label+'</span></div>';
+        h += '</div>';
+      }
+      h += '</div>'; // close right cp-col
+      h += '</div>'; // close cp-columns
+    }
+
+    if (d.suggestion) {
+      h += '<div class="cp-section" style="margin-top:8px;"><div class="cp-label"><i class="bi bi-lightbulb me-1"></i>Suggested Channel</div>';
+      h += '<div class="cp-suggestion"><strong>'+d.suggestion.channel_label+'</strong> ('+d.suggestion.channel+')<br><small style="color:#a8b4c8;">'+d.suggestion.reason+'</small></div>';
+      h += '</div>';
+    }
+
+    if (d.message) {
+      h += '<div class="cp-section"><small class="text-muted"><i class="bi bi-info-circle me-1"></i>'+d.message+'</small></div>';
+    }
+
+    if (!h) h = '<div class="text-muted text-center py-3">No data available</div>';
+    body.innerHTML = h;
+  }
+})();
+</script>
 </body>
 </html>

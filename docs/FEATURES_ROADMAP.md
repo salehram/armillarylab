@@ -583,6 +583,7 @@ Create comprehensive documentation and user guide to help new users get started 
 | Automatic recomputation | 🟡 Pending | After changes to settings |
 | Comprehensive user guide & documentation | 🟡 Pending | Getting started guides, tutorials, and feature documentation |
 | Filter & channel management | 🟡 In Progress | Multi-wheel support, NINA integration |
+| Night conditions popup | ✅ Done | Moon phase, weather, seeing, channel suggestion with offline fallback |
 
 ---
 
@@ -768,10 +769,86 @@ flask import-preset new_setup.json --include-wheels
 
 ---
 
+## ✅ 16. Night Conditions Popup with Weather & Seeing Integration (Completed)
+### Summary
+Real-time night conditions overlay accessible from the navbar, showing moon phase, weather conditions, astronomical seeing, and intelligent channel suggestions for the current target. Features a 3-tier online/cache/offline fallback strategy.
+
+### Data Sources
+- **Open-Meteo API** (free, no key): Temperature, humidity, cloud cover, wind speed/gusts — 5-day hourly forecast
+- **7Timer API** (free, no key): Astronomical seeing (arcsec), transparency — 72-hour forecast at 3-hour intervals
+- **astroplan** (offline, local): Moon phase, illumination percentage, next full moon date — fully offline computation using existing project dependency
+
+### Completed Features
+
+#### 16.1 Moon Phase Information
+- Current moon phase name (New Moon, Waxing Crescent, First Quarter, etc.) with emoji
+- Moon illumination percentage
+- Next full moon date with days-to-full countdown
+- Fully offline via astroplan — no internet required
+
+#### 16.2 Weather Conditions
+- Temperature (°C) from Open-Meteo
+- Relative humidity percentage
+- Cloud cover percentage
+- Wind speed and gust speed (km/h)
+
+#### 16.3 Astronomical Seeing & Transparency
+- Seeing in arcseconds with quality label (Excellent/Good/Average/Poor)
+- Atmospheric transparency rating
+- Data from 7Timer's astronomy-specific forecast model
+
+#### 16.4 Intelligent Channel Suggestion (Weighted Scoring)
+Uses a weighted scoring algorithm to recommend the best filter channel for tonight:
+
+**Formula:** `score = moon_suitability_weight * remaining_ratio`
+
+**Moon suitability weights** (at full moon illumination; all channels score 1.0 at new moon, interpolated linearly):
+| Channel | Weight at Full Moon | Rationale |
+|---------|-------------------|-----------|
+| Ha | 1.0 | Strongest narrowband — tolerates full moon |
+| SII | 0.7 | Mid-strength narrowband |
+| OIII | 0.3 | Weakest narrowband — most moon-sensitive |
+| L/R/G/B | 0.2 | Broadband — usable but degraded under moonlight |
+
+**Remaining ratio:** `(planned_minutes - captured_minutes) / planned_minutes`
+- Channels with more remaining planned time score higher
+- Naturally prioritizes channels with the most work left
+
+**Result:** The channel with the highest combined score is suggested, with a human-readable explanation (e.g., "Ha scores highest: moon tolerance 100% at 72% illumination + 80% of planned subs remaining")
+
+No channel is ever hard-excluded. A broadband channel with lots of remaining time can still outscore a nearly-complete narrowband channel.
+
+#### 16.5 Three-Tier Fallback Strategy
+1. **Online** (Option 1): Fetch live data from both APIs + compute moon locally. Cache the 5-day forecast for offline use
+2. **Cached** (Option 2): If offline, serve from local JSON cache (valid for up to 5 days of forecast data)
+3. **Offline Moon** (Option 3): If no cache exists, compute moon phase locally via astroplan (no weather/seeing)
+4. **Fallback**: Display status message indicating offline state and need for internet connection
+
+#### 16.6 Frontend Popup
+- Gmail-style overlay card triggered by moon icon in navbar
+- Dark-themed design matching the app's visual language
+- Sections: Moon Phase, Weather, Seeing & Transparency, Suggested Channel
+- Status badge (Live / Cached / Offline)
+- Close on click outside or Escape key
+- Target-aware: shows channel suggestion on target pages, general conditions elsewhere
+
+### Technical Implementation
+- **`conditions_utils.py`**: New utility module with moon computation, API fetching, caching, and channel scoring
+- **`/api/conditions/<target_id>`**: New JSON API route in `app.py`
+- **`base.html`**: Navbar icon + popup HTML + inline JavaScript
+- **`target_detail.html`**: Hidden `data-target-id` element for target-aware popup
+- **Cache storage**: JSON files in `cache/conditions/` directory (gitignored)
+- **No new dependencies**: Uses astropy/astroplan (existing), stdlib `urllib.request` for HTTP
+
+### Status
+**✅ Fully implemented and working.**
+
+---
+
 # Next Recommended Focus
 **11. Session Recommendation Engine** - AI-driven session optimization  
-Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, and enhanced custom filter system), the next major enhancement is implementing an intelligent session recommendation engine. This ambitious feature includes:
-- Weather integration and forecasting
+Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, and enhanced custom filter system), the next major enhancement is implementing an intelligent session recommendation engine. Note that weather integration and moon phase awareness are now partially delivered through the Night Conditions popup (feature 16), which provides real-time weather data, seeing conditions, and moon-aware channel suggestions. The remaining scope for this feature includes:
+- Advanced weather forecasting and multi-night planning
 - AI-driven target priority scoring based on multiple factors
 - Automatic session planning and filter switching recommendations
 - Machine learning to adapt to user behavior and local conditions

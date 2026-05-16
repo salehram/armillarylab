@@ -67,6 +67,13 @@ ArmillaryLab v2.0.0 brings major improvements for production deployment and equi
 - **Export/Import**: Backup and restore equipment configurations
 - **📚 Documentation**: See [Equipment Presets Guide](docs/PRESETS_GUIDE.md) for detailed usage
 
+### 🌙 Night Conditions & Channel Suggestion
+- **Moon Phase Popup**: Current phase, illumination %, and next full moon date — computed offline via astroplan
+- **Weather Conditions**: Temperature, humidity, cloud cover, wind speed/gusts from Open-Meteo API (free, no key)
+- **Astronomical Seeing**: Seeing quality and transparency from 7Timer API (free, no key)
+- **Channel Suggestion**: Weighted scoring engine recommends the best filter channel based on moon suitability and remaining plan progress
+- **Offline Fallback**: 3-tier strategy — live data → cached 5-day forecast → offline moon-only → status message
+
 ### 🌍 Global Configuration & Settings
 - **Observer Location**: Configurable latitude, longitude, and elevation with global defaults
 - **Timezone Support**: Robust timezone handling with Windows compatibility and UTC conversion
@@ -327,6 +334,7 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 armillarylab/
 ├── app.py                 # Main Flask application
 ├── astro_utils.py         # Astronomical calculations
+├── conditions_utils.py    # Night conditions: moon, weather, seeing, channel suggestion
 ├── cli.py                 # CLI command definitions
 ├── nina_integration.py    # N.I.N.A. export functionality
 ├── time_utils.py          # Time formatting and parsing utilities
@@ -359,6 +367,7 @@ armillarylab/
 ├── static/                # Static assets (CSS, JS, fonts)
 ├── dev/                   # Virtual environment
 ├── uploads/               # File uploads directory
+├── cache/                 # Weather/seeing forecast cache (gitignored)
 └── armillarylab.db        # SQLite database (created after init)
 ```
 
@@ -521,7 +530,7 @@ docker-compose up --build
 
 ### 🚧 Roadmap
 
-- **Session Recommendation Engine**: AI-driven session optimization
+- **Session Recommendation Engine**: AI-driven session optimization (moon phase and weather integration now partially delivered via Night Conditions popup)
 - **Automatic Recomputation**: Dynamic updates after configuration changes
 - **Advanced Export Options**: Additional template formats and customization
 - **Comprehensive User Guide**: Documentation and tutorials

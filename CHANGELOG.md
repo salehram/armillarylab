@@ -21,6 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - No data migration required; the SQLite file rename preserves all data unchanged.
 - The GitHub redirect from the old repo URL keeps existing remotes working until they are updated with `git remote set-url`.
 
+### Added
+
+#### Night Conditions Popup
+- **Moon phase overlay**: Current moon phase with emoji, illumination percentage, and next full moon countdown — computed offline via astroplan
+- **Weather integration**: Temperature, humidity, cloud cover, and wind data from Open-Meteo API (free, no key required)
+- **Astronomical seeing**: Seeing quality and transparency ratings from 7Timer API (free, no key required)
+- **Channel suggestion engine**: Weighted scoring algorithm recommending the best filter channel based on moon suitability and remaining plan progress
+  - `score = moon_weight * remaining_ratio` — Ha strongest (1.0 at full moon), OIII weakest (0.3), broadband (0.2)
+- **3-tier offline fallback**: Online → cached forecast → offline moon-only → status message
+- **Gmail-style navbar popup**: Dark-themed overlay card with Live/Cached/Offline status badge
+- **Target-aware**: Shows channel suggestion when viewing a target, general conditions on other pages
+
+#### New Files
+- `conditions_utils.py` — Moon computation, weather/seeing API clients, caching, and channel scoring logic
+
 ## [2.0.0] - 2026-02-01
 
 ### 🎉 Version 2.0.0 - PostgreSQL Support & Equipment Management

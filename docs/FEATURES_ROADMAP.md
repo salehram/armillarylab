@@ -1,12 +1,12 @@
 # ArmillaryLab – Feature Roadmap  
-*Status: Updated to 2026-01-11 | Version 2.1.0-dev (Equipment Presets & AstroBin Integration)*
+*Status: Updated to 2026-05-16 | Version 2.1.0 (Night Conditions & Channel Suggestion)*
 
 This document tracks the major features of the ArmillaryLab project, what has been completed, and what remains.  
 It is intended to be version-controlled in Git for transparency, planning, and future development.
 
 **🎉 Version 1.0.0 Release - Complete Feature Set**  
 **🚀 Version 2.0.0-dev - PostgreSQL Support Implementation**  
-**🆕 Version 2.1.0-dev - Equipment Presets & AstroBin Integration**
+**🆕 Version 2.1.0 - Night Conditions & Intelligent Channel Suggestion**
 
 ---
 

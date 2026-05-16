@@ -31,7 +31,7 @@ from config.database import get_flask_config
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.0.0-dev"
+APP_VERSION = "2.1.0"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))

@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Project rename**: Versions 1.0.0 and 2.0.0 shipped under the previous project name **AstroPlanner**. The project was renamed to **ArmillaryLab** in 2026 to avoid conflict with an unrelated existing product. Historical version labels in this file refer to the project's name at the time of release.
 
-## [Unreleased] - Project rename
+## [2.1.0] - 2026-05-16
+
+### 🎉 Version 2.1.0 - Night Conditions & Intelligent Channel Suggestion
+
+**ArmillaryLab v2.1.0** adds real-time night conditions awareness with moon phase tracking, weather and astronomical seeing integration, and an intelligent channel suggestion engine -- all accessible from a single navbar icon.
 
 ### Changed
 
@@ -15,11 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated default PostgreSQL DB name and role to `armillarylab` in [config/database.py](../config/database.py); existing PG deployments can keep using their current names by setting `DATABASE_URL` explicitly.
 - Updated Docker Compose service/container names and PostgreSQL service defaults.
 - Updated the GitHub repository URL references in `README.md`.
-
-### Notes
-
-- No data migration required; the SQLite file rename preserves all data unchanged.
-- The GitHub redirect from the old repo URL keeps existing remotes working until they are updated with `git remote set-url`.
 
 ### Added
 
@@ -29,12 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Astronomical seeing**: Seeing quality and transparency ratings from 7Timer API (free, no key required)
 - **Channel suggestion engine**: Weighted scoring algorithm recommending the best filter channel based on moon suitability and remaining plan progress
   - `score = moon_weight * remaining_ratio` — Ha strongest (1.0 at full moon), OIII weakest (0.3), broadband (0.2)
-- **3-tier offline fallback**: Online → cached forecast → offline moon-only → status message
+- **Imaging window forecast**: Two-column layout showing current conditions alongside aggregated imaging window weather and seeing
+- **3-tier offline fallback**: Online → cached 5-day forecast → offline moon-only → status message
 - **Gmail-style navbar popup**: Dark-themed overlay card with Live/Cached/Offline status badge
 - **Target-aware**: Shows channel suggestion when viewing a target, general conditions on other pages
 
 #### New Files
 - `conditions_utils.py` — Moon computation, weather/seeing API clients, caching, and channel scoring logic
+
+### Notes
+
+- No data migration required; the SQLite file rename preserves all data unchanged.
+- No new Python dependencies — uses existing astropy/astroplan + stdlib urllib
+- The GitHub redirect from the old repo URL keeps existing remotes working until they are updated with `git remote set-url`.
 
 ## [2.0.0] - 2026-02-01
 

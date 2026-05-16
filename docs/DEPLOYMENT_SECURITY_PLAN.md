@@ -5,7 +5,7 @@
 ## Overview
 This document outlines the plan for implementing secure database credential management across different deployment scenarios. The current implementation uses .env files for simplicity, but this plan provides a roadmap for more secure approaches.
 
-## Current State (v2.0.0-dev)
+## Current State (as of v2.1.0)
 - PostgreSQL credentials stored in `.env.production` file
 - Simple environment variable loading via python-dotenv
 - Works but not production-secure for sensitive deployments

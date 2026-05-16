@@ -11,7 +11,7 @@ alwaysApply: true
 
 > **Last updated:** 2026-05-16
 > **Purpose:** Save agent discovery time and token cost. Read this FIRST, explore SECOND.
-> **Maintenance:** MANDATORY — before committing, if you modified app.py (models/routes/helpers/database schema), any template, astro_utils.py, time_utils.py, nina_integration.py, config/*.py, requirements.txt, or .env.example in a way that changes the project's structure or API surface (new/removed/renamed models, columns, routes, templates, env vars, dependencies), you MUST update the relevant section(s) below and bump the "Last updated" date. A stop-hook also enforces this as a safety net.
+> **Maintenance:** MANDATORY — before committing, if you modified app.py (models/routes/helpers/database schema), any template, astro_utils.py, **conditions_utils.py**, time_utils.py, nina_integration.py, config/*.py, requirements.txt, or .env.example in a way that changes the project's structure or API surface (new/removed/renamed models, columns, routes, templates, env vars, dependencies), you MUST update the relevant section(s) below and bump the "Last updated" date. A stop-hook also enforces this as a safety net.
 
 ---
 
@@ -23,7 +23,8 @@ alwaysApply: true
 | ORM | SQLAlchemy 2.x + Flask-SQLAlchemy 3.x | All models in `app.py` |
 | Database | SQLite (dev) / PostgreSQL (prod) | Configured via `DATABASE_URL` env var |
 | Migrations | Custom `config/migration.py` | Full bidirectional SQLite↔PostgreSQL migrator (not Alembic) |
-| Astronomy | astropy 6.x + astroplan 0.10+ | Window/altitude calculations |
+| Astronomy | astropy 6.x + astroplan 0.10+ | Window/altitude + moon phase (Night Conditions) |
+| External APIs | Open-Meteo, 7Timer | Weather & seeing (no API keys; server-side fetch in `conditions_utils.py`) |
 | Templates | Jinja2 (Flask built-in) | Dark-themed Bootstrap 5 |
 | Charts | Chart.js (vendored UMD) | Altitude-over-night plot |
 | Frontend | Bootstrap 5 + Bootstrap Icons | No custom CSS/JS files — all inline |

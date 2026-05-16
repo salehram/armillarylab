@@ -8,9 +8,11 @@ A comprehensive web-based tool for planning astrophotography sessions and managi
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 
-## 🎉 Version 2.0.0 - Database & Filter Management Release
+## 🎉 Current release: v2.1.0 — Night Conditions & channel suggestion
 
-ArmillaryLab v2.0.0 brings major improvements for production deployment and equipment management, including PostgreSQL support, comprehensive filter management, target archiving, and enhanced dark theme visibility.
+**ArmillaryLab v2.1.0** adds the **Night Conditions** navbar popup: live moon phase (offline via astroplan), Open-Meteo weather, 7Timer seeing/transparency, weighted filter-channel suggestions, imaging-window aggregates when a target has a valid window, and a three-tier offline fallback with local caching. See [CHANGELOG.md](CHANGELOG.md) and [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§16) for full detail.
+
+**v2.0.0** remains the foundation: PostgreSQL-ready deployment, filter and filter-wheel management, presets, AstroBin export, archiving, and dark-theme UX.
 
 ## 🌟 Features
 
@@ -97,9 +99,9 @@ Detailed documentation is available in the [docs/](docs/) folder:
 | [NINA Integration Guide](docs/NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. |
 | [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV |
 | [Database Guide](docs/DATABASE_GUIDE.md) | SQLite/PostgreSQL setup and migration |
-| [Features Roadmap](docs/FEATURES_ROADMAP.md) | Completed features and future plans |
+| [Features Roadmap](docs/FEATURES_ROADMAP.md) | Completed features, Night Conditions (§16), and future plans |
 
-## �🚀 Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -504,29 +506,21 @@ docker-compose up --build
 
 ## 📊 Current Status
 
-### ✅ Completed Features (v2.0.0)
+**Shipping version:** **2.1.0** (`APP_VERSION` in `app.py`; tag `v2.1.0` on GitHub). Install from `main` or check out that tag for a frozen snapshot.
 
-**Core Functionality:**
-- Target-as-project design with creation timestamps
-- Local timezone support with Windows compatibility
-- Database rebuild support with CLI commands
-- NINA export functionality for remaining exposures
-- Global and per-target configuration management
-- Palette management system with CRUD operations
-- Plan & Palette Enhancements with H:M:S formatting
-- Bidirectional frame/time input functionality
-- Altitude Chart with moon position, meridian flip, current time markers
-- Comprehensive imaging logs and session tracking
+### ✅ New in v2.1.0 (Night Conditions)
 
-**New in v2.0.0:**
-- 🗄️ **PostgreSQL Support**: Full production database support with automatic migration
-- 🎛️ **Filter Management System**: Complete filter and filter wheel configuration
-- 📦 **Target Archiving**: Archive completed targets to keep workspace clean
-- 🔗 **Object Mapping**: Cross-reference catalogs with AstroBin integration
-- ⚙️ **Equipment Preset System**: JSON-based configuration sharing
-- 📤 **AstroBin CSV Export**: Filter ID mapping for seamless uploads
-- 👥 **Multi-user Setup Support**: Import/export presets for team use
-- 🎨 **Dark Theme UI Improvements**: Better visibility across all pages
+- 🌙 **Night Conditions**: Navbar moon icon — moon phase, weather, seeing, channel suggestion; Open-Meteo + 7Timer (no API keys); `conditions_utils.py` + `/api/conditions/<id>`
+- 📊 **Imaging window summary**: When a target has a non-zero altitude window, aggregates weather/seeing across that window vs. “right now”
+- 🔌 **Offline resilience**: Cached 5-day forecast, then astroplan-only moon, then clear status messaging
+
+### ✅ Completed in v2.0.0 (foundation)
+
+**Core workflow:** target-as-project, timezone-aware timestamps, CLI database init/migrate, NINA export, global & per-target settings, palettes CRUD, H:M:S and bidirectional plan math, altitude chart (moon, meridian, “now”), imaging logs.
+
+**Infrastructure & equipment:** PostgreSQL support and migration tooling, filter + filter wheel management, target archiving, object mappings, JSON presets, AstroBin CSV export, dark-theme polish.
+
+See [CHANGELOG.md](CHANGELOG.md) for release-by-release notes.
 
 ### 🚧 Roadmap
 

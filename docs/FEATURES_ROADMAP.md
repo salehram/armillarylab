@@ -4,9 +4,9 @@
 This document tracks the major features of the ArmillaryLab project, what has been completed, and what remains.  
 It is intended to be version-controlled in Git for transparency, planning, and future development.
 
-**🎉 Version 1.0.0 Release - Complete Feature Set**  
-**🚀 Version 2.0.0-dev - PostgreSQL Support Implementation**  
-**🆕 Version 2.1.0 - Night Conditions & Intelligent Channel Suggestion**
+**🎉 Version 1.0.0 — complete feature set**  
+**🚀 Version 2.0.0 — PostgreSQL, filters, presets, AstroBin**  
+**🆕 Version 2.1.0 — Night Conditions & intelligent channel suggestion**
 
 ---
 

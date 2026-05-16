@@ -359,7 +359,7 @@ Full bidirectional database migration engine for SQLite ↔ PostgreSQL:
 
 | Template | Extends | Key Purpose | Key Variables |
 |----------|---------|-------------|---------------|
-| `base.html` | — | Root layout, navbar, flash messages, Night Conditions popup (`/api/conditions`) with Overview (incl. go/skip wind block under channel suggestion) + Wind detail tab, dark theme | `app_name`, `app_version` |
+| `base.html` | — | Root layout, navbar, flash messages, Night Conditions popup (`/api/conditions`) with Overview (go/skip wind above channel suggestion) + Wind detail tab, dark theme | `app_name`, `app_version` |
 | `index.html` | base | Target dashboard with tonight's recommendation | `tonight_pick`, `target_summaries`, `archived_summaries` |
 | `target_detail.html` | base | Main target page (plan, chart, sessions, notes) | `target`, `plan_data`, `window_info`, `progress_*`, `palettes`, `astrobin_filter_map` |
 | `target_form.html` | base | Create/edit target form | `target`, `global_config`, `palettes` |

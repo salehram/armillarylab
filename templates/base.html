@@ -351,13 +351,13 @@
       h += '</div>';
       h += '</div>';
     }
+    if (d.wind_session) {
+      h += '<div style="margin-top:8px;">' + windSessionBox(d.wind_session) + '</div>';
+    }
     if (d.suggestion) {
-      h += '<div class="cp-section" style="margin-top:8px;"><div class="cp-label"><i class="bi bi-lightbulb me-1"></i>Suggested Channel</div>';
+      h += '<div class="cp-section" style="margin-top:10px;"><div class="cp-label"><i class="bi bi-lightbulb me-1"></i>Suggested Channel</div>';
       h += '<div class="cp-suggestion"><strong>'+d.suggestion.channel_label+'</strong> ('+d.suggestion.channel+')<br><small style="color:#a8b4c8;">'+d.suggestion.reason+'</small></div>';
       h += '</div>';
-    }
-    if (d.wind_session) {
-      h += '<div style="margin-top:10px;">' + windSessionBox(d.wind_session) + '</div>';
     }
     if (d.message) {
       h += '<div class="cp-section"><small class="text-muted"><i class="bi bi-info-circle me-1"></i>'+d.message+'</small></div>';

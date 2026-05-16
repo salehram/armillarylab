@@ -251,8 +251,8 @@
 
     if (d.moon) {
       h += '<div class="cp-section"><div class="cp-label"><i class="bi bi-moon me-1"></i>Moon</div>';
-      h += '<div class="cp-row"><span>'+d.moon.emoji+' '+d.moon.phase_name+'</span><span>'+d.moon.illumination_pct+'% lit</span></div>';
-      h += '<div class="cp-row"><span>Next full moon</span><span>'+d.moon.next_full_moon+' ('+d.moon.days_to_full+'d)</span></div>';
+      h += '<div style="padding:2px 0;">'+d.moon.emoji+' '+d.moon.phase_name+' <span style="color:#9e9eb8;margin-left:6px;">'+d.moon.illumination_pct+'% lit</span></div>';
+      h += '<div style="padding:2px 0;">Next full moon <span style="color:#9e9eb8;margin-left:6px;">'+d.moon.next_full_moon+' ('+d.moon.days_to_full+'d)</span></div>';
       h += '</div>';
     }
 
@@ -279,7 +279,7 @@
       h += '<div class="cp-section"><div class="cp-label"><i class="bi bi-eye me-1"></i>Seeing</div>';
       h += '<div class="cp-row"><span>Seeing</span><span>'+d.astro.seeing_arcsec+'</span></div>';
       h += '<div class="cp-row"><span>Quality</span><span>'+d.astro.seeing_label+'</span></div>';
-      h += '<div class="cp-row"><span>Transp.</span><span>'+d.astro.transparency_label+'</span></div>';
+      h += '<div class="cp-row"><span>Transparency</span><span>'+d.astro.transparency_label+'</span></div>';
       h += '</div>';
     }
 
@@ -304,7 +304,7 @@
         h += '<div class="cp-section"><div class="cp-label">Seeing ('+wa.points+' pts)</div>';
         h += '<div class="cp-row"><span>Avg</span><span>'+wa.seeing_avg+' ('+wa.seeing_avg_label+')</span></div>';
         h += '<div class="cp-row"><span>Worst</span><span>'+wa.seeing_worst+' ('+wa.seeing_worst_label+')</span></div>';
-        h += '<div class="cp-row"><span>Transp.</span><span>'+wa.transparency_avg_label+'</span></div>';
+        h += '<div class="cp-row"><span>Transparency</span><span>'+wa.transparency_avg_label+'</span></div>';
         h += '</div>';
       }
       h += '</div>'; // close right cp-col

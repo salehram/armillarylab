@@ -207,6 +207,7 @@
                     <th>Remaining Time</th>
                     <th>Remaining (h:m:s)</th>
                     <th>Status</th>
+                    <th>Cal</th>
                     <th style="width: 35px;"></th>
                   </tr>
                 </thead>
@@ -262,6 +263,13 @@
                       <td class="remaining-minutes fw-bold">-</td>
                       <td class="remaining-hms fw-bold">-</td>
                       <td class="status-badge"></td>
+                      <td class="small">
+                        {% if calibration_badges and calibration_badges.get(ch.name) %}
+                          {% for badge in calibration_badges[ch.name] %}
+                            <span class="badge bg-info text-dark d-block mb-1">{{ badge }}</span>
+                          {% endfor %}
+                        {% endif %}
+                      </td>
                       <td>
                         <button type="button" class="btn btn-sm btn-outline-danger remove-filter-btn" 
                                 data-channel="{{ ch.name }}" title="Remove this filter">
@@ -467,6 +475,40 @@
 
   <!-- RIGHT COLUMN STACK: PROGRESS + NOTES + PIXINSIGHT -->
   <div class="col-lg-6 d-flex flex-column gap-4">
+
+    {% if calibration_config.enabled and calibration_data %}
+    <!-- CALIBRATION ACTION ITEMS -->
+    {% if calibration_data.suggestions %}
+    <div id="calibration-suggestions">
+      {% for s in calibration_data.suggestions %}
+      <div class="alert alert-warning mb-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+          <i class="bi bi-lightning-charge me-1"></i>
+          <strong>{{ s.channel }}</strong> —
+          capture <strong>{{ s.suggested_count }}</strong>
+          {{ s.frame_type.replace('_', ' ') }} ({{ s.checkpoint }})
+        </div>
+        <div class="d-flex gap-1 flex-wrap">
+          <button type="button" class="btn btn-sm btn-primary cal-prefill-btn"
+                  data-channel="{{ s.channel }}"
+                  data-frame-type="{{ s.frame_type }}"
+                  data-checkpoint="{{ s.checkpoint }}"
+                  data-count="{{ s.suggested_count }}">
+            Log capture
+          </button>
+          <form method="post" action="{{ url_for('skip_calibration_checkpoint', target_id=target.id) }}" class="d-inline">
+            <input type="hidden" name="channel" value="{{ s.channel }}">
+            <input type="hidden" name="frame_type" value="{{ s.frame_type }}">
+            <input type="hidden" name="checkpoint" value="{{ s.checkpoint }}">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Skip for now</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
     <!-- ADD IMAGING PROGRESS -->
     <div class="card bg-secondary text-light">
       <div class="card-header">Add Imaging Progress</div>
@@ -528,6 +570,159 @@
         </form>
       </div>
     </div>
+
+    {% if calibration_config.enabled %}
+    <!-- CALIBRATION TRACKING -->
+    <div class="card bg-secondary text-light" id="calibration-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-sliders me-1"></i>Calibration Frames</span>
+        <a href="{{ url_for('target_settings', target_id=target.id) }}" class="btn btn-sm btn-outline-light">Settings</a>
+      </div>
+      <div class="card-body">
+        {% if calibration_data %}
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <div class="small text-muted">Darks</div>
+            {% set darks = calibration_data.summary.darks %}
+            <div>{{ darks.captured }} / {{ darks.planned }}</div>
+            {% if darks.planned > 0 %}
+            <div class="progress mt-1" style="height: 6px;">
+              <div class="progress-bar bg-info" style="width: {{ [100, (darks.captured / darks.planned * 100) | round(0)] | min }}%"></div>
+            </div>
+            {% endif %}
+          </div>
+          <div class="col-md-6">
+            <div class="small text-muted">Bias</div>
+            {% set bias = calibration_data.summary.bias %}
+            <div>{{ bias.captured }} / {{ bias.planned }}</div>
+            {% if bias.planned > 0 %}
+            <div class="progress mt-1" style="height: 6px;">
+              <div class="progress-bar bg-info" style="width: {{ [100, (bias.captured / bias.planned * 100) | round(0)] | min }}%"></div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if calibration_data.summary.channels %}
+        <div class="table-responsive mb-3">
+          <table class="table table-sm table-dark mb-0">
+            <thead>
+              <tr>
+                <th>Ch</th>
+                <th>Flats</th>
+                <th>Mid</th>
+                <th>Dark flats</th>
+                <th>Mid</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ch_name, ch_cal in calibration_data.summary.channels.items() %}
+              <tr>
+                <td>{{ ch_name }}</td>
+                <td>{{ ch_cal.flat.captured }}/{{ ch_cal.flat.planned }}</td>
+                <td class="small">
+                  {% if ch_cal.flat.mid_skipped %}—{% elif ch_cal.flat.mid_complete %}✓{% else %}pending{% endif %}
+                </td>
+                <td>{{ ch_cal.dark_flat.captured }}/{{ ch_cal.dark_flat.planned }}</td>
+                <td class="small">
+                  {% if ch_cal.dark_flat.mid_skipped %}—{% elif ch_cal.dark_flat.mid_complete %}✓{% else %}pending{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% endif %}
+
+        <form method="post" action="{{ url_for('log_calibration_capture', target_id=target.id) }}" id="main-calibration-form">
+          <div class="row mb-2">
+            <div class="col-md-4">
+              <label class="form-label">Date</label>
+              <input class="form-control form-control-sm" type="date" name="imaging_date"
+                     value="{{ datetime.now().strftime('%Y-%m-%d') }}" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Type</label>
+              <select class="form-control form-control-sm" name="frame_type" id="cal_log_type" required>
+                <option value="dark">Darks</option>
+                <option value="flat">Flats</option>
+                <option value="dark_flat">Dark flats</option>
+                <option value="bias">Bias</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Count</label>
+              <input class="form-control form-control-sm" type="number" name="frame_count" id="cal_log_count"
+                     min="1" step="1" value="10" required>
+            </div>
+          </div>
+          <div class="row mb-2">
+            <div class="col-md-4" id="cal_log_channel_wrap">
+              <label class="form-label">Channel</label>
+              <select class="form-control form-control-sm" name="channel" id="cal_log_channel">
+                <option value="">—</option>
+                {% if plan_data and plan_data.channels %}
+                  {% for ch in plan_data.channels %}
+                    <option value="{{ ch.name }}">{{ ch.name }}</option>
+                  {% endfor %}
+                {% endif %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Checkpoint</label>
+              <select class="form-control form-control-sm" name="checkpoint" id="cal_log_checkpoint">
+                <option value="manual">Manual</option>
+                <option value="midpoint">Midpoint</option>
+                <option value="end">End</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Notes</label>
+              <input class="form-control form-control-sm" name="notes" placeholder="Optional">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle me-1"></i>Log Calibration
+          </button>
+        </form>
+
+        {% if target.calibration_captures %}
+        <hr class="border-secondary my-3">
+        <h6 class="text-info">Calibration History</h6>
+        {% set cal_by_date = {} %}
+        {% for cap in target.calibration_captures | sort(attribute='date', reverse=true) %}
+          {% if cap.date not in cal_by_date %}
+            {% set _ = cal_by_date.update({cap.date: []}) %}
+          {% endif %}
+          {% set _ = cal_by_date[cap.date].append(cap) %}
+        {% endfor %}
+        {% for date, caps in cal_by_date.items() %}
+          <div class="border rounded p-2 mb-2 bg-dark small">
+            <div class="text-info mb-1">{{ date.strftime('%Y-%m-%d') }}</div>
+            {% for cap in caps %}
+            <div class="d-flex justify-content-between align-items-center py-1">
+              <span>
+                <span class="badge bg-secondary me-1">{{ cap.frame_type.replace('_', ' ') }}</span>
+                {% if cap.channel %}<span class="badge bg-warning text-dark me-1">{{ cap.channel }}</span>{% endif %}
+                {{ cap.frame_count }} frames
+                {% if cap.checkpoint %}<span class="text-muted">({{ cap.checkpoint }})</span>{% endif %}
+              </span>
+              <span>
+                <a href="{{ url_for('edit_calibration_capture', capture_id=cap.id) }}" class="btn btn-sm btn-outline-info py-0 px-1"><i class="bi bi-pencil"></i></a>
+                <form method="post" action="{{ url_for('delete_calibration_capture', capture_id=cap.id) }}" class="d-inline"
+                      onsubmit="return confirm('Delete this calibration entry?')">
+                  <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"><i class="bi bi-trash"></i></button>
+                </form>
+              </span>
+            </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
 
     <!-- NOTES -->
     <div class="card bg-secondary text-light">
@@ -2179,6 +2374,35 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   }
+
+  // Calibration log form: channel visibility + suggestion prefill
+  const calLogType = document.getElementById('cal_log_type');
+  const calLogChannelWrap = document.getElementById('cal_log_channel_wrap');
+  const calLogChannel = document.getElementById('cal_log_channel');
+  const calLogCheckpoint = document.getElementById('cal_log_checkpoint');
+  const calLogCount = document.getElementById('cal_log_count');
+  const calCard = document.getElementById('calibration-card');
+
+  function toggleCalChannelField() {
+    if (!calLogType || !calLogChannelWrap) return;
+    const t = calLogType.value;
+    calLogChannelWrap.style.display = (t === 'flat' || t === 'dark_flat') ? 'block' : 'none';
+  }
+  if (calLogType) {
+    calLogType.addEventListener('change', toggleCalChannelField);
+    toggleCalChannelField();
+  }
+
+  document.querySelectorAll('.cal-prefill-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (calLogType) calLogType.value = btn.dataset.frameType || 'manual';
+      if (calLogChannel) calLogChannel.value = btn.dataset.channel || '';
+      if (calLogCheckpoint) calLogCheckpoint.value = btn.dataset.checkpoint || 'manual';
+      if (calLogCount) calLogCount.value = btn.dataset.count || '1';
+      toggleCalChannelField();
+      if (calCard) calCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
 });
 </script>
 
@@ -2245,19 +2469,23 @@ document.addEventListener("DOMContentLoaded", function () {
           <div class="row mb-3">
             <div class="col-md-3">
               <label class="form-label">Darks</label>
-              <input class="form-control" type="number" name="darks" placeholder="--" step="1" min="0">
+              <input class="form-control" type="number" name="darks" placeholder="--" step="1" min="0"
+                     value="{{ calibration_export_totals.darks if calibration_export_totals and calibration_export_totals.darks else '' }}">
             </div>
             <div class="col-md-3">
               <label class="form-label">Flats</label>
-              <input class="form-control" type="number" name="flats" placeholder="--" step="1" min="0">
+              <input class="form-control" type="number" name="flats" placeholder="--" step="1" min="0"
+                     value="{{ calibration_export_totals.flats if calibration_export_totals and calibration_export_totals.flats else '' }}">
             </div>
             <div class="col-md-3">
               <label class="form-label">Flat Darks</label>
-              <input class="form-control" type="number" name="flat_darks" placeholder="--" step="1" min="0">
+              <input class="form-control" type="number" name="flat_darks" placeholder="--" step="1" min="0"
+                     value="{{ calibration_export_totals.flat_darks if calibration_export_totals and calibration_export_totals.flat_darks else '' }}">
             </div>
             <div class="col-md-3">
               <label class="form-label">Bias</label>
-              <input class="form-control" type="number" name="bias" placeholder="--" step="1" min="0">
+              <input class="form-control" type="number" name="bias" placeholder="--" step="1" min="0"
+                     value="{{ calibration_export_totals.bias if calibration_export_totals and calibration_export_totals.bias else '' }}">
             </div>
           </div>
           

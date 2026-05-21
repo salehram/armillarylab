@@ -2,15 +2,17 @@
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
-![Version](https://img.shields.io/badge/version-2.1.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.2.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 
-## 🎉 Current release: v2.1.0 — Night Conditions & channel suggestion
+## 🎉 Current release: v2.2.0 — Calibration Frames Management
 
-**ArmillaryLab v2.1.0** adds the **Night Conditions** navbar popup: live moon phase (offline via astroplan), Open-Meteo weather, 7Timer seeing/transparency, weighted filter-channel suggestions, imaging-window aggregates when a target has a valid window, and a three-tier offline fallback with local caching. See [CHANGELOG.md](CHANGELOG.md) and [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§16) for full detail.
+**ArmillaryLab v2.2.0** adds optional **calibration frame tracking**: global defaults, per-target opt-in, manual dark/bias logging, and two-point flat/dark-flat suggestions at channel midpoint and end—with skip/defer and AstroBin export prefill. See [CHANGELOG.md](CHANGELOG.md) and [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§17).
+
+**v2.1.0** adds the **Night Conditions** navbar popup: live moon phase (offline via astroplan), Open-Meteo weather, 7Timer seeing/transparency, weighted filter-channel suggestions, imaging-window aggregates when a target has a valid window, and a three-tier offline fallback with local caching.
 
 **v2.0.0** remains the foundation: PostgreSQL-ready deployment, filter and filter-wheel management, presets, AstroBin export, archiving, and dark-theme UX.
 
@@ -69,6 +71,14 @@ A comprehensive web-based tool for planning astrophotography sessions and managi
 - **Export/Import**: Backup and restore equipment configurations
 - **📚 Documentation**: See [Equipment Presets Guide](docs/PRESETS_GUIDE.md) for detailed usage
 
+### 📐 Calibration Frames Management
+- **Opt-in tracking**: Enable per target; global defaults for darks, flats per channel, dark flats, and bias
+- **Two-point flats workflow**: Suggest half the flat + dark-flat count at channel light midpoint, remainder at channel end
+- **Manual darks/bias**: Log any amount anytime (e.g. a few darks per session or batch at project end)
+- **Skip/defer**: Skip midpoint suggestions; end checkpoint covers remaining; manual catch-up always available
+- **AstroBin prefill**: Tracked totals prefill export modal when tracking is enabled
+- **📚 Documentation**: See [Calibration Guide](docs/CALIBRATION_GUIDE.md) and [Features Roadmap §17](docs/FEATURES_ROADMAP.md)
+
 ### 🌙 Night Conditions & Channel Suggestion
 - **Moon Phase Popup**: Current phase, illumination %, and next full moon date — computed offline via astroplan
 - **Weather Conditions**: Temperature, humidity, cloud cover, wind speed/gusts from Open-Meteo API (free, no key)
@@ -99,7 +109,8 @@ Detailed documentation is available in the [docs/](docs/) folder:
 | [NINA Integration Guide](docs/NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. |
 | [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV |
 | [Database Guide](docs/DATABASE_GUIDE.md) | SQLite/PostgreSQL setup and migration |
-| [Features Roadmap](docs/FEATURES_ROADMAP.md) | Completed features, Night Conditions (§16), and future plans |
+| [Calibration Guide](docs/CALIBRATION_GUIDE.md) | Track darks, flats, dark flats, and bias with two-point suggestions |
+| [Features Roadmap](docs/FEATURES_ROADMAP.md) | Completed features, Calibration (§17), Night Conditions (§16), and future plans |
 
 ## 🚀 Quick Start
 
@@ -506,7 +517,14 @@ docker-compose up --build
 
 ## 📊 Current Status
 
-**Shipping version:** **2.1.0** (`APP_VERSION` in `app.py`; tag `v2.1.0` on GitHub). Install from `main` or check out that tag for a frozen snapshot.
+**Shipping version:** **2.2.0** (`APP_VERSION` in `app.py`; tag `v2.2.0` on GitHub). Install from `main` or check out that tag for a frozen snapshot.
+
+### ✅ New in v2.2.0 (Calibration Frames)
+
+- 📐 **Calibration tracking**: Opt-in per target; global defaults; manual dark/bias logging
+- 🎯 **Two-point flats**: Midpoint + end suggestions per channel based on light frame progress
+- ⏭️ **Skip/defer**: Skip checkpoints; log manually later; AstroBin export prefill from tracked totals
+- 🧩 **`calibration_utils.py`** + `/api/target/<id>/calibration`
 
 ### ✅ New in v2.1.0 (Night Conditions)
 

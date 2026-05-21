@@ -1,5 +1,5 @@
 # ArmillaryLab – Feature Roadmap  
-*Status: Updated to 2026-05-16 | Version 2.1.0 (Night Conditions & Channel Suggestion)*
+*Status: Updated to 2026-05-21 | Version 2.2.0 (Calibration Frames Management)*
 
 This document tracks the major features of the ArmillaryLab project, what has been completed, and what remains.  
 It is intended to be version-controlled in Git for transparency, planning, and future development.
@@ -7,6 +7,7 @@ It is intended to be version-controlled in Git for transparency, planning, and f
 **🎉 Version 1.0.0 — complete feature set**  
 **🚀 Version 2.0.0 — PostgreSQL, filters, presets, AstroBin**  
 **🆕 Version 2.1.0 — Night Conditions & intelligent channel suggestion**
+**🆕 Version 2.2.0 — Calibration frames management & two-point flat workflow**
 
 ---
 
@@ -845,9 +846,44 @@ No channel is ever hard-excluded. A broadband channel with lots of remaining tim
 
 ---
 
+## ✅ 17. Calibration Frames Management (Completed)
+### Summary
+Optional per-target tracking for darks, flats, dark flats, and bias with a two-point flat/dark-flat workflow tied to light frame progress per channel. Extends §15.2 AstroBin export (previously export-only calibration fields) with persistent capture logging.
+
+### Completed Features
+
+#### 17.1 Configuration
+- **Global defaults** (`GlobalConfig`): darks, flats per channel, dark flats per channel, bias, two-point toggle — Settings page
+- **Per-target opt-in** (`Target.calibration_tracking_enabled`) with override counts and two-point flag — Target Settings page
+- **`get_effective_calibration_config()`** resolves global → target overrides
+
+#### 17.2 Data Model
+- **`CalibrationCapture`**: log captures with date, frame type, channel, checkpoint (midpoint/end/manual), count, notes
+- **`CalibrationCheckpointSkip`**: persist skip/defer for flat/dark-flat midpoint or end checkpoints
+
+#### 17.3 Suggestion Engine (`calibration_utils.py`)
+- Frame-based light progress (matches plan table Done Frames math)
+- **Midpoint** (two-point on): suggest half of per-channel flat/dark-flat count at ≥50% light frames
+- **End**: suggest remaining counts when channel lights complete
+- **Skip midpoint**: rolls obligation to end checkpoint
+- **Darks/bias**: manual logging only; progress bars, no auto-suggestions
+
+#### 17.4 UI & Routes
+- Target detail: action-item banners, calibration card, log form, history by date, plan table Cal badges
+- Routes: log, skip, edit, delete, `GET /api/target/<id>/calibration`
+- Flash after light progress when calibration threshold crossed
+
+#### 17.5 AstroBin Integration
+- Export modal prefills calibration columns from tracked totals when tracking enabled (user can override)
+
+### Status
+**✅ Fully implemented in v2.2.0.**
+
+---
+
 # Next Recommended Focus
 **11. Session Recommendation Engine** - AI-driven session optimization  
-Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, and enhanced custom filter system), the next major enhancement is implementing an intelligent session recommendation engine. Note that weather integration and moon phase awareness are now partially delivered through the Night Conditions popup (feature 16), which provides real-time weather data, seeing conditions, and moon-aware channel suggestions. The remaining scope for this feature includes:
+Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, enhanced custom filter system, Night Conditions, and calibration frame tracking), the next major enhancement is implementing an intelligent session recommendation engine. Note that weather integration and moon phase awareness are now partially delivered through the Night Conditions popup (feature 16), which provides real-time weather data, seeing conditions, and moon-aware channel suggestions. Calibration tracking (feature 17) covers flat/dark-flat workflow suggestions per channel. The remaining scope for this feature includes:
 - Advanced weather forecasting and multi-night planning
 - AI-driven target priority scoring based on multiple factors
 - Automatic session planning and filter switching recommendations

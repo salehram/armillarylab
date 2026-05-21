@@ -59,6 +59,45 @@
         </div>
       </div>
 
+      <!-- Default Calibration Frames -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Default Calibration Frames</h5>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">Used when calibration tracking is enabled on a target. Set to 0 to disable a frame type.</p>
+          <div class="row mb-3">
+            <div class="col-md-3">
+              <label for="default_calibration_darks" class="form-label">Darks (per target)</label>
+              <input type="number" class="form-control" id="default_calibration_darks" name="default_calibration_darks"
+                     step="1" min="0" value="{{ config.default_calibration_darks or 0 }}">
+            </div>
+            <div class="col-md-3">
+              <label for="default_calibration_flats_per_channel" class="form-label">Flats (per channel)</label>
+              <input type="number" class="form-control" id="default_calibration_flats_per_channel" name="default_calibration_flats_per_channel"
+                     step="1" min="0" value="{{ config.default_calibration_flats_per_channel or 0 }}">
+            </div>
+            <div class="col-md-3">
+              <label for="default_calibration_dark_flats_per_channel" class="form-label">Dark flats (per channel)</label>
+              <input type="number" class="form-control" id="default_calibration_dark_flats_per_channel" name="default_calibration_dark_flats_per_channel"
+                     step="1" min="0" value="{{ config.default_calibration_dark_flats_per_channel or 0 }}">
+            </div>
+            <div class="col-md-3">
+              <label for="default_calibration_bias" class="form-label">Bias (optional)</label>
+              <input type="number" class="form-control" id="default_calibration_bias" name="default_calibration_bias"
+                     step="1" min="0" value="{{ config.default_calibration_bias or 0 }}">
+            </div>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="default_calibration_two_point" name="default_calibration_two_point" value="1"
+                   {% if config.default_calibration_two_point %}checked{% endif %}>
+            <label class="form-check-label" for="default_calibration_two_point">
+              Use two-point flat capture by default (half at channel midpoint, remainder at channel end)
+            </label>
+          </div>
+        </div>
+      </div>
+
       <!-- Timezone -->
       <div class="card mb-4">
         <div class="card-header">

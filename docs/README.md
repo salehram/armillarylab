@@ -13,7 +13,7 @@ Welcome to the ArmillaryLab documentation. This folder contains detailed guides 
 | [README.md](../README.md) | Project overview, installation, and quick start |
 | [CHANGELOG.md](../CHANGELOG.md) | Version history and release notes |
 
-**Current release:** **v2.1.0** — Night Conditions (navbar moon icon), weather/seeing APIs, channel suggestion, and offline cache. Details in §16 of [Features Roadmap](FEATURES_ROADMAP.md) and the top of [CHANGELOG.md](../CHANGELOG.md).
+**Current release:** **v2.2.0** — Calibration frames tracking, two-point flat suggestions, manual dark/bias logging. Details in §17 of [Features Roadmap](FEATURES_ROADMAP.md) and the top of [CHANGELOG.md](../CHANGELOG.md).
 
 ### User Guides
 
@@ -21,6 +21,8 @@ Welcome to the ArmillaryLab documentation. This folder contains detailed guides 
 |----------|-------------|
 | [Palette & Filter Guide](PALETTE_FILTER_GUIDE.md) | **Start here!** Understand palettes, filters, and target plans |
 | [Equipment Presets Guide](PRESETS_GUIDE.md) | Configure and share filter setups using JSON presets |
+| [Features Roadmap §17](FEATURES_ROADMAP.md) | **Calibration Frames** — tracking, two-point flats, skip/defer |
+| [Calibration Guide](CALIBRATION_GUIDE.md) | Enable tracking, log captures, read suggestions |
 | [Features Roadmap §16](FEATURES_ROADMAP.md) | **Night Conditions** — moon phase, weather, seeing, channel suggestion (built into the app UI) |
 | [NINA Integration Guide](NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. |
 | [AstroBin Export Guide](ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV |

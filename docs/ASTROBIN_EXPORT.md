@@ -153,7 +153,22 @@ If using common equipment:
    | Flat Darks | (empty) | Flat-dark count (optional) |
    | Bias | (empty) | Bias frame count (optional) |
 
+   When **calibration tracking** is enabled on the target, these fields are **prefilled** from logged capture totals (flats and dark flats summed across channels). You can still override before download.
+
 5. Click **Download CSV**
+
+### Calibration Data from Tracking (v2.2.0)
+
+If you enable calibration tracking on a target and log captures in ArmillaryLab:
+
+| CSV column | Prefill source |
+|------------|----------------|
+| `darks` | Sum of all logged dark captures |
+| `flats` | Sum of logged flats across all channels |
+| `flatDarks` | Sum of logged dark flats across all channels |
+| `bias` | Sum of all logged bias captures |
+
+See [Calibration Guide](CALIBRATION_GUIDE.md) for the full workflow.
 
 ### Export Example
 

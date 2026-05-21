@@ -22,6 +22,12 @@ from astro_utils import (
 
 from nina_integration import load_nina_template, build_nina_sequence_from_blocks
 from time_utils import register_time_filters, format_hms, parse_hms, hms_to_minutes
+from calibration_utils import (
+    get_calibration_payload,
+    aggregate_calibration_for_export,
+    format_suggestion_flash,
+    channel_calibration_badges,
+)
 from zoneinfo import ZoneInfo
 
 # Import database configuration
@@ -31,7 +37,7 @@ from config.database import get_flask_config
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -84,6 +90,13 @@ class GlobalConfig(db.Model):
     # Default observation settings
     default_packup_time = db.Column(db.String(5), default="01:00")
     default_min_altitude = db.Column(db.Float, default=30.0)
+
+    # Default calibration frame counts (0 = disabled)
+    default_calibration_darks = db.Column(db.Integer, default=0)
+    default_calibration_flats_per_channel = db.Column(db.Integer, default=0)
+    default_calibration_dark_flats_per_channel = db.Column(db.Integer, default=0)
+    default_calibration_bias = db.Column(db.Integer, default=0)
+    default_calibration_two_point = db.Column(db.Boolean, default=True)
     
     # Timezone
     timezone_name = db.Column(db.String(64), default="Asia/Riyadh")
@@ -291,6 +304,14 @@ class Target(db.Model):
     override_packup_time = db.Column(db.String(5))  # NULL = use global default
     override_min_altitude = db.Column(db.Float)     # NULL = use global default
 
+    # Calibration tracking (opt-in per target)
+    calibration_tracking_enabled = db.Column(db.Boolean, default=False)
+    override_calibration_darks = db.Column(db.Integer)
+    override_calibration_flats_per_channel = db.Column(db.Integer)
+    override_calibration_dark_flats_per_channel = db.Column(db.Integer)
+    override_calibration_bias = db.Column(db.Integer)
+    override_calibration_two_point = db.Column(db.Boolean)
+
     final_image_filename = db.Column(db.String(255))
 
     # NEW: when this target (i.e. this "project") was created
@@ -305,6 +326,12 @@ class Target(db.Model):
                          cascade="all, delete-orphan")
     sessions = relationship("ImagingSession", back_populates="target",
                             cascade="all, delete-orphan")
+    calibration_captures = relationship(
+        "CalibrationCapture", back_populates="target", cascade="all, delete-orphan"
+    )
+    calibration_checkpoint_skips = relationship(
+        "CalibrationCheckpointSkip", back_populates="target", cascade="all, delete-orphan"
+    )
     palette = relationship("Palette", back_populates="targets")
 
 
@@ -349,6 +376,41 @@ class ImagingSession(db.Model):
     notes = db.Column(db.Text)
 
     target = relationship("Target", back_populates="sessions")
+
+
+class CalibrationCapture(db.Model):
+    __tablename__ = "calibration_captures"
+
+    id = db.Column(db.Integer, primary_key=True)
+    target_id = db.Column(db.Integer, db.ForeignKey("targets.id"), nullable=False)
+    date = db.Column(db.Date, nullable=False, default=datetime.now().date)
+    frame_type = db.Column(db.String(16), nullable=False)  # dark, flat, dark_flat, bias
+    channel = db.Column(db.String(16))  # required for flat/dark_flat
+    checkpoint = db.Column(db.String(16))  # midpoint, end, manual
+    frame_count = db.Column(db.Integer, nullable=False)
+    notes = db.Column(db.Text)
+
+    target = relationship("Target", back_populates="calibration_captures")
+
+
+class CalibrationCheckpointSkip(db.Model):
+    __tablename__ = "calibration_checkpoint_skips"
+
+    id = db.Column(db.Integer, primary_key=True)
+    target_id = db.Column(db.Integer, db.ForeignKey("targets.id"), nullable=False)
+    channel = db.Column(db.String(16), nullable=False)
+    frame_type = db.Column(db.String(16), nullable=False)  # flat, dark_flat
+    checkpoint = db.Column(db.String(16), nullable=False)  # midpoint, end
+    skipped_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    target = relationship("Target", back_populates="calibration_checkpoint_skips")
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "target_id", "channel", "frame_type", "checkpoint",
+            name="unique_calibration_checkpoint_skip",
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -425,6 +487,40 @@ def get_effective_min_altitude(target):
     if target.override_min_altitude is not None:
         return target.override_min_altitude
     return get_global_config().default_min_altitude
+
+
+def get_effective_calibration_config(target):
+    """Resolved calibration settings for a target (global defaults + overrides)."""
+    global_config = get_global_config()
+    two_point = (
+        target.override_calibration_two_point
+        if target.override_calibration_two_point is not None
+        else global_config.default_calibration_two_point
+    )
+    return {
+        "enabled": bool(target.calibration_tracking_enabled),
+        "darks": (
+            target.override_calibration_darks
+            if target.override_calibration_darks is not None
+            else global_config.default_calibration_darks
+        ),
+        "flats_per_channel": (
+            target.override_calibration_flats_per_channel
+            if target.override_calibration_flats_per_channel is not None
+            else global_config.default_calibration_flats_per_channel
+        ),
+        "dark_flats_per_channel": (
+            target.override_calibration_dark_flats_per_channel
+            if target.override_calibration_dark_flats_per_channel is not None
+            else global_config.default_calibration_dark_flats_per_channel
+        ),
+        "bias": (
+            target.override_calibration_bias
+            if target.override_calibration_bias is not None
+            else global_config.default_calibration_bias
+        ),
+        "two_point": bool(two_point),
+    }
 
 
 def get_observer_location():
@@ -837,6 +933,27 @@ def target_detail(target_id):
     # Get AstroBin ID map for export modal
     astrobin_filter_map = {f.name: f.astrobin_id for f in Filter.query.all() if f.astrobin_id}
 
+    calibration_config = get_effective_calibration_config(target)
+    calibration_data = None
+    calibration_badges = {}
+    calibration_export_totals = None
+    if calibration_config["enabled"]:
+        calibration_data = get_calibration_payload(
+            calibration_config,
+            plan_data,
+            progress_seconds,
+            target.calibration_captures,
+            target.calibration_checkpoint_skips,
+        )
+        calibration_badges = channel_calibration_badges(
+            calibration_config,
+            plan_data,
+            progress_seconds,
+            target.calibration_captures,
+            target.calibration_checkpoint_skips,
+        )
+        calibration_export_totals = aggregate_calibration_for_export(target.calibration_captures)
+
     return render_template(
         "target_detail.html",
         target=target,
@@ -852,6 +969,10 @@ def target_detail(target_id):
         progress_seconds=progress_seconds,
         palettes=palettes,
         astrobin_filter_map=astrobin_filter_map,
+        calibration_config=calibration_config,
+        calibration_data=calibration_data,
+        calibration_badges=calibration_badges,
+        calibration_export_totals=calibration_export_totals,
     )
 
 @app.post("/target/<int:target_id>/export_nina")
@@ -1149,6 +1270,12 @@ def clone_target(target_id):
         packup_time_local=original.packup_time_local,
         override_packup_time=original.override_packup_time,
         override_min_altitude=original.override_min_altitude,
+        calibration_tracking_enabled=original.calibration_tracking_enabled,
+        override_calibration_darks=original.override_calibration_darks,
+        override_calibration_flats_per_channel=original.override_calibration_flats_per_channel,
+        override_calibration_dark_flats_per_channel=original.override_calibration_dark_flats_per_channel,
+        override_calibration_bias=original.override_calibration_bias,
+        override_calibration_two_point=original.override_calibration_two_point,
         # Don't copy: final_image_filename, is_archived, archived_at, completion_notes
         # Don't copy: created_at (will be set to now automatically)
     )
@@ -1442,6 +1569,33 @@ def add_progress(target_id):
     db.session.add(session)
     db.session.commit()
 
+    if target.calibration_tracking_enabled:
+        plan = (
+            TargetPlan.query
+            .filter_by(target_id=target.id, palette_name=target.preferred_palette)
+            .order_by(TargetPlan.created_at.desc())
+            .first()
+        )
+        plan_data = json.loads(plan.plan_json) if plan else None
+        from collections import defaultdict
+        progress_seconds = defaultdict(float)
+        for s in target.sessions:
+            progress_seconds[s.channel] += s.sub_exposure_seconds * s.sub_count
+        cal_config = get_effective_calibration_config(target)
+        payload = get_calibration_payload(
+            cal_config,
+            plan_data,
+            progress_seconds,
+            target.calibration_captures,
+            target.calibration_checkpoint_skips,
+        )
+        flash_msg = format_suggestion_flash(payload["suggestions"])
+        if flash_msg:
+            flash(
+                f"Calibration reminder — {flash_msg}. Log captures below or skip for later.",
+                "info",
+            )
+
     flash("Progress added.", "success")
     return redirect(url_for("target_detail", target_id=target.id))
 
@@ -1492,6 +1646,180 @@ def delete_session(session_id):
     
     flash("Session deleted successfully.", "success")
     return redirect(url_for("target_detail", target_id=target_id))
+
+
+@app.route("/target/<int:target_id>/calibration/log", methods=["POST"])
+def log_calibration_capture(target_id):
+    target = Target.query.get_or_404(target_id)
+    if not target.calibration_tracking_enabled:
+        flash("Calibration tracking is not enabled for this target.", "warning")
+        return redirect(url_for("target_detail", target_id=target.id))
+
+    frame_type = (request.form.get("frame_type") or "").strip().lower()
+    if frame_type not in ("dark", "flat", "dark_flat", "bias"):
+        flash("Invalid calibration frame type.", "danger")
+        return redirect(url_for("target_detail", target_id=target.id))
+
+    channel = (request.form.get("channel") or "").strip().upper() or None
+    if frame_type in ("flat", "dark_flat") and not channel:
+        flash("Channel is required for flats and dark flats.", "danger")
+        return redirect(url_for("target_detail", target_id=target.id))
+    if frame_type in ("dark", "bias"):
+        channel = None
+
+    try:
+        frame_count = int(request.form.get("frame_count", 0))
+    except (TypeError, ValueError):
+        frame_count = 0
+    if frame_count <= 0:
+        flash("Frame count must be greater than zero.", "danger")
+        return redirect(url_for("target_detail", target_id=target.id))
+
+    checkpoint = (request.form.get("checkpoint") or "manual").strip().lower()
+    if checkpoint not in ("midpoint", "end", "manual"):
+        checkpoint = "manual"
+
+    imaging_date_str = request.form.get("imaging_date")
+    if imaging_date_str:
+        from datetime import datetime as dt
+        capture_date = dt.strptime(imaging_date_str, "%Y-%m-%d").date()
+    else:
+        capture_date = datetime.now().date()
+
+    capture = CalibrationCapture(
+        target_id=target.id,
+        date=capture_date,
+        frame_type=frame_type,
+        channel=channel,
+        checkpoint=checkpoint,
+        frame_count=frame_count,
+        notes=request.form.get("notes"),
+    )
+    db.session.add(capture)
+    db.session.commit()
+    flash("Calibration capture logged.", "success")
+    return redirect(url_for("target_detail", target_id=target.id))
+
+
+@app.route("/target/<int:target_id>/calibration/skip", methods=["POST"])
+def skip_calibration_checkpoint(target_id):
+    target = Target.query.get_or_404(target_id)
+    channel = (request.form.get("channel") or "").strip().upper()
+    frame_type = (request.form.get("frame_type") or "").strip().lower()
+    checkpoint = (request.form.get("checkpoint") or "").strip().lower()
+
+    if frame_type not in ("flat", "dark_flat") or checkpoint not in ("midpoint", "end"):
+        flash("Invalid skip request.", "danger")
+        return redirect(url_for("target_detail", target_id=target.id))
+
+    existing = CalibrationCheckpointSkip.query.filter_by(
+        target_id=target.id,
+        channel=channel,
+        frame_type=frame_type,
+        checkpoint=checkpoint,
+    ).first()
+    if not existing:
+        db.session.add(
+            CalibrationCheckpointSkip(
+                target_id=target.id,
+                channel=channel,
+                frame_type=frame_type,
+                checkpoint=checkpoint,
+            )
+        )
+        db.session.commit()
+    flash(f"Skipped {frame_type.replace('_', ' ')} {checkpoint} for {channel}.", "info")
+    return redirect(url_for("target_detail", target_id=target.id))
+
+
+@app.route("/calibration/<int:capture_id>/edit", methods=["GET", "POST"])
+def edit_calibration_capture(capture_id):
+    capture = CalibrationCapture.query.get_or_404(capture_id)
+    target = capture.target
+
+    if request.method == "POST":
+        frame_type = (request.form.get("frame_type") or capture.frame_type).strip().lower()
+        if frame_type not in ("dark", "flat", "dark_flat", "bias"):
+            flash("Invalid calibration frame type.", "danger")
+            return redirect(url_for("edit_calibration_capture", capture_id=capture.id))
+
+        channel = (request.form.get("channel") or "").strip().upper() or None
+        if frame_type in ("flat", "dark_flat") and not channel:
+            flash("Channel is required for flats and dark flats.", "danger")
+            return redirect(url_for("edit_calibration_capture", capture_id=capture.id))
+        if frame_type in ("dark", "bias"):
+            channel = None
+
+        capture.frame_type = frame_type
+        capture.channel = channel
+        capture.frame_count = int(request.form.get("frame_count", capture.frame_count))
+        capture.notes = request.form.get("notes")
+        checkpoint = (request.form.get("checkpoint") or "manual").strip().lower()
+        capture.checkpoint = checkpoint if checkpoint in ("midpoint", "end", "manual") else "manual"
+
+        imaging_date_str = request.form.get("imaging_date")
+        if imaging_date_str:
+            from datetime import datetime as dt
+            capture.date = dt.strptime(imaging_date_str, "%Y-%m-%d").date()
+
+        db.session.commit()
+        flash("Calibration capture updated.", "success")
+        return redirect(url_for("target_detail", target_id=target.id))
+
+    channels = []
+    plan = (
+        TargetPlan.query
+        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
+        .order_by(TargetPlan.created_at.desc())
+        .first()
+    )
+    if plan:
+        plan_data = json.loads(plan.plan_json)
+        channels = [c.get("name") for c in plan_data.get("channels", []) if c.get("name")]
+
+    return render_template(
+        "edit_calibration.html",
+        capture=capture,
+        target=target,
+        channels=channels,
+    )
+
+
+@app.route("/calibration/<int:capture_id>/delete", methods=["POST"])
+def delete_calibration_capture(capture_id):
+    capture = CalibrationCapture.query.get_or_404(capture_id)
+    target_id = capture.target_id
+    db.session.delete(capture)
+    db.session.commit()
+    flash("Calibration capture deleted.", "success")
+    return redirect(url_for("target_detail", target_id=target_id))
+
+
+@app.route("/api/target/<int:target_id>/calibration")
+def api_target_calibration(target_id):
+    target = Target.query.get_or_404(target_id)
+    plan = (
+        TargetPlan.query
+        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
+        .order_by(TargetPlan.created_at.desc())
+        .first()
+    )
+    plan_data = json.loads(plan.plan_json) if plan else None
+
+    from collections import defaultdict
+    progress_seconds = defaultdict(float)
+    for s in target.sessions:
+        progress_seconds[s.channel] += s.sub_exposure_seconds * s.sub_count
+
+    cal_config = get_effective_calibration_config(target)
+    payload = get_calibration_payload(
+        cal_config,
+        plan_data,
+        progress_seconds,
+        target.calibration_captures,
+        target.calibration_checkpoint_skips,
+    )
+    return jsonify(payload)
 
 
 @app.route("/imaging-logs")
@@ -1710,6 +2038,17 @@ def global_settings():
         config.default_packup_time = request.form.get("default_packup_time", config.default_packup_time)
         config.default_min_altitude = float(request.form.get("default_min_altitude", config.default_min_altitude))
         config.timezone_name = request.form.get("timezone_name", config.timezone_name)
+
+        config.default_calibration_darks = int(request.form.get("default_calibration_darks", 0) or 0)
+        config.default_calibration_flats_per_channel = int(
+            request.form.get("default_calibration_flats_per_channel", 0) or 0
+        )
+        config.default_calibration_dark_flats_per_channel = int(
+            request.form.get("default_calibration_dark_flats_per_channel", 0) or 0
+        )
+        config.default_calibration_bias = int(request.form.get("default_calibration_bias", 0) or 0)
+        config.default_calibration_two_point = request.form.get("default_calibration_two_point") == "1"
+
         config.updated_at = datetime.utcnow()
         
         try:
@@ -1926,6 +2265,32 @@ def target_settings(target_id):
         
         target.override_packup_time = override_packup if override_packup else None
         target.override_min_altitude = float(override_altitude) if override_altitude else None
+
+        target.calibration_tracking_enabled = (
+            request.form.get("calibration_tracking_enabled") == "1"
+        )
+        override_darks = request.form.get("override_calibration_darks", "").strip()
+        override_flats = request.form.get("override_calibration_flats_per_channel", "").strip()
+        override_dark_flats = request.form.get(
+            "override_calibration_dark_flats_per_channel", ""
+        ).strip()
+        override_bias = request.form.get("override_calibration_bias", "").strip()
+        override_two_point = request.form.get("override_calibration_two_point", "").strip()
+
+        target.override_calibration_darks = int(override_darks) if override_darks else None
+        target.override_calibration_flats_per_channel = (
+            int(override_flats) if override_flats else None
+        )
+        target.override_calibration_dark_flats_per_channel = (
+            int(override_dark_flats) if override_dark_flats else None
+        )
+        target.override_calibration_bias = int(override_bias) if override_bias else None
+        if override_two_point == "1":
+            target.override_calibration_two_point = True
+        elif override_two_point == "0":
+            target.override_calibration_two_point = False
+        else:
+            target.override_calibration_two_point = None
         
         try:
             db.session.commit()
@@ -1937,7 +2302,13 @@ def target_settings(target_id):
         # Simple redirect back to target detail - window will be recalculated
         return redirect(url_for("target_detail", target_id=target_id))
     
-    return render_template("target_settings.html", target=target, global_config=global_config)
+    effective_calibration = get_effective_calibration_config(target)
+    return render_template(
+        "target_settings.html",
+        target=target,
+        global_config=global_config,
+        effective_calibration=effective_calibration,
+    )
 
 
 @app.route("/manage-object-mappings", methods=["GET", "POST"])
@@ -2528,12 +2899,23 @@ def migrate_db():
     from sqlalchemy import inspect, text
     
     inspector = inspect(db.engine)
+
+    def add_column_if_missing(table, column, ddl):
+        if table not in inspector.get_table_names():
+            print(f"Table '{table}' does not exist. Run 'flask init-db' first.")
+            return
+        columns = [col["name"] for col in inspector.get_columns(table)]
+        if column not in columns:
+            with db.engine.connect() as conn:
+                conn.execute(text(ddl))
+                conn.commit()
+            print(f"Added '{column}' column to {table} table.")
+        else:
+            print(f"Column '{column}' already exists in {table} table.")
     
-    # Check if filters table exists
+    # Legacy filter migration
     if 'filters' in inspector.get_table_names():
         columns = [col['name'] for col in inspector.get_columns('filters')]
-        
-        # Add astrobin_id column if it doesn't exist
         if 'astrobin_id' not in columns:
             with db.engine.connect() as conn:
                 conn.execute(text('ALTER TABLE filters ADD COLUMN astrobin_id INTEGER'))
@@ -2541,9 +2923,30 @@ def migrate_db():
             print("Added 'astrobin_id' column to filters table.")
         else:
             print("Column 'astrobin_id' already exists in filters table.")
-    else:
-        print("Table 'filters' does not exist. Run 'flask init-db' first.")
-    
+
+    # GlobalConfig calibration defaults
+    for col, ddl in (
+        ("default_calibration_darks", "ALTER TABLE global_config ADD COLUMN default_calibration_darks INTEGER DEFAULT 0"),
+        ("default_calibration_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_flats_per_channel INTEGER DEFAULT 0"),
+        ("default_calibration_dark_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_dark_flats_per_channel INTEGER DEFAULT 0"),
+        ("default_calibration_bias", "ALTER TABLE global_config ADD COLUMN default_calibration_bias INTEGER DEFAULT 0"),
+        ("default_calibration_two_point", "ALTER TABLE global_config ADD COLUMN default_calibration_two_point BOOLEAN DEFAULT 1"),
+    ):
+        add_column_if_missing("global_config", col, ddl)
+
+    # Target calibration settings
+    for col, ddl in (
+        ("calibration_tracking_enabled", "ALTER TABLE targets ADD COLUMN calibration_tracking_enabled BOOLEAN DEFAULT 0"),
+        ("override_calibration_darks", "ALTER TABLE targets ADD COLUMN override_calibration_darks INTEGER"),
+        ("override_calibration_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_flats_per_channel INTEGER"),
+        ("override_calibration_dark_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_dark_flats_per_channel INTEGER"),
+        ("override_calibration_bias", "ALTER TABLE targets ADD COLUMN override_calibration_bias INTEGER"),
+        ("override_calibration_two_point", "ALTER TABLE targets ADD COLUMN override_calibration_two_point BOOLEAN"),
+    ):
+        add_column_if_missing("targets", col, ddl)
+
+    db.create_all()
+    print("Ensured calibration tables exist (calibration_captures, calibration_checkpoint_skips).")
     print("Database migration complete.")
 
 

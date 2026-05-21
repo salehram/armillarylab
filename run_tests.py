@@ -75,7 +75,7 @@ def main():
     
     parser.add_argument(
         '--type', '-t',
-        choices=['all', 'config', 'migration'],
+        choices=['all', 'config', 'migration', 'app'],
         default='all',
         help='Type of tests to run (default: all)'
     )

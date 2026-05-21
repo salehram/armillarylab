@@ -240,7 +240,7 @@ class DatabaseMigrator:
         level2_tables = ['targets', 'object_mappings', 'filter_wheel_slots', 'palette_filters']
         
         # Level 3: Depend on level 2 tables
-        level3_tables = ['target_plans', 'imaging_sessions']
+        level3_tables = ['target_plans', 'imaging_sessions', 'calibration_captures', 'calibration_checkpoint_skips']
         
         # Filter to only existing tables
         all_tables = set(metadata.tables.keys())
@@ -274,7 +274,8 @@ class DatabaseMigrator:
         inspector = inspect(self.target_engine)
         existing_tables = inspector.get_table_names()
         
-        required_tables = ['targets', 'target_plans', 'imaging_sessions', 'filters', 
+        required_tables = ['targets', 'target_plans', 'imaging_sessions', 'calibration_captures',
+                          'calibration_checkpoint_skips', 'filters',
                           'palettes', 'target_types', 'global_config', 'filter_wheels',
                           'filter_wheel_slots', 'object_mappings', 'palette_filters']
         

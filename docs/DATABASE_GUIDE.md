@@ -310,6 +310,23 @@ The migration tool handles everything automatically:
 
 No manual steps required!
 
+### Calibration tables (v2.2.0)
+
+After upgrading from v2.1.x, run on existing SQLite databases:
+
+```powershell
+flask migrate-db
+```
+
+This adds columns to `global_config` and `targets`, and creates:
+
+| Table | Purpose |
+|-------|---------|
+| `calibration_captures` | Logged dark/flat/dark_flat/bias captures per target |
+| `calibration_checkpoint_skips` | Skipped midpoint/end flat suggestions per channel |
+
+These tables are included in `config/migration.py` export/import ordering (level 3, after `targets`).
+
 ---
 
 ### SQLite → PostgreSQL Migration

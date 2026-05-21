@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Calibration - {{ target.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h2 class="text-light mb-1"><i class="bi bi-sliders me-2"></i>Edit Calibration Capture</h2>
+          <p class="text-muted mb-0">{{ target.name }} · {{ capture.date.strftime('%B %d, %Y') }}</p>
+        </div>
+        <a href="{{ url_for('target_detail', target_id=target.id) }}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+      </div>
+
+      <div class="card bg-secondary text-light">
+        <div class="card-body">
+          <form method="post">
+            <div class="mb-3">
+              <label class="form-label">Date</label>
+              <input class="form-control" type="date" name="imaging_date"
+                     value="{{ capture.date.strftime('%Y-%m-%d') }}" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Frame type</label>
+              <select class="form-control" name="frame_type" id="cal_frame_type" required>
+                <option value="dark" {% if capture.frame_type == 'dark' %}selected{% endif %}>Darks</option>
+                <option value="flat" {% if capture.frame_type == 'flat' %}selected{% endif %}>Flats</option>
+                <option value="dark_flat" {% if capture.frame_type == 'dark_flat' %}selected{% endif %}>Dark flats</option>
+                <option value="bias" {% if capture.frame_type == 'bias' %}selected{% endif %}>Bias</option>
+              </select>
+            </div>
+            <div class="mb-3" id="cal_channel_group">
+              <label class="form-label">Channel</label>
+              <select class="form-control" name="channel" id="cal_channel">
+                <option value="">Select channel...</option>
+                {% for ch in channels %}
+                  <option value="{{ ch }}" {% if capture.channel == ch %}selected{% endif %}>{{ ch }}</option>
+                {% endfor %}
+                {% if capture.channel and capture.channel not in channels %}
+                  <option value="{{ capture.channel }}" selected>{{ capture.channel }}</option>
+                {% endif %}
+              </select>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Frame count</label>
+                <input class="form-control" type="number" name="frame_count" min="1" step="1"
+                       value="{{ capture.frame_count }}" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Checkpoint</label>
+                <select class="form-control" name="checkpoint">
+                  <option value="manual" {% if capture.checkpoint == 'manual' or not capture.checkpoint %}selected{% endif %}>Manual</option>
+                  <option value="midpoint" {% if capture.checkpoint == 'midpoint' %}selected{% endif %}>Midpoint</option>
+                  <option value="end" {% if capture.checkpoint == 'end' %}selected{% endif %}>End</option>
+                </select>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" name="notes" rows="2">{{ capture.notes or '' }}</textarea>
+            </div>
+            <div class="d-flex justify-content-between">
+              <a href="{{ url_for('target_detail', target_id=target.id) }}" class="btn btn-outline-secondary">Cancel</a>
+              <button type="submit" class="btn btn-primary">Update Capture</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const typeSelect = document.getElementById('cal_frame_type');
+  const channelGroup = document.getElementById('cal_channel_group');
+  function toggleChannel() {
+    const t = typeSelect.value;
+    channelGroup.style.display = (t === 'flat' || t === 'dark_flat') ? 'block' : 'none';
+  }
+  typeSelect.addEventListener('change', toggleChannel);
+  toggleChannel();
+});
+</script>
+{% endblock %}

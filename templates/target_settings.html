@@ -35,6 +35,58 @@
         </div>
       </div>
 
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Calibration Tracking</h5>
+        </div>
+        <div class="card-body">
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="calibration_tracking_enabled" name="calibration_tracking_enabled" value="1"
+                   {% if target.calibration_tracking_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="calibration_tracking_enabled">
+              Enable calibration frame tracking for this target
+            </label>
+          </div>
+          <p class="text-muted small">Track darks, flats, dark flats, and bias. Flats/dark flats can use two-point capture suggestions per channel.</p>
+          <div class="row">
+            <div class="col-md-6 mb-2">
+              <label for="override_calibration_darks" class="form-label">Darks override</label>
+              <input type="number" class="form-control" id="override_calibration_darks" name="override_calibration_darks"
+                     min="0" step="1" value="{{ target.override_calibration_darks if target.override_calibration_darks is not none else '' }}"
+                     placeholder="Global: {{ global_config.default_calibration_darks or 0 }}">
+            </div>
+            <div class="col-md-6 mb-2">
+              <label for="override_calibration_bias" class="form-label">Bias override</label>
+              <input type="number" class="form-control" id="override_calibration_bias" name="override_calibration_bias"
+                     min="0" step="1" value="{{ target.override_calibration_bias if target.override_calibration_bias is not none else '' }}"
+                     placeholder="Global: {{ global_config.default_calibration_bias or 0 }}">
+            </div>
+            <div class="col-md-6 mb-2">
+              <label for="override_calibration_flats_per_channel" class="form-label">Flats per channel override</label>
+              <input type="number" class="form-control" id="override_calibration_flats_per_channel" name="override_calibration_flats_per_channel"
+                     min="0" step="1" value="{{ target.override_calibration_flats_per_channel if target.override_calibration_flats_per_channel is not none else '' }}"
+                     placeholder="Global: {{ global_config.default_calibration_flats_per_channel or 0 }}">
+            </div>
+            <div class="col-md-6 mb-2">
+              <label for="override_calibration_dark_flats_per_channel" class="form-label">Dark flats per channel override</label>
+              <input type="number" class="form-control" id="override_calibration_dark_flats_per_channel" name="override_calibration_dark_flats_per_channel"
+                     min="0" step="1" value="{{ target.override_calibration_dark_flats_per_channel if target.override_calibration_dark_flats_per_channel is not none else '' }}"
+                     placeholder="Global: {{ global_config.default_calibration_dark_flats_per_channel or 0 }}">
+            </div>
+            <div class="col-md-12">
+              <label for="override_calibration_two_point" class="form-label">Two-point flat capture</label>
+              <select class="form-select" id="override_calibration_two_point" name="override_calibration_two_point">
+                <option value="" {% if target.override_calibration_two_point is none %}selected{% endif %}>
+                  Use global default ({{ 'On' if global_config.default_calibration_two_point else 'Off' }})
+                </option>
+                <option value="1" {% if target.override_calibration_two_point == true %}selected{% endif %}>On — midpoint + end</option>
+                <option value="0" {% if target.override_calibration_two_point == false %}selected{% endif %}>Off — end of channel only</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">
           <i class="bi bi-floppy me-1"></i>Save Target Settings
@@ -69,6 +121,25 @@
           <span class="badge bg-secondary ms-2">Global Default</span>
         {% endif %}
         </p>
+
+        <hr>
+        <p><strong>Calibration tracking:</strong><br>
+        {% if target.calibration_tracking_enabled %}
+          <span class="badge bg-success">Enabled</span>
+        {% else %}
+          <span class="badge bg-secondary">Disabled</span>
+        {% endif %}
+        </p>
+        {% if target.calibration_tracking_enabled %}
+        <p class="small mb-1"><strong>Effective counts:</strong></p>
+        <ul class="small text-muted">
+          <li>Darks: {{ effective_calibration.darks }}</li>
+          <li>Flats / channel: {{ effective_calibration.flats_per_channel }}</li>
+          <li>Dark flats / channel: {{ effective_calibration.dark_flats_per_channel }}</li>
+          <li>Bias: {{ effective_calibration.bias }}</li>
+          <li>Two-point: {{ 'Yes' if effective_calibration.two_point else 'No' }}</li>
+        </ul>
+        {% endif %}
 
         <hr>
         <p class="small text-muted">

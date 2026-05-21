@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Project rename**: Versions 1.0.0 and 2.0.0 shipped under the previous project name **AstroPlanner**. The project was renamed to **ArmillaryLab** in 2026 to avoid conflict with an unrelated existing product. Historical version labels in this file refer to the project's name at the time of release.
 
+## [2.2.0] - 2026-05-21
+
+### Version 2.2.0 - Calibration Frames Management
+
+**ArmillaryLab v2.2.0** adds optional per-target calibration frame tracking with global defaults, manual dark/bias logging, and two-point flat/dark-flat suggestions at channel midpoint and end.
+
+### Added
+
+#### Calibration Frame Tracking
+- **Opt-in per target**: Enable calibration tracking on target settings; global defaults on Settings page
+- **Frame types**: Darks and bias (manual logging); flats and dark flats per channel with optional two-point workflow
+- **Two-point suggestions**: At 50% light frame progress, suggest half the flat/dark-flat count; remainder at channel completion
+- **Skip/defer**: Skip midpoint or end checkpoints; end suggestion covers remaining counts; manual catch-up anytime
+- **Action items**: Target detail banners with Log capture / Skip for now when thresholds are crossed
+- **History**: Calibration captures grouped by date with edit/delete
+- **API**: `GET /api/target/<id>/calibration` for status and suggestions JSON
+
+#### New Models & Module
+- `CalibrationCapture`, `CalibrationCheckpointSkip` tables
+- `GlobalConfig` / `Target` calibration default and override columns
+- `calibration_utils.py` — suggestion engine and status aggregation
+
+### Changed
+
+- **AstroBin export**: When calibration tracking is enabled, export modal prefills darks/flats/flatDarks/bias from captured totals (still overridable)
+- **`flask migrate-db`**: Adds calibration columns to existing SQLite databases and creates new tables
+
+### Notes
+
+- Run `flask migrate-db` after upgrading if you use an existing SQLite database.
+- Clone target copies calibration **settings** only, not capture history or skip records.
+
 ## [2.1.0] - 2026-05-16
 
 ### 🎉 Version 2.1.0 - Night Conditions & Intelligent Channel Suggestion

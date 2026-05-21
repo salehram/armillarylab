@@ -71,10 +71,10 @@ def init():
         # Create global config if it doesn't exist
         if not GlobalConfig.query.first():
             global_config = GlobalConfig(
-                observer_latitude=32.0,
-                observer_longitude=35.0,
-                observer_elevation=500,
-                timezone_name="Asia/Jerusalem",
+                observer_lat=24.7136,
+                observer_lon=46.6753,
+                observer_elev_m=600,
+                timezone_name="Asia/Riyadh",
                 default_packup_time="01:00",
                 default_min_altitude=30.0
             )
@@ -82,18 +82,19 @@ def init():
         
         # Create default target types if they don't exist
         default_types = [
-            {"name": "Galaxy", "description": "Galaxies and galaxy clusters"},
-            {"name": "Nebula", "description": "Emission, reflection, and planetary nebulae"},
-            {"name": "Star Cluster", "description": "Open and globular star clusters"},
-            {"name": "Star", "description": "Individual stars and binary systems"},
-            {"name": "Solar System", "description": "Planets, moons, and other solar system objects"},
-            {"name": "Other", "description": "Other astronomical objects"}
+            {"name": "Galaxy", "recommended_palette": "LRGB", "description": "Galaxies and galaxy clusters"},
+            {"name": "Nebula", "recommended_palette": "SHO", "description": "Emission, reflection, and planetary nebulae"},
+            {"name": "Star Cluster", "recommended_palette": "LRGB", "description": "Open and globular star clusters"},
+            {"name": "Star", "recommended_palette": "LRGB", "description": "Individual stars and binary systems"},
+            {"name": "Solar System", "recommended_palette": "LRGB", "description": "Planets, moons, and other solar system objects"},
+            {"name": "Other", "recommended_palette": "LRGB", "description": "Other astronomical objects"}
         ]
         
         for type_data in default_types:
             if not TargetType.query.filter_by(name=type_data["name"]).first():
                 target_type = TargetType(
                     name=type_data["name"],
+                    recommended_palette=type_data["recommended_palette"],
                     description=type_data["description"]
                 )
                 db.session.add(target_type)
@@ -102,6 +103,7 @@ def init():
         default_palettes = [
             {
                 "name": "SHO",
+                "display_name": "Sulfur-Hydrogen-Oxygen (SHO)",
                 "description": "Sulfur II, Hydrogen Alpha, Oxygen III",
                 "is_system": True,
                 "filters_json": json.dumps({
@@ -112,6 +114,7 @@ def init():
             },
             {
                 "name": "HOO",
+                "display_name": "Hydrogen-Oxygen-Oxygen (HOO)",
                 "description": "Hydrogen Alpha, Oxygen III, Oxygen III",
                 "is_system": True,
                 "filters_json": json.dumps({
@@ -121,6 +124,7 @@ def init():
             },
             {
                 "name": "LRGB",
+                "display_name": "Luminance-Red-Green-Blue (LRGB)",
                 "description": "Luminance, Red, Green, Blue",
                 "is_system": True,
                 "filters_json": json.dumps({
@@ -136,6 +140,7 @@ def init():
             if not Palette.query.filter_by(name=palette_data["name"]).first():
                 palette = Palette(
                     name=palette_data["name"],
+                    display_name=palette_data["display_name"],
                     description=palette_data["description"],
                     is_system=palette_data["is_system"],
                     filters_json=palette_data["filters_json"]
@@ -321,8 +326,9 @@ def migrate(to, target_url, backup, validate, update_env):
         with Session(target_engine) as session:
             # Delete in reverse dependency order using raw SQL for reliability
             tables_to_clear = [
+                'calibration_checkpoint_skips', 'calibration_captures',
                 'imaging_sessions', 'target_plans', 'targets',
-                'filter_wheel_slots', 'filter_wheels', 
+                'filter_wheel_slots', 'filter_wheels',
                 'palette_filters', 'object_mappings',
                 'filters', 'palettes', 'target_types', 'global_config'
             ]
@@ -435,11 +441,14 @@ def reset():
         return
 
     from app import db
-    from config.destructive_db_guard import destructive_db_allowed
+    from config.destructive_db_guard import destructive_db_allowed, destructive_db_allowed_pg
 
     db_config = get_database_config()
-    db_path = db_config.sqlite_file_path() if db_config.db_type == "sqlite" else None
-    allowed, refuse_msg = destructive_db_allowed(db_path, "flask db reset")
+    if db_config.db_type == "sqlite":
+        db_path = db_config.sqlite_file_path()
+        allowed, refuse_msg = destructive_db_allowed(db_path, "flask db reset")
+    else:
+        allowed, refuse_msg = destructive_db_allowed_pg(db, "flask db reset")
     if not allowed:
         click.echo(refuse_msg)
         return

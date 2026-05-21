@@ -13,7 +13,7 @@ from flask import (
     send_file, g
 )
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import relationship
 from werkzeug.utils import secure_filename
 
@@ -255,15 +255,20 @@ def _ensure_sqlite_before_request():
     return render_template("db_unavailable.html", message=msg), 503
 
 
-@app.errorhandler(OperationalError)
-def _handle_sqlite_schema_errors(e):
-    """Retry once after schema sync (missing columns) or sidecar cleanup — never restore."""
+def _handle_missing_schema(e):
+    """Shared handler for missing columns/tables across both SQLite and PostgreSQL."""
     if app.config.get("TESTING"):
         raise e
     err = str(getattr(e, "orig", e)).lower()
-    if "no such table" not in err and "no such column" not in err:
+
+    missing_column = ("no such column" in err or
+                      ("column" in err and "does not exist" in err))
+    missing_table = ("no such table" in err or
+                     ("relation" in err and "does not exist" in err))
+
+    if not missing_column and not missing_table:
         raise e
-    if "no such column" in err and not getattr(g, "_schema_sync_attempted", False):
+    if missing_column and not getattr(g, "_schema_sync_attempted", False):
         g._schema_sync_attempted = True
         try:
             applied = apply_additive_schema_migrations(log=app.logger.info)
@@ -275,10 +280,10 @@ def _handle_sqlite_schema_errors(e):
                 return redirect(request.url), 302
         except Exception as sync_exc:
             app.logger.error("Schema sync failed: %s", sync_exc)
-    if "no such table" not in err:
+    if not missing_table:
         raise e
-    if not getattr(g, "_sqlite_recheck_attempted", False):
-        g._sqlite_recheck_attempted = True
+    if not getattr(g, "_db_recheck_attempted", False):
+        g._db_recheck_attempted = True
         ok, msg = _check_sqlite_health()
         if ok:
             if request.path.startswith("/api/"):
@@ -291,8 +296,21 @@ def _handle_sqlite_schema_errors(e):
         return jsonify({"error": "Database unavailable", "detail": err}), 503
     return render_template(
         "db_unavailable.html",
-        message="Database schema error. Stop Flask and inspect armillarylab.db — automatic restore is disabled.",
+        message="Database schema error. Run 'flask migrate-db' to apply missing schema changes.",
     ), 503
+
+
+@app.errorhandler(OperationalError)
+def _handle_operational_error(e):
+    """SQLite raises OperationalError for missing tables/columns."""
+    return _handle_missing_schema(e)
+
+
+@app.errorhandler(ProgrammingError)
+def _handle_programming_error(e):
+    """PostgreSQL raises ProgrammingError for missing tables/columns."""
+    return _handle_missing_schema(e)
+
 
 # Register CLI commands
 register_cli_commands(app)

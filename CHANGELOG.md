@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Project rename**: Versions 1.0.0 and 2.0.0 shipped under the previous project name **AstroPlanner**. The project was renamed to **ArmillaryLab** in 2026 to avoid conflict with an unrelated existing product. Historical version labels in this file refer to the project's name at the time of release.
 
+## [Unreleased]
+
+### Changed
+
+- **SQLite sample data**: The repository commits **`armillarylab.db`** (project root) as a **demonstration dataset** (bundled presets, demo targets/sessions/calibration). `.gitignore` now ignores every `*.db` **except** that file so local clones get the showcase catalog by default.
+- **Documentation**: Describes **Option A** (keep bundled DB + `migrate-db`) versus **Option B** (delete + `init-db` for blank). README, Database Guide, and Docker Guide updated accordingly.
+
+---
+
 ## [2.2.0] - 2026-05-21
 
 ### Version 2.2.0 - Calibration Frames Management

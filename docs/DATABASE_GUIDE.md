@@ -7,15 +7,33 @@ This guide provides clear, step-by-step instructions for configuring and migrati
 ## Table of Contents
 
 1. [Quick Reference](#quick-reference)
-2. [Part 1: Initial Setup](#part-1-initial-setup)
+2. [SQLite: sample dataset vs blank install](#sqlite-sample-dataset-vs-blank-install)
+3. [Part 1: Initial Setup](#part-1-initial-setup)
    - [Option A: SQLite (Default)](#option-a-sqlite-default)
    - [Option B: PostgreSQL](#option-b-postgresql)
-3. [Part 2: Migrating Between Databases](#part-2-migrating-between-databases)
+4. [Part 2: Migrating Between Databases](#part-2-migrating-between-databases)
    - [SQLite → PostgreSQL Migration](#sqlite--postgresql-migration)
    - [Migrating When PostgreSQL Schema Is Out of Sync](#migrating-when-postgresql-schema-is-out-of-sync)
    - [PostgreSQL → SQLite Migration](#postgresql--sqlite-migration)
-4. [Environment Variables Reference](#environment-variables-reference)
-5. [Troubleshooting](#troubleshooting)
+5. [Environment Variables Reference](#environment-variables-reference)
+6. [Troubleshooting](#troubleshooting)
+
+---
+
+## SQLite: sample dataset vs blank install
+
+After `git clone`, the repository **includes [`armillarylab.db`](../armillarylab.db)** in the project root as a **curated demonstration dataset**: multiple targets with plans, imaging session history (including calibration-tracking examples where applicable), filters, palettes, wheel config, and global settings suited for exploring the UI and exports.
+
+Pick **one** path:
+
+| Choice | What to do |
+|--------|------------|
+| **Use bundled sample data** | Keep `armillarylab.db` from Git. Stop the dev server if it is running, run `flask migrate-db` once (additive schema sync), then start Flask. Inspect with `python scripts/inspect_db.py armillarylab.db` or `flask db info` if desired. |
+| **Start completely fresh** | Delete or rename `armillarylab.db`, then run `flask init-db` (optionally `--filter-preset zwo`, etc.). This creates a clean schema and seeded equipment presets only — no demo targets unless you create them in the UI. |
+
+> **Reminder:** Prefer stopping Flask (`Ctrl+C`) before **`flask migrate-db`**, replacing `armillarylab.db`, or running restore scripts — see [.cursor/rules/flask-migrate-db-safety.mdc](../.cursor/rules/flask-migrate-db-safety.mdc) rationale.
+
+PostgreSQL setups do **not** use this file; configure `DATABASE_URL` as usual.
 
 ---
 
@@ -119,6 +137,8 @@ SQLite is the default database and requires **zero configuration**. Perfect for:
 - Single-user installations
 - Quick testing
 - Portable setups (database is a single file)
+
+See **[SQLite: sample dataset vs blank install](#sqlite-sample-dataset-vs-blank-install)** for the curated `armillarylab.db` bundled in Git (**skip `init-db`** if you keep that file) versus a blank install (**delete file, then run `init-db`** below).
 
 #### Steps
 

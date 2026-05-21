@@ -30,8 +30,9 @@ env
 *.swp
 *.swo
 
-# Database files (will be created in container)
+# Database files (*.db skipped except bundled demo SQLite)
 *.db
+!armillarylab.db
 *.db-journal
 *.db.backup*
 instance/

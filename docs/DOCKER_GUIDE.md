@@ -31,14 +31,16 @@ This guide explains how to deploy ArmillaryLab using Docker containers, with sup
 git clone https://github.com/yourusername/armillarylab.git
 cd armillarylab
 
-# Start with default settings
+# Start with default settings (image contains bundled armillarylab.db sample data under /app)
 docker-compose up -d
 
-# Initialize the database
-docker-compose exec armillarylab flask init-db
+# One-time additive schema sync (recommended after pulls / version upgrades), then reload if needed:
+docker-compose exec armillarylab flask migrate-db
 
 # Access at http://localhost:5000
 ```
+
+Use **`flask init-db`** inside the container only if you mounted an **empty** database path or intentionally removed `/app/armillarylab.db`; see **[Database Guide — SQLite: sample dataset vs blank install](DATABASE_GUIDE.md#sqlite-sample-dataset-vs-blank-install)**.
 
 ---
 

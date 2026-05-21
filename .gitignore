@@ -4,8 +4,12 @@ __pycache__/
 *$py.class
 
 # SQLite database files
-armillarylab.db
+# Repo tracks armillarylab.db as a curated demo/sample dataset (see README).
+# All other SQLite files (*.db, backup copies, corrupt snapshots) stay untracked.
 *.db
+!armillarylab.db
+armillarylab.db.backup_*
+armillarylab.db.corrupt_*
 
 # C extensions
 *.so

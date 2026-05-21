@@ -143,18 +143,38 @@ Detailed documentation is available in the [docs/](docs/) folder:
    pip install -r requirements.txt
    ```
 
-4. **Initialize the database**
+4. **Choose how to start SQLite** (defaults in `.env`; see [Database Guide](docs/DATABASE_GUIDE.md) for Postgres).
+
+   **Option A — Use the bundled sample dataset (recommended for demos and exploring the UI)**  
+
+   After `git clone`, the repo contains `armillarylab.db` with example targets, session history, calibration examples, filters, and presets. Align the schema, then run:
    ```bash
+   # Stop Flask if it is running, then:
+   flask migrate-db
+   flask --app app.py run
+   ```
+   Navigate to **`http://127.0.0.1:5000`** (or the host/port shown in the terminal).
+
+   **Option B — Blank database / your own equipment from scratch**
+
+   Delete the sample database file (or move it aside), then initialize:
+   ```bash
+   # Windows PowerShell
+   Remove-Item armillarylab.db -ErrorAction SilentlyContinue
+
+   # Linux/macOS
+   rm -f armillarylab.db
+
    flask init-db
+   # Optional presets, e.g. flask init-db --filter-preset zwo
+   flask --app app.py run
    ```
 
-5. **Run the application**
-   ```bash
-   flask run
-   ```
+5. **Open your browser**
 
-6. **Open your browser**
-   Navigate to `http://127.0.0.1:5000`
+   Navigate to **`http://127.0.0.1:5000`** (unless you configured another port).
+
+> **PostgreSQL**: For production-style setup, configure `DATABASE_URL` / `DATABASE_TYPE` and follow [Database Guide § Option B — PostgreSQL](docs/DATABASE_GUIDE.md). The bundled `armillarylab.db` applies only when using project-root SQLite.
 
 ## 🖥️ Command Line Interface (CLI)
 

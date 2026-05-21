@@ -12,6 +12,7 @@ This guide provides clear, step-by-step instructions for configuring and migrati
    - [Option B: PostgreSQL](#option-b-postgresql)
 3. [Part 2: Migrating Between Databases](#part-2-migrating-between-databases)
    - [SQLite → PostgreSQL Migration](#sqlite--postgresql-migration)
+   - [Migrating When PostgreSQL Schema Is Out of Sync](#migrating-when-postgresql-schema-is-out-of-sync)
    - [PostgreSQL → SQLite Migration](#postgresql--sqlite-migration)
 4. [Environment Variables Reference](#environment-variables-reference)
 5. [Troubleshooting](#troubleshooting)
@@ -27,6 +28,7 @@ This guide provides clear, step-by-step instructions for configuring and migrati
 | Initialize PostgreSQL | Set env vars + `flask init-db` |
 | Migrate SQLite → PostgreSQL | `flask db migrate --to postgresql --target-url <URL>` |
 | Migrate PostgreSQL → SQLite | `flask db migrate --to sqlite` |
+| Sync schema on existing PG | Point env at PG + `flask migrate-db` |
 | Create backup | `flask db backup` |
 
 > **Migration Note:** The migrate command automatically handles schema creation, data clearing, data migration, and `.env` file updates. Just run the command and confirm!
@@ -86,8 +88,9 @@ Instead of setting environment variables manually each time, you can use `.env` 
    DATABASE_URL=postgresql://username:password@hostname:5432/armillarylab
    
    # Connection pool (adjust based on your needs)
-   POSTGRES_POOL_SIZE=20
-   POSTGRES_POOL_TIMEOUT=30
+   DB_POOL_SIZE=20
+   DB_POOL_TIMEOUT=30
+   DB_POOL_RECYCLE=3600
    ```
 
 3. **Initialize and run:**
@@ -412,6 +415,67 @@ flask run
 Open http://127.0.0.1:5000 and verify all your targets, sessions, and settings are intact.
 
 > **Note:** Your original SQLite database file remains unchanged as a backup.
+
+---
+
+### Migrating When PostgreSQL Schema Is Out of Sync
+
+If you've been using SQLite and applied schema updates (e.g. v2.2.0 calibration tables) but your PostgreSQL database was created earlier and is now behind, you have two options:
+
+#### Option 1: Clean Migration (Recommended — PG has no valuable data)
+
+Drop and recreate the PG schema, then migrate all data from SQLite:
+
+```powershell
+# 1. Stop Flask (Ctrl+C)
+
+# 2. Drop the stale PG schema (in psql or pgAdmin)
+psql -U armillarylab_user -d armillarylab -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO armillarylab_user;"
+
+# 3. Run the full migration (reads from current SQLite, writes to PG)
+flask db migrate --to postgresql --target-url "postgresql://armillarylab_user:password@localhost:5432/armillarylab"
+
+# 4. Open a NEW terminal (so .env changes take effect), then:
+flask db info
+flask run
+```
+
+This recreates all 13 tables with the current schema and copies all your SQLite data (targets, sessions, calibration logs, filters, palettes, etc.) into PostgreSQL.
+
+#### Option 2: In-Place Schema Update (PG has data you want to keep)
+
+Point the app at PostgreSQL temporarily and run the additive migrations:
+
+```powershell
+# 1. Stop Flask (Ctrl+C)
+
+# 2. Set env to point at PostgreSQL
+$env:DATABASE_TYPE = "postgresql"
+$env:DATABASE_URL = "postgresql://armillarylab_user:password@localhost:5432/armillarylab"
+
+# 3. Run additive schema migrations (adds missing columns + creates missing tables)
+flask migrate-db
+
+# 4. Verify
+flask db info
+
+# 5. Restart Flask
+flask run
+```
+
+`flask migrate-db` will:
+- Add missing calibration columns to `global_config` and `targets`
+- Create `calibration_captures` and `calibration_checkpoint_skips` tables
+- Run `db.create_all()` to catch any other missing tables
+- Never delete existing rows
+
+#### Which option to choose?
+
+| Your situation | Use |
+|---------------|-----|
+| PG has old test data or was just an empty init | **Option 1** (clean migration) |
+| PG has production data you need to preserve | **Option 2** (in-place update) |
+| PG has different data you want to merge with SQLite | Manual — export both, merge, reimport |
 
 ---
 

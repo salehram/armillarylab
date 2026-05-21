@@ -1,5 +1,72 @@
 {% extends "base.html" %}
 {% block content %}
+
+{% macro notes_and_pixi_cards() %}
+    <!-- NOTES -->
+    <div class="card bg-secondary text-light">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Notes</span>
+        <button type="button" class="btn btn-sm btn-outline-light" id="notes-edit-btn"
+                onclick="toggleNotesEdit(true)">
+          <i class="bi bi-pencil me-1"></i>Edit
+        </button>
+      </div>
+      <div class="card-body">
+        <div id="notes-display">
+          {% if target.notes %}
+            <pre class="mb-0" style="white-space: pre-wrap;">{{ target.notes }}</pre>
+          {% else %}
+            <p class="text-muted mb-0">No notes yet.</p>
+          {% endif %}
+        </div>
+        <div id="notes-editor" style="display: none;">
+          <textarea class="form-control bg-dark text-light mb-2" id="notes-textarea"
+                    rows="6" placeholder="Add your notes here...">{{ target.notes or '' }}</textarea>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-primary" onclick="saveNotes()">
+              <i class="bi bi-floppy me-1"></i>Save
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleNotesEdit(false)">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PIXINSIGHT WORKFLOW -->
+    <div class="card bg-secondary text-light">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>PixInsight Workflow</span>
+        <button type="button" class="btn btn-sm btn-outline-light" id="pixi-edit-btn"
+                onclick="togglePixiEdit(true)">
+          <i class="bi bi-pencil me-1"></i>Edit
+        </button>
+      </div>
+      <div class="card-body">
+        <div id="pixi-display">
+          {% if target.pixinsight_workflow %}
+            <pre class="mb-0" style="white-space: pre-wrap;">{{ target.pixinsight_workflow }}</pre>
+          {% else %}
+            <p class="text-muted mb-0">No workflow documented yet.</p>
+          {% endif %}
+        </div>
+        <div id="pixi-editor" style="display: none;">
+          <textarea class="form-control bg-dark text-light mb-2" id="pixi-textarea"
+                    rows="6" placeholder="Document your PixInsight workflow here...">{{ target.pixinsight_workflow or '' }}</textarea>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-primary" onclick="savePixiWorkflow()">
+              <i class="bi bi-floppy me-1"></i>Save
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="togglePixiEdit(false)">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+{% endmacro %}
+
 <div id="currentTargetId" data-target-id="{{ target.id }}" hidden></div>
 
 <style>
@@ -380,9 +447,9 @@
 
 <!-- ROW 2: TONIGHT'S WINDOW (LEFT) + RIGHT COLUMN STACK (PROGRESS + NOTES + PIXINSIGHT) -->
 <div class="row g-4 mb-4">
-  <!-- TONIGHT -->
-  <div class="col-lg-6">
-    <div class="card bg-secondary text-light h-100">
+  <!-- TONIGHT (+ Notes/PixInsight under chart when calibration tracking is on) -->
+  <div class="col-lg-6{% if calibration_config.enabled %} d-flex flex-column gap-4{% endif %}">
+    <div class="card bg-secondary text-light{% if not calibration_config.enabled %} h-100{% endif %}">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>Tonight's Window</span>
         <small class="text-muted">
@@ -472,9 +539,13 @@
         {% endif %}
       </div>
     </div>
+
+    {% if calibration_config.enabled %}
+      {{ notes_and_pixi_cards() }}
+    {% endif %}
   </div>
 
-  <!-- RIGHT COLUMN STACK: PROGRESS + NOTES + PIXINSIGHT -->
+  <!-- RIGHT COLUMN STACK: PROGRESS + CALIBRATION (and Notes/PixInsight when calibration off) -->
   <div class="col-lg-6 d-flex flex-column gap-4">
 
     {% if calibration_config.enabled and calibration_data %}
@@ -711,69 +782,9 @@
     </div>
     {% endif %}
 
-    <!-- NOTES -->
-    <div class="card bg-secondary text-light">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Notes</span>
-        <button type="button" class="btn btn-sm btn-outline-light" id="notes-edit-btn"
-                onclick="toggleNotesEdit(true)">
-          <i class="bi bi-pencil me-1"></i>Edit
-        </button>
-      </div>
-      <div class="card-body">
-        <div id="notes-display">
-          {% if target.notes %}
-            <pre class="mb-0" style="white-space: pre-wrap;">{{ target.notes }}</pre>
-          {% else %}
-            <p class="text-muted mb-0">No notes yet.</p>
-          {% endif %}
-        </div>
-        <div id="notes-editor" style="display: none;">
-          <textarea class="form-control bg-dark text-light mb-2" id="notes-textarea"
-                    rows="6" placeholder="Add your notes here...">{{ target.notes or '' }}</textarea>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-sm btn-primary" onclick="saveNotes()">
-              <i class="bi bi-floppy me-1"></i>Save
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleNotesEdit(false)">
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- PIXINSIGHT WORKFLOW -->
-    <div class="card bg-secondary text-light">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>PixInsight Workflow</span>
-        <button type="button" class="btn btn-sm btn-outline-light" id="pixi-edit-btn"
-                onclick="togglePixiEdit(true)">
-          <i class="bi bi-pencil me-1"></i>Edit
-        </button>
-      </div>
-      <div class="card-body">
-        <div id="pixi-display">
-          {% if target.pixinsight_workflow %}
-            <pre class="mb-0" style="white-space: pre-wrap;">{{ target.pixinsight_workflow }}</pre>
-          {% else %}
-            <p class="text-muted mb-0">No workflow documented yet.</p>
-          {% endif %}
-        </div>
-        <div id="pixi-editor" style="display: none;">
-          <textarea class="form-control bg-dark text-light mb-2" id="pixi-textarea"
-                    rows="6" placeholder="Document your PixInsight workflow here...">{{ target.pixinsight_workflow or '' }}</textarea>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-sm btn-primary" onclick="savePixiWorkflow()">
-              <i class="bi bi-floppy me-1"></i>Save
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="togglePixiEdit(false)">
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    {% if not calibration_config.enabled %}
+      {{ notes_and_pixi_cards() }}
+    {% endif %}
   </div>
 </div>
 

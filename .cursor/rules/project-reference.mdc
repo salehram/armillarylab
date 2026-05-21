@@ -9,7 +9,7 @@ alwaysApply: true
 
 # ArmillaryLab — Project Reference Cache
 
-> **Last updated:** 2026-05-21
+> **Last updated:** 2026-05-23
 > **App version:** 2.2.0 (`APP_VERSION` in `app.py`)
 > **Purpose:** Save agent discovery time and token cost. Read this FIRST, explore SECOND.
 > **Maintenance:** MANDATORY — before committing, if you modified app.py (models/routes/helpers/database schema), any template, astro_utils.py, **conditions_utils.py**, **calibration_utils.py**, time_utils.py, nina_integration.py, config/*.py, requirements.txt, or .env.example in a way that changes the project's structure or API surface (new/removed/renamed models, columns, routes, templates, env vars, dependencies), you MUST update the relevant section(s) below and bump the "Last updated" date. A stop-hook also enforces this as a safety net.

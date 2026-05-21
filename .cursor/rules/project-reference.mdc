@@ -9,7 +9,7 @@ alwaysApply: true
 
 # ArmillaryLab — Project Reference Cache
 
-> **Last updated:** 2026-05-23
+> **Last updated:** 2026-05-22
 > **App version:** 2.2.0 (`APP_VERSION` in `app.py`)
 > **Purpose:** Save agent discovery time and token cost. Read this FIRST, explore SECOND.
 > **Maintenance:** MANDATORY — before committing, if you modified app.py (models/routes/helpers/database schema), any template, astro_utils.py, **conditions_utils.py**, **calibration_utils.py**, time_utils.py, nina_integration.py, config/*.py, requirements.txt, or .env.example in a way that changes the project's structure or API surface (new/removed/renamed models, columns, routes, templates, env vars, dependencies), you MUST update the relevant section(s) below and bump the "Last updated" date. A stop-hook also enforces this as a safety net.
@@ -65,6 +65,7 @@ astroplanner/
 ├── Dockerfile                # python:3.12-slim, gunicorn
 ├── docker-compose.yml        # Single web service, volume mounts
 ├── run_tests.py              # pytest runner script
+├── armillarylab.db           # Bundled SQLite showcase data (tracked; omit via delete + flask init-db for blank)
 └── README.md
 ```
 

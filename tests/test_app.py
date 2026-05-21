@@ -28,10 +28,9 @@ from calibration_utils import (
 @pytest.fixture
 def client():
     app.config["TESTING"] = True
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
 
     with app.app_context():
-        db.engine.dispose()
+        db.session.remove()
         db.drop_all()
         db.create_all()
         config = GlobalConfig(

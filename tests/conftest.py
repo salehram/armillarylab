@@ -8,8 +8,9 @@ import os
 import tempfile
 from pathlib import Path
 
-# Must run before any test module imports app.py — prevents live DB access on import.
+# Must run before any test module imports app.py — never touch armillarylab.db.
 os.environ.setdefault("TESTING", "1")
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 import pytest
 from config.database import DatabaseConfig

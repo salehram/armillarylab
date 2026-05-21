@@ -23,6 +23,7 @@ def run_tests(test_type='all', database='all', verbose=False, coverage=False):
     test_env['FLASK_ENV'] = 'testing'
     test_env['TESTING'] = '1'
     test_env['DATABASE_TYPE'] = 'sqlite'  # Default to SQLite for tests
+    test_env['DATABASE_URL'] = 'sqlite:///:memory:'  # Never use armillarylab.db
     
     # Build pytest command
     cmd = ['python', '-m', 'pytest']

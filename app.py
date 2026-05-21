@@ -53,7 +53,7 @@ from config.flask_process import (
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.2.1"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -73,6 +73,10 @@ def inject_version():
 # --- Database configuration with PostgreSQL support ----------------------
 flask_config, db_config = get_flask_config(BASE_DIR)
 app.config.update(flask_config)
+
+if os.environ.get("TESTING", "").lower() in ("1", "true", "yes"):
+    app.config["TESTING"] = True
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
 
 db = SQLAlchemy(app)
 
@@ -319,7 +323,11 @@ def _handle_missing_schema(e):
         return jsonify({"error": "Database unavailable", "detail": err}), 503
     return render_template(
         "db_unavailable.html",
-        message="Database schema error. Run 'flask migrate-db' to apply missing schema changes.",
+        message=(
+            "Database schema error. If your code is newer than this database file, "
+            "stop Flask and run flask migrate-db once. If you already match this version, "
+            "restore from backup or diagnose with python scripts/diagnose_db.py."
+        ),
     ), 503
 
 
@@ -1807,11 +1815,6 @@ def update_plan(target_id):
                 # Skip invalid custom filters
                 pass
 
-    # Original total (from plan or sum of channels)
-    orig_total = data.get("total_planned_minutes")
-    if not orig_total:
-        orig_total = sum(float(c.get("planned_minutes", 0) or 0) for c in channels)
-
     # Ensure numeric planned_minutes and sub_exposure_seconds fields exist
     for c in channels:
         c["planned_minutes"] = float(c.get("planned_minutes", 0) or 0)
@@ -1825,6 +1828,20 @@ def update_plan(target_id):
             else:
                 c["sub_exposure_seconds"] = 180
 
+    baseline_total = sum(c["planned_minutes"] for c in channels)
+
+    # Original total (metadata or sum after normalization)
+    try:
+        orig_total_meta = float(data.get("total_planned_minutes") or 0)
+    except (TypeError, ValueError):
+        orig_total_meta = 0.0
+    if not orig_total_meta or orig_total_meta <= 0:
+        orig_total_meta = baseline_total
+
+    scale_denom = orig_total_meta if orig_total_meta > 0 else baseline_total
+    if scale_denom <= 0:
+        scale_denom = baseline_total if baseline_total > 0 else 1.0
+
     # User-specified total
     form_total_raw = request.form.get("total_planned_minutes")
     new_total = None
@@ -1834,25 +1851,31 @@ def update_plan(target_id):
         except ValueError:
             new_total = None
 
-    # If user provided a new total, rescale channels proportionally first
-    if new_total and new_total > 0 and orig_total and orig_total > 0:
-        scale = new_total / orig_total
-        for c in channels:
-            c["planned_minutes"] = c["planned_minutes"] * scale
+    # If user raised/lowered the master total vs the saved plan, rescale proportionally first.
+    # Stale POST fields for each channel minute would undo that rescale unless we skip them.
+    master_total_rescaled = False
+    if new_total is not None and new_total > 0 and scale_denom > 0:
+        delta = abs(new_total - scale_denom)
+        if delta > 0.001:
+            master_total_rescaled = True
+            scale = new_total / scale_denom
+            for c in channels:
+                c["planned_minutes"] = c["planned_minutes"] * scale
 
-    # Then apply per-channel overrides from the form
+    # Then apply per-channel overrides from the form (minutes only if master total did not drive rescale).
     for c in channels:
         name = c.get("name")
         # Per-channel minutes override
-        field_name = f"ch_{name}_minutes"
-        field_val = request.form.get(field_name)
-        if field_val is not None and field_val != "":
-            try:
-                mins = float(field_val)
-                if mins >= 0:
-                    c["planned_minutes"] = mins
-            except ValueError:
-                pass  # ignore bad values, keep previous
+        if not master_total_rescaled:
+            field_name = f"ch_{name}_minutes"
+            field_val = request.form.get(field_name)
+            if field_val is not None and field_val != "":
+                try:
+                    mins = float(field_val)
+                    if mins >= 0:
+                        c["planned_minutes"] = mins
+                except ValueError:
+                    pass  # ignore bad values, keep previous
 
         # Per-channel sub-exposure override
         sub_field = f"ch_{name}_subexp"
@@ -3353,6 +3376,11 @@ def list_filter_presets():
 @app.cli.command("migrate-db")
 def migrate_db():
     """Run additive schema migrations (never deletes rows).
+
+    Run after upgrading ArmillaryLab when models gain columns/tables, or when
+    the UI or SQL mentions missing tables/columns. Not required on every Flask
+    start or after every backup restore; a DB that already matches this checkout
+    is typically a no-op.
 
     Safe workflow:
       1. flask db info          # confirm which database file/server is active

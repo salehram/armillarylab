@@ -5,7 +5,7 @@ alwaysApply: true
 
 # SQLite Database Corruption Incident — Agent Reference
 
-> **Last updated:** 2026-05-21  
+> **Last updated:** 2026-05-23  
 > **Conversation transcript:** `agent-transcripts/a43ac73b-920b-4a23-808a-67eacfd90823.jsonl`  
 > **User environment:** Windows 11, project under **OneDrive** (`OneDrive\Desktop\Python\astroplanner`), Flask dev server with **auto-reload enabled** (`FLASK_DEBUG=1`), SQLite at project root **`armillarylab.db`** (no secondary DB path).
 
@@ -27,6 +27,7 @@ The problem **escalated after v2.2.0** because agent sessions increased DB file 
 - **No automatic restore** from backup at runtime
 - **UI/template work must not touch the database**
 - Ask before inserting/restoring data
+- **Unless the user's current message explicitly asks for database work** (repair, restore, diagnose, migrate, inspect data/schema, backups, SQLite corruption investigations): **do not** run `sqlite3`, `scripts/diagnose_db.py`, `scripts/restore_db.py`, `scripts/inspect_db.py`, `flask migrate-db` / `init-db` / `db reset`, or copy/overwrite `armillarylab.db`, `git checkout -- armillarylab.db`, or import `app`/`db` to probe the DB. Answer unrelated questions (features, bugs, templates, tests, refactoring) **without touching the SQLite file.**
 
 ---
 
@@ -282,8 +283,9 @@ On OneDrive (auto-detected):
 
 ### ALWAYS
 
-- Diagnose with `python scripts/diagnose_db.py` (read-only)
-- Use `python scripts/inspect_db.py armillarylab.db` for row counts
+- **Unless the user's message explicitly requests database operations**, do **nothing** listed below — skip diagnosis, inspect, migrate, restore, and do not probe `armillarylab.db`.
+- When the user **explicitly** asks about DB health or corruption (or agrees after you offered): run `python scripts/diagnose_db.py` (read-only).
+- For row counts **only when explicitly requested**: `python scripts/inspect_db.py armillarylab.db`
 - For data fixes: **ask user first**, prefer UI, or use `sqlite3` scripts that do not import `app`
 - Set `TESTING=1` when running pytest (`run_tests.py` does this)
 - After any manual restore: tell user to **restart Flask**

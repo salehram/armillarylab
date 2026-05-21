@@ -57,7 +57,11 @@ def main():
     print("After:", sqlite_db_info(db_path))
 
     if restored:
-        print("Next (Flask stopped): flask migrate-db")
+        print(
+            "Next: restart Flask. Run `flask migrate-db` only if you pulled/upgraded ArmillaryLab "
+            "since that backup was made, or Flask errors with missing tables/columns — "
+            "otherwise the restored file already matches this checkout."
+        )
         return 0
     return 1
 

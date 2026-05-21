@@ -172,12 +172,13 @@
                          type="number" step="0.1" min="0"
                          name="total_planned_minutes"
                          value="{{ plan_data.total_planned_minutes }}"
-                         placeholder="Minutes">
+                         placeholder="Minutes"
+                         title="Change total time; channel minutes scale proportionally">
                   <span class="input-group-text">min</span>
                 </div>
                 <input id="total_planned_hms" class="form-control form-control-sm mt-1"
                        type="text" placeholder="H:M:S format (e.g. 6:00:00)"
-                       title="Enter time in H:M:S format">
+                       title="Change total time; channel minutes scale proportionally (Tab out to apply)">
               </div>
 
               <div class="col-md-4 mb-2">
@@ -1058,7 +1059,8 @@ document.addEventListener("DOMContentLoaded", function () {
            String(s).padStart(2,"0");
   }
 
-  function recalcFrames() {
+  function recalcFrames(options) {
+    const skipTotalUpdate = options && options.skipTotalUpdate;
     console.log('recalcFrames called');
     if (!planTable) {
       console.log('No planTable found');
@@ -1202,8 +1204,10 @@ document.addEventListener("DOMContentLoaded", function () {
       if (rf) rf.textContent = remainingFrames;
     });
     
-    // Update total planned time when any minutes change
-    updateTotalPlannedTime();
+    // Update total planned time when channel minutes change (not when total drives redistribution)
+    if (!skipTotalUpdate) {
+      updateTotalPlannedTime();
+    }
   }
 
   // H:M:S parsing and formatting utilities
@@ -1239,6 +1243,64 @@ document.addEventListener("DOMContentLoaded", function () {
     return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
   }
 
+  function redistributeFromTotal(newTotalMinutes) {
+    if (isNaN(newTotalMinutes) || newTotalMinutes < 0) return;
+
+    const currentRows = document.querySelectorAll("#plan-table tr.plan-row");
+    const channelRows = [];
+    let baseline = 0;
+
+    currentRows.forEach(row => {
+      const minInput = row.querySelector("input.channel-minutes");
+      if (!minInput) return;
+      const val = parseFloat(minInput.value) || 0;
+      channelRows.push({ row, minInput, val });
+      baseline += val;
+    });
+
+    if (channelRows.length === 0) return;
+
+    if (baseline > 0) {
+      const scale = newTotalMinutes / baseline;
+      channelRows.forEach(({ row, minInput, val }) => {
+        const newMins = val * scale;
+        minInput.value = newMins.toFixed(1);
+        const hmsInput = row.querySelector("input.channel-hms");
+        if (hmsInput) {
+          hmsInput.value = minutesToHMS(newMins);
+        }
+      });
+    } else if (newTotalMinutes > 0) {
+      const perChannel = newTotalMinutes / channelRows.length;
+      channelRows.forEach(({ row, minInput }) => {
+        minInput.value = perChannel.toFixed(1);
+        const hmsInput = row.querySelector("input.channel-hms");
+        if (hmsInput) {
+          hmsInput.value = minutesToHMS(perChannel);
+        }
+      });
+    } else {
+      channelRows.forEach(({ row, minInput }) => {
+        minInput.value = "0.0";
+        const hmsInput = row.querySelector("input.channel-hms");
+        if (hmsInput) {
+          hmsInput.value = minutesToHMS(0);
+        }
+      });
+    }
+
+    const totalMinutesInput = document.getElementById("total_planned_minutes");
+    const totalHmsInput = document.getElementById("total_planned_hms");
+    if (totalMinutesInput) {
+      totalMinutesInput.value = newTotalMinutes.toFixed(1);
+    }
+    if (totalHmsInput) {
+      totalHmsInput.value = minutesToHMS(newTotalMinutes);
+    }
+
+    recalcFrames({ skipTotalUpdate: true });
+  }
+
   // Setup bidirectional total planned time conversion
   function setupTotalTimeConversion() {
     const minutesInput = document.getElementById("total_planned_minutes");
@@ -1251,24 +1313,27 @@ document.addEventListener("DOMContentLoaded", function () {
       hmsInput.value = minutesToHMS(parseFloat(minutesInput.value));
     }
     
-    // Minutes input changes -> update HMS
+    // Minutes input changes -> sync H:M:S and redistribute channels proportionally
     minutesInput.addEventListener("input", function() {
       const inputMinutes = parseFloat(this.value);
       if (!isNaN(inputMinutes) && inputMinutes >= 0) {
         hmsInput.value = minutesToHMS(inputMinutes);
+        redistributeFromTotal(inputMinutes);
       }
     });
     
-    // HMS input changes -> update minutes
-    hmsInput.addEventListener("input", function() {
-      const seconds = parseHMS(this.value);
+    function applyTotalHms() {
+      const seconds = parseHMS(hmsInput.value);
       if (seconds !== null) {
         const convertedMinutes = seconds / 60;
         minutesInput.value = convertedMinutes.toFixed(1);
-        // Trigger recalc to update the plan
-        recalcFrames();
+        redistributeFromTotal(convertedMinutes);
       }
-    });
+    }
+
+    // H:M:S apply on change/blur so partial typing does not constantly rescale
+    hmsInput.addEventListener("change", applyTotalHms);
+    hmsInput.addEventListener("blur", applyTotalHms);
   }
 
   // Setup everything
@@ -2229,6 +2294,11 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateTotalPlannedTime() {
     const totalMinutesInput = document.getElementById('total_planned_minutes');
     if (!totalMinutesInput) return;
+
+    const active = document.activeElement;
+    if (active && (active.id === 'total_planned_minutes' || active.id === 'total_planned_hms')) {
+      return;
+    }
     
     let totalMinutes = 0;
     const minutesInputs = document.querySelectorAll('.minutes-input');

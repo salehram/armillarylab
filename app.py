@@ -149,6 +149,7 @@ def apply_additive_schema_migrations(log=print):
         ("default_calibration_dark_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_dark_flats_per_channel INTEGER DEFAULT 0"),
         ("default_calibration_bias", "ALTER TABLE global_config ADD COLUMN default_calibration_bias INTEGER DEFAULT 0"),
         ("default_calibration_two_point", f"ALTER TABLE global_config ADD COLUMN default_calibration_two_point BOOLEAN {bool_true}"),
+        ("max_cloud_cover_pct", "ALTER TABLE global_config ADD COLUMN max_cloud_cover_pct INTEGER DEFAULT 25"),
     ):
         add_column_if_missing("global_config", col, ddl)
 
@@ -189,6 +190,7 @@ def _ensure_pg_schema_ready():
         applied = apply_additive_schema_migrations(log=app.logger.info)
         if applied:
             db.engine.dispose()
+            db.session.remove()
     except Exception as exc:
         app.logger.warning("PostgreSQL startup schema sync skipped: %s", exc)
 
@@ -228,9 +230,11 @@ def _init_sqlite_for_serving_process():
     if "Removed sidecars" in msg:
         app.logger.info("SQLite startup: %s", msg)
         db.engine.dispose()
+        db.session.remove()
     applied = apply_additive_schema_migrations(log=app.logger.info)
     if applied:
         db.engine.dispose()
+        db.session.remove()
 
 
 _register_sqlite_shutdown()
@@ -361,6 +365,9 @@ class GlobalConfig(db.Model):
     # Default observation settings
     default_packup_time = db.Column(db.String(5), default="01:00")
     default_min_altitude = db.Column(db.Float, default=30.0)
+
+    # Night conditions thresholds
+    max_cloud_cover_pct = db.Column(db.Integer, default=25)
 
     # Default calibration frame counts (0 = disabled)
     default_calibration_darks = db.Column(db.Integer, default=0)
@@ -2463,6 +2470,7 @@ def api_conditions(target_id):
         window_end_local=window_end_local,
         window_start_utc=window_start_utc,
         window_end_utc=window_end_utc,
+        max_cloud_cover_pct=config.max_cloud_cover_pct or 25,
     )
     return jsonify(result)
 
@@ -2481,6 +2489,10 @@ def global_settings():
         config.default_min_altitude = float(request.form.get("default_min_altitude", config.default_min_altitude))
         config.timezone_name = request.form.get("timezone_name", config.timezone_name)
 
+        raw_cloud_pct = request.form.get("max_cloud_cover_pct", "").strip()
+        if raw_cloud_pct:
+            config.max_cloud_cover_pct = max(5, min(100, int(raw_cloud_pct)))
+
         config.default_calibration_darks = int(request.form.get("default_calibration_darks", 0) or 0)
         config.default_calibration_flats_per_channel = int(
             request.form.get("default_calibration_flats_per_channel", 0) or 0
@@ -2495,12 +2507,15 @@ def global_settings():
         
         try:
             db.session.commit()
+            db.session.refresh(config)
             flash("Global settings updated successfully! All targets will use new defaults.", "success")
         except Exception as e:
             db.session.rollback()
             flash(f"Error updating settings: {e}", "error")
             
         return redirect(url_for("global_settings"))
+    
+    db.session.refresh(config)
     
     # Load available presets for the UI
     presets = []

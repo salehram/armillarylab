@@ -470,6 +470,152 @@ def compute_wind_session_advice(
     }
 
 
+def compute_cloud_session_advice(
+    weather: dict | None,
+    window_weather: dict | None,
+    max_cloud_pct: int = 25,
+) -> dict | None:
+    """Summarize cloud cover for go / caution / marginal / skip decisions.
+
+    Uses the worst of current cloud cover and window max cloud cover.
+    Thresholds are relative to the user's configured max_cloud_pct tolerance.
+    """
+    candidates: list[tuple[float, str]] = []
+    if weather:
+        c = weather.get("cloud_cover_pct")
+        if c is not None:
+            try:
+                candidates.append((float(c), "now"))
+            except (TypeError, ValueError):
+                pass
+    window_max_cloud = None
+    window_avg_cloud = None
+    if window_weather:
+        cmax = window_weather.get("cloud_cover_max_pct")
+        cavg = window_weather.get("cloud_cover_avg_pct")
+        if cmax is not None:
+            try:
+                window_max_cloud = float(cmax)
+                candidates.append((window_max_cloud, "window"))
+            except (TypeError, ValueError):
+                pass
+        if cavg is not None:
+            try:
+                window_avg_cloud = float(cavg)
+            except (TypeError, ValueError):
+                pass
+
+    if not candidates:
+        return None
+
+    worst_cloud = max(c[0] for c in candidates)
+    threshold = max(max_cloud_pct, 5)
+
+    if worst_cloud <= threshold:
+        verdict = "go"
+        title = "Cloud cover: clear"
+        detail = (
+            f"Peak cloud cover ~{worst_cloud:.0f}% — within your {threshold}% threshold. "
+            "Skies should be clear enough for imaging."
+        )
+    elif worst_cloud <= threshold + 15:
+        verdict = "caution"
+        title = "Cloud cover: partly cloudy"
+        detail = (
+            f"Peak cloud cover ~{worst_cloud:.0f}% (your threshold: {threshold}%). "
+            "Expect occasional thin clouds; you may lose some subs but imaging is possible."
+        )
+    elif worst_cloud <= threshold + 35:
+        verdict = "marginal"
+        title = "Cloud cover: mostly cloudy"
+        detail = (
+            f"Peak cloud cover ~{worst_cloud:.0f}% — well above your {threshold}% threshold. "
+            "Significant cloud interference expected; many frames may be unusable."
+        )
+    else:
+        verdict = "skip"
+        title = "Cloud cover: overcast — consider skipping"
+        detail = (
+            f"Peak cloud cover ~{worst_cloud:.0f}% — far above your {threshold}% tolerance. "
+            "Overcast conditions will block most targets; skipping is the safer call."
+        )
+
+    now_cloud_val = None
+    if weather and weather.get("cloud_cover_pct") is not None:
+        try:
+            now_cloud_val = float(weather["cloud_cover_pct"])
+        except (TypeError, ValueError):
+            pass
+    if window_max_cloud is not None and (now_cloud_val is None or window_max_cloud >= now_cloud_val):
+        worst_source = "window"
+    else:
+        worst_source = "now"
+
+    notes: list[str] = []
+    if window_avg_cloud is not None and window_max_cloud is not None:
+        if window_max_cloud - window_avg_cloud > 20:
+            notes.append(
+                f"Window average is {window_avg_cloud:.0f}% but peaks at {window_max_cloud:.0f}% "
+                "— clouds may be intermittent with clear gaps."
+            )
+
+    return {
+        "verdict": verdict,
+        "title": title,
+        "detail": detail,
+        "worst_cloud_pct": round(worst_cloud, 1),
+        "worst_cloud_source": worst_source,
+        "window_avg_cloud_pct": round(window_avg_cloud, 1) if window_avg_cloud is not None else None,
+        "window_max_cloud_pct": round(window_max_cloud, 1) if window_max_cloud is not None else None,
+        "threshold_pct": threshold,
+        "notes": notes or None,
+    }
+
+
+_VERDICT_RANK = {"go": 0, "caution": 1, "marginal": 2, "skip": 3}
+
+
+def compute_session_advice(
+    wind_session: dict | None,
+    cloud_session: dict | None,
+) -> dict | None:
+    """Combine wind and cloud verdicts into an overall session go/skip recommendation."""
+    parts = []
+    if wind_session:
+        parts.append(("wind", wind_session))
+    if cloud_session:
+        parts.append(("cloud", cloud_session))
+
+    if not parts:
+        return None
+
+    worst_verdict = "go"
+    for _, adv in parts:
+        v = adv.get("verdict", "go")
+        if _VERDICT_RANK.get(v, 0) > _VERDICT_RANK.get(worst_verdict, 0):
+            worst_verdict = v
+
+    titles = {
+        "go": "Conditions favorable — go image!",
+        "caution": "Conditions acceptable with caution",
+        "marginal": "Conditions marginal — imaging risky",
+        "skip": "Conditions poor — consider skipping tonight",
+    }
+
+    factors = []
+    if wind_session:
+        factors.append(f"Wind: {wind_session['verdict']}")
+    if cloud_session:
+        factors.append(f"Clouds: {cloud_session['verdict']}")
+
+    return {
+        "verdict": worst_verdict,
+        "title": titles.get(worst_verdict, "Unknown"),
+        "factors": factors,
+        "driven_by": max(parts, key=lambda p: _VERDICT_RANK.get(p[1].get("verdict", "go"), 0))[0] if parts else None,
+    }
+
+
 # ---------------------------------------------------------------------------
 # 3. 7Timer  (seeing, transparency)
 # ---------------------------------------------------------------------------
@@ -703,6 +849,7 @@ def get_tonight_conditions(
     window_end_local: str | None = None,
     window_start_utc: str | None = None,
     window_end_utc: str | None = None,
+    max_cloud_cover_pct: int = 25,
 ) -> dict:
     """Main entry point. Returns a dict ready for JSON serialization."""
 
@@ -763,6 +910,8 @@ def get_tonight_conditions(
     moon_illum = moon["illumination_pct"] if moon else 50.0
     suggestion = suggest_tonight_channel(plan_data, moon_illum, progress_by_channel)
     wind_session = compute_wind_session_advice(weather, window_weather)
+    cloud_session = compute_cloud_session_advice(weather, window_weather, max_cloud_cover_pct)
+    session_advice = compute_session_advice(wind_session, cloud_session)
 
     message = None
     if status == "offline":
@@ -781,6 +930,8 @@ def get_tonight_conditions(
         "window_weather": window_weather,
         "window_astro": window_astro,
         "wind_session": wind_session,
+        "cloud_session": cloud_session,
+        "session_advice": session_advice,
         "suggestion": suggestion,
         "message": message,
     }

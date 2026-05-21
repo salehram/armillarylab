@@ -289,6 +289,38 @@
       + '</div>' + notes + '</div>';
   }
 
+  function cloudSessionBox(cs){
+    if (!cs) return '';
+    var vc = {go:'success', caution:'warning', marginal:'info', skip:'danger'};
+    var bc = vc[cs.verdict] || 'secondary';
+    var notes = '';
+    if (cs.notes && cs.notes.length){
+      notes = '<ul style="margin:6px 0 0 1rem;padding:0;font-size:.72rem;color:#a8b4c8;">';
+      for (var i = 0; i < cs.notes.length; i++) notes += '<li style="margin-bottom:4px;">'+cs.notes[i]+'</li>';
+      notes += '</ul>';
+    }
+    return '<div class="cp-section cp-cloud-session border-start border-4 border-'+bc+' ps-2 ms-1" style="background:rgba(255,255,255,.03);border-radius:4px;padding:8px 8px 8px 10px;">'
+      + '<div class="cp-label"><i class="bi bi-clouds me-1"></i>Cloud Cover</div>'
+      + '<div style="font-size:.82rem;font-weight:600;margin-bottom:4px;">'+cs.title+'</div>'
+      + '<div style="font-size:.75rem;color:#c8d0e0;line-height:1.35;">'+cs.detail+'</div>'
+      + '<div style="font-size:.72rem;color:#8a96ae;margin-top:6px;">Peak ~'+cs.worst_cloud_pct+'%'
+      + (cs.worst_cloud_source === 'window' ? ' — from imaging window forecast' : ' — current hour')
+      + ' · threshold '+cs.threshold_pct+'%'
+      + '</div>' + notes + '</div>';
+  }
+
+  function sessionAdviceBox(sa){
+    if (!sa) return '';
+    var vc = {go:'success', caution:'warning', marginal:'info', skip:'danger'};
+    var bc = vc[sa.verdict] || 'secondary';
+    var icons = {go:'bi-check-circle-fill', caution:'bi-exclamation-triangle-fill', marginal:'bi-exclamation-diamond-fill', skip:'bi-x-octagon-fill'};
+    var ic = icons[sa.verdict] || 'bi-question-circle';
+    var factors = sa.factors ? '<div style="font-size:.72rem;color:#8a96ae;margin-top:4px;">'+sa.factors.join(' · ')+'</div>' : '';
+    return '<div class="cp-section border-start border-4 border-'+bc+' ps-2 ms-1" style="background:rgba(255,255,255,.05);border-radius:4px;padding:10px 10px 8px 12px;margin-bottom:6px;">'
+      + '<div style="font-size:.85rem;font-weight:700;"><i class="bi '+ic+' me-1 text-'+bc+'"></i>'+sa.title+'</div>'
+      + factors + '</div>';
+  }
+
   function buildOverviewTab(d){
     var h = '';
     if (d.location) {
@@ -351,8 +383,14 @@
       h += '</div>';
       h += '</div>';
     }
+    if (d.session_advice) {
+      h += '<div style="margin-top:10px;">' + sessionAdviceBox(d.session_advice) + '</div>';
+    }
     if (d.wind_session) {
       h += '<div style="margin-top:8px;">' + windSessionBox(d.wind_session) + '</div>';
+    }
+    if (d.cloud_session) {
+      h += '<div style="margin-top:6px;">' + cloudSessionBox(d.cloud_session) + '</div>';
     }
     if (d.suggestion) {
       h += '<div class="cp-section" style="margin-top:10px;"><div class="cp-label"><i class="bi bi-lightbulb me-1"></i>Suggested Channel</div>';

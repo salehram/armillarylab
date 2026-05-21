@@ -33,6 +33,7 @@ Welcome to the ArmillaryLab documentation. This folder contains detailed guides 
 |----------|-------------|
 | [Docker Guide](DOCKER_GUIDE.md) | **Recommended!** Deploy with Docker containers |
 | [Database Guide](DATABASE_GUIDE.md) | SQLite/PostgreSQL setup and migration |
+| [RCA: SQLite empty shell & dev workflow](RCA-SQLite-empty-shell-and-dev-workflow.md) | Deep dive: forensic fingerprint, Flask reloader, ranked causes (handoff audits) |
 | [PostgreSQL Deployment](POSTGRESQL_DEPLOYMENT.md) | Production PostgreSQL configuration |
 | [PostgreSQL Summary](POSTGRESQL_SUMMARY.md) | Quick reference for PostgreSQL features |
 | [Deployment Security Plan](DEPLOYMENT_SECURITY_PLAN.md) | Security considerations for deployment |

@@ -89,6 +89,7 @@ astroplanner/
 | default_calibration_dark_flats_per_channel | Integer, default 0 | Dark flats per channel |
 | default_calibration_bias | Integer, default 0 | Optional bias count |
 | default_calibration_two_point | Boolean, default True | Split flats at midpoint + end |
+| max_cloud_cover_pct | Integer, default 25 | Cloud cover % threshold for go/skip advice |
 | timezone_name | String(64), default "Asia/Riyadh" | IANA timezone |
 | updated_at | DateTime, default utcnow | |
 
@@ -339,7 +340,7 @@ Relationships: `plans` → TargetPlan, `sessions` → ImagingSession, `calibrati
 | `/api/resolve` | GET | `api_resolve()` | Resolve catalog name → RA/Dec + target type |
 | `/api/palette-recommendation` | GET | `api_palette_recommendation()` | Recommend palette for a target type |
 | `/api/target/<id>/window` | GET | `api_target_window(id)` | JSON window info for target |
-| `/api/conditions/<id>` | GET | `api_conditions(id)` | Moon phase, weather, seeing, wind/gust go-skip advice, channel suggestion (3-tier fallback) |
+| `/api/conditions/<id>` | GET | `api_conditions(id)` | Moon phase, weather, seeing, wind/gust + cloud go-skip advice, combined session advice, channel suggestion (3-tier fallback) |
 | `/api/target/<id>/calibration` | GET | `api_target_calibration(id)` | Calibration status + suggestions JSON |
 | `/api/active-wheel` | GET | `api_active_wheel()` | JSON active filter wheel + slots |
 | `/health` | GET | `health_check()` | Returns `{"status": "healthy"}` |
@@ -373,8 +374,10 @@ Moon phase, weather, seeing, and channel suggestion with caching + offline fallb
 - `fetch_7timer(lat, lon)` → 72h astronomical forecast from 7Timer (seeing, transparency)
 - `suggest_tonight_channel(plan_data, moon_illum_pct, progress_by_channel)` → weighted scoring: `score = moon_weight * remaining_ratio`; Ha=1.0 (strongest NB), SII=0.7, OIII=0.3 (weakest NB), broadband=0.2 at full moon; all 1.0 at new moon
 - `compute_wind_session_advice(weather, window_weather)` → go/caution/marginal/skip verdict from peak gusts (km/h), gust factor vs sustained wind, optional notes (peak gust hour in window)
+- `compute_cloud_session_advice(weather, window_weather, max_cloud_pct)` → go/caution/marginal/skip verdict from peak cloud cover vs user's configured threshold
+- `compute_session_advice(wind_session, cloud_session)` → combined overall verdict (worst of wind + cloud)
 - Imaging-window weather aggregate includes `gust_factor`, `peak_gust_local`, and `gust_hour_stats` (counts of forecast hours with gust ≥35/45 km/h, gust ≥1.5× that hour’s wind, plus short hints)
-- `get_tonight_conditions(...)` → orchestrator with 3-tier fallback (online → cache → offline moon → error); JSON includes `wind_session`
+- `get_tonight_conditions(...)` → orchestrator with 3-tier fallback (online → cache → offline moon → error); JSON includes `wind_session`, `cloud_session`, `session_advice`
 - Cache: JSON files in `cache/conditions/`, keyed by lat/lon, max age 6h for weather
 
 ### `calibration_utils.py` — Calibration Frames (v2.2.0)

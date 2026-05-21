@@ -91,6 +91,30 @@ def test_effective_calibration_config_uses_target_override(client):
         assert cfg["two_point"] is True
 
 
+def test_global_settings_saves_max_cloud_cover_pct(client):
+    response = client.post(
+        "/settings",
+        data={
+            "observer_lat": "24.7136",
+            "observer_lon": "46.6753",
+            "observer_elev_m": "600",
+            "default_packup_time": "01:00",
+            "default_min_altitude": "30",
+            "timezone_name": "Asia/Riyadh",
+            "max_cloud_cover_pct": "15",
+            "default_calibration_darks": "0",
+            "default_calibration_flats_per_channel": "0",
+            "default_calibration_dark_flats_per_channel": "0",
+            "default_calibration_bias": "0",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert b'value="15"' in response.data
+    with app.app_context():
+        assert GlobalConfig.query.first().max_cloud_cover_pct == 15
+
+
 def test_midpoint_suggestion_at_half_light_frames(client):
     with app.app_context():
         target = _seed_target()

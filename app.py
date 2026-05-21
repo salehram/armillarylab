@@ -116,6 +116,11 @@ def apply_additive_schema_migrations(log=print):
     if "targets" not in inspector.get_table_names():
         return []
 
+    is_pg = db_config.db_type == "postgresql"
+    bool_true = "DEFAULT TRUE" if is_pg else "DEFAULT 1"
+    bool_false = "DEFAULT FALSE" if is_pg else "DEFAULT 0"
+    float_type = "DOUBLE PRECISION" if is_pg else "REAL"
+
     applied = []
 
     def add_column_if_missing(table, column, ddl):
@@ -143,12 +148,12 @@ def apply_additive_schema_migrations(log=print):
         ("default_calibration_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_flats_per_channel INTEGER DEFAULT 0"),
         ("default_calibration_dark_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_dark_flats_per_channel INTEGER DEFAULT 0"),
         ("default_calibration_bias", "ALTER TABLE global_config ADD COLUMN default_calibration_bias INTEGER DEFAULT 0"),
-        ("default_calibration_two_point", "ALTER TABLE global_config ADD COLUMN default_calibration_two_point BOOLEAN DEFAULT 1"),
+        ("default_calibration_two_point", f"ALTER TABLE global_config ADD COLUMN default_calibration_two_point BOOLEAN {bool_true}"),
     ):
         add_column_if_missing("global_config", col, ddl)
 
     for col, ddl in (
-        ("calibration_tracking_enabled", "ALTER TABLE targets ADD COLUMN calibration_tracking_enabled BOOLEAN DEFAULT 0"),
+        ("calibration_tracking_enabled", f"ALTER TABLE targets ADD COLUMN calibration_tracking_enabled BOOLEAN {bool_false}"),
         ("override_calibration_darks", "ALTER TABLE targets ADD COLUMN override_calibration_darks INTEGER"),
         ("override_calibration_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_flats_per_channel INTEGER"),
         ("override_calibration_dark_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_dark_flats_per_channel INTEGER"),
@@ -160,7 +165,7 @@ def apply_additive_schema_migrations(log=print):
     add_column_if_missing(
         "calibration_captures",
         "sub_exposure_seconds",
-        "ALTER TABLE calibration_captures ADD COLUMN sub_exposure_seconds REAL",
+        f"ALTER TABLE calibration_captures ADD COLUMN sub_exposure_seconds {float_type}",
     )
 
     db.create_all()
@@ -3307,9 +3312,9 @@ def migrate_db():
     from config.database import get_database_config
     from config.sqlite_health import check_sqlite_database, sqlite_has_core_schema, sqlite_db_info
 
-    db_config = get_database_config(BASE_DIR)
+    local_db_config = get_database_config(BASE_DIR)
 
-    def sqlite_row_counts():
+    def row_counts():
         counts = {}
         for table in ("targets", "target_plans", "imaging_sessions", "filters"):
             try:
@@ -3318,11 +3323,13 @@ def migrate_db():
                 counts[table] = None
         return counts
 
-    print(f"Database type: {db_config.db_type}")
-    print(f"Connection: {db_config.connection_string}")
+    print(f"Database type: {local_db_config.db_type}")
+    print(f"Connection: {local_db_config.connection_string}")
 
-    if db_config.db_type == "sqlite":
-        source_path = db_config.sqlite_file_path()
+    backup_path = None
+
+    if local_db_config.db_type == "sqlite":
+        source_path = local_db_config.sqlite_file_path()
         if not source_path:
             print("ERROR: Could not resolve SQLite file path.")
             return
@@ -3347,7 +3354,14 @@ def migrate_db():
             print(f"ERROR: Database still invalid after repair attempt: {info}")
             return
 
-    before_counts = sqlite_row_counts()
+    elif local_db_config.db_type == "postgresql":
+        valid, errors = local_db_config.validate_connection()
+        if not valid:
+            print(f"ERROR: Cannot connect to PostgreSQL: {errors}")
+            return
+        print("PostgreSQL connection verified.")
+
+    before_counts = row_counts()
     if any(v is not None for v in before_counts.values()):
         print("Row counts before migration:", before_counts)
 
@@ -3356,23 +3370,24 @@ def migrate_db():
 
     if "targets" not in table_names:
         print(
-            "ERROR: Core schema still missing after auto-repair. "
-            "Run 'flask init-db' to create an empty schema, then restore data."
+            "ERROR: Core schema missing. "
+            "Run 'flask init-db' to create the schema, then restore data."
         )
         return
 
     apply_additive_schema_migrations()
 
-    after_counts = sqlite_row_counts()
+    after_counts = row_counts()
     if any(v is not None for v in after_counts.values()):
         print("Row counts after migration:", after_counts)
         for table in ("targets", "target_plans", "imaging_sessions"):
             if before_counts.get(table) is not None and after_counts.get(table) is not None:
                 if after_counts[table] < before_counts[table]:
+                    restore_hint = f"Restore from backup: {backup_path}" if backup_path else "Check your PostgreSQL backups."
                     print(
                         f"WARNING: {table} row count decreased "
                         f"({before_counts[table]} -> {after_counts[table]}). "
-                        f"Restore from backup: {backup_path or 'flask db backup'}"
+                        f"{restore_hint}"
                     )
 
     print("Database migration complete (additive only — no rows deleted).")
@@ -3416,19 +3431,22 @@ def init_db(mode, filter_preset, force):
     
     filter_preset_data = load_preset_file(filter_preset_path)
 
-    ensure_sqlite_serving_ready()
+    if db_config.db_type == "sqlite":
+        ensure_sqlite_serving_ready()
 
     # Handle force flag
     if force:
-        from config.destructive_db_guard import destructive_db_allowed
+        from config.destructive_db_guard import destructive_db_allowed, destructive_db_allowed_pg
 
-        db_path = db_config.sqlite_file_path()
-        allowed, refuse_msg = destructive_db_allowed(db_path, "flask init-db --force")
+        if db_config.db_type == "sqlite":
+            db_path = db_config.sqlite_file_path()
+            allowed, refuse_msg = destructive_db_allowed(db_path, "flask init-db --force")
+        else:
+            allowed, refuse_msg = destructive_db_allowed_pg(db, "flask init-db --force")
         if not allowed:
             print(refuse_msg)
             return
         print("Force flag set - clearing existing data...")
-        # Drop all tables and recreate - cleanest approach
         db.drop_all()
         db.create_all()
         print("Database schema recreated.")

@@ -201,6 +201,10 @@ cython_debug/
 # Conditions cache (weather / seeing forecasts)
 cache/
 
+# One-off workspace migration scripts (machine-specific)
+scripts/migrate_to_d_drive.ps1
+scripts/fix_cursor_workspace.py
+
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data

@@ -312,11 +312,24 @@ No manual steps required!
 
 ### Calibration tables (v2.2.0)
 
-After upgrading from v2.1.x, run on existing SQLite databases:
+After upgrading from v2.1.x on an **existing SQLite database**:
 
 ```powershell
-flask migrate-db
+flask db info      # confirm database path
+flask db backup    # optional extra snapshot (migrate-db also auto-backs up SQLite)
+flask migrate-db   # additive only: new columns + new tables; never deletes rows
 ```
+
+**Important:** `migrate-db` only updates schema on the database shown by `flask db info`. It does not copy data from other files (e.g. `old-astroplanner.db`). If targets disappear, verify the SQLite path and restore from a `.backup_*` file or `flask db backup`.
+
+Legacy restore from `old-astroplanner.db`:
+
+```powershell
+python scripts/restore_legacy_sqlite.py
+flask init-db      # without --force — seeds filters/palettes only if missing
+```
+
+**Never use** `flask init-db --force` or `flask db reset` unless you intentionally want to wipe all data.
 
 This adds columns to `global_config` and `targets`, and creates:
 
@@ -510,6 +523,41 @@ If not using `DATABASE_URL`, you can specify components individually:
 ## Troubleshooting
 
 ### Common Issues
+
+#### `migrate-db`: "Core schema missing (no 'targets' table)"
+
+**What it means:** The SQLite file exists but has **no tables** (or no `targets` table). This is **not** because migrations were never applied — it usually means the file was **corrupted or wiped** after a successful migration.
+
+**Common cause on Windows:** The project lives under **OneDrive** (`OneDrive\Desktop\...`). OneDrive sync + Flask auto-reload + SQLite WAL sidecar files (`.db-wal`, `.db-shm`) can leave `armillarylab.db` as a valid but **empty** SQLite shell (~114 KB, 0 tables).
+
+**What ArmillaryLab does now (v2.2.0+):**
+
+1. **App startup** — auto-repairs from the best local `armillarylab.db.backup_*` if the main file is invalid.
+2. **`flask migrate-db`** — checks health **before** backing up; auto-restores from backup if needed; **never** snapshots a 0-table file as a new backup.
+3. **`python scripts/restore_db.py`** — manual restore from the backup with the most targets.
+
+**Fix (Flask must be stopped):**
+
+```powershell
+# 1. Stop Flask (Ctrl+C in its terminal)
+python scripts/restore_db.py
+flask migrate-db
+# 2. Restart Flask — prefer no reload on OneDrive:
+flask run
+```
+
+Auto-reload is safe: only the worker process opens SQLite, not the reloader watcher (see `config/flask_process.py`).
+
+**Prevention (optional):**
+
+**Verify:**
+
+```powershell
+flask db info
+python -c "from pathlib import Path; from config.sqlite_health import sqlite_db_info; print(sqlite_db_info(Path('armillarylab.db')))"
+```
+
+A healthy database shows `tables: 13+` and `targets: N` (N ≥ 0).
 
 #### "Connection Refused" (PostgreSQL)
 

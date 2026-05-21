@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card bg-secondary text-light border-warning">
+        <div class="card-body p-4">
+          <h1 class="h3 mb-3">
+            <i class="bi bi-database-exclamation text-warning"></i>
+            Database temporarily unavailable
+          </h1>
+          <p class="mb-3">
+            The app cannot read a valid schema from <code>armillarylab.db</code>.
+            On OneDrive this is often a <strong>temporary sync glitch</strong> (file looks empty for a few seconds) —
+            not true corruption.
+          </p>
+          {% if message %}
+          <p class="text-muted small mb-3">{{ message }}</p>
+          {% endif %}
+          <h2 class="h5 mt-4">What to do</h2>
+          <ol class="mb-4">
+            <li>Stop Flask (Ctrl+C).</li>
+            <li>Wait for OneDrive to finish syncing the project folder.</li>
+            <li>Reload this page or restart <code>flask run</code>.</li>
+          </ol>
+          <p class="small text-muted mb-4">
+            <strong>Automatic restore is disabled.</strong> The app will never overwrite your database with a backup on its own.
+            Manual restore only if you choose: <code>python scripts/diagnose_db.py</code> then
+            <code>python scripts/restore_db.py</code> (Flask stopped).
+          </p>
+          <a href="{{ url_for('index') }}" class="btn btn-outline-light me-2">Try again</a>
+          <button type="button" class="btn btn-warning" onclick="location.reload()">Reload page</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

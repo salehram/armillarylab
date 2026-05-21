@@ -216,7 +216,7 @@
                   {% for ch in plan_data.channels %}
                     {% set done = progress_minutes.get(ch.name, 0) %}
                     {% set done_sec = progress_seconds.get(ch.name, 0) %}
-                    <tr class="plan-row">
+                    <tr class="plan-row" data-channel="{{ ch.name }}">
                       <td>{{ ch.name }}</td>
                       <td>{{ ch.label }}</td>
 
@@ -263,7 +263,7 @@
                       <td class="remaining-minutes fw-bold">-</td>
                       <td class="remaining-hms fw-bold">-</td>
                       <td class="status-badge"></td>
-                      <td class="small">
+                      <td class="small cal-plan-badges">
                         {% if calibration_badges and calibration_badges.get(ch.name) %}
                           {% for badge in calibration_badges[ch.name] %}
                             <span class="badge bg-info text-dark d-block mb-1">{{ badge }}</span>
@@ -478,34 +478,12 @@
 
     {% if calibration_config.enabled and calibration_data %}
     <!-- CALIBRATION ACTION ITEMS -->
-    {% if calibration_data.suggestions %}
-    <div id="calibration-suggestions">
-      {% for s in calibration_data.suggestions %}
-      <div class="alert alert-warning mb-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div>
-          <i class="bi bi-lightning-charge me-1"></i>
-          <strong>{{ s.channel }}</strong> —
-          capture <strong>{{ s.suggested_count }}</strong>
-          {{ s.frame_type.replace('_', ' ') }} ({{ s.checkpoint }})
-        </div>
-        <div class="d-flex gap-1 flex-wrap">
-          <button type="button" class="btn btn-sm btn-primary cal-prefill-btn"
-                  data-channel="{{ s.channel }}"
-                  data-frame-type="{{ s.frame_type }}"
-                  data-checkpoint="{{ s.checkpoint }}"
-                  data-count="{{ s.suggested_count }}">
-            Log capture
-          </button>
-          <form method="post" action="{{ url_for('skip_calibration_checkpoint', target_id=target.id) }}" class="d-inline">
-            <input type="hidden" name="channel" value="{{ s.channel }}">
-            <input type="hidden" name="frame_type" value="{{ s.frame_type }}">
-            <input type="hidden" name="checkpoint" value="{{ s.checkpoint }}">
-            <button type="submit" class="btn btn-sm btn-outline-secondary">Skip for now</button>
-          </form>
-        </div>
-      </div>
-      {% endfor %}
+    <div id="calibration-suggestions-panel" class="{% if not calibration_data.suggestions %}d-none{% endif %}">
+      <div id="calibration-suggestions"></div>
     </div>
+    <div id="calibration-toast" class="alert d-none mb-2 py-2 small" role="alert"></div>
+    {% if calibration_api %}
+    <script type="application/json" id="calibration-bootstrap-data">{{ calibration_api | tojson }}</script>
     {% endif %}
     {% endif %}
 
@@ -580,17 +558,37 @@
       </div>
       <div class="card-body">
         {% if calibration_data %}
-        <div class="row mb-3">
-          <div class="col-md-6">
-            <div class="small text-muted">Darks</div>
-            {% set darks = calibration_data.summary.darks %}
-            <div>{{ darks.captured }} / {{ darks.planned }}</div>
-            {% if darks.planned > 0 %}
-            <div class="progress mt-1" style="height: 6px;">
-              <div class="progress-bar bg-info" style="width: {{ [100, (darks.captured / darks.planned * 100) | round(0)] | min }}%"></div>
-            </div>
-            {% endif %}
+        <div class="mb-3">
+          <div class="small text-muted mb-2">Darks <span class="text-light">({{ calibration_data.summary.darks.planned_per_exposure }} per exposure)</span></div>
+          {% if calibration_data.summary.darks.exposures %}
+          <div class="table-responsive mb-2">
+            <table class="table table-sm table-dark mb-0" id="calibration-darks-table">
+              <thead>
+                <tr><th>Sub-exp</th><th>Progress</th></tr>
+              </thead>
+              <tbody>
+                {% for row in calibration_data.summary.darks.exposures %}
+                <tr>
+                  <td>{{ row.sub_exposure_seconds }}s</td>
+                  <td>
+                    {{ row.captured }} / {{ row.planned }}
+                    {% if row.planned > 0 %}
+                    <div class="progress mt-1" style="height: 6px;">
+                      <div class="progress-bar bg-info" style="width: {{ [100, (row.captured / row.planned * 100) | round(0)] | min }}%"></div>
+                    </div>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
+          {% else %}
+          <div class="small text-muted mb-2">Add a capture plan to track darks per sub-exposure.</div>
+          {% endif %}
+          <div class="small text-muted">Total darks: {{ calibration_data.summary.darks.captured }} / {{ calibration_data.summary.darks.planned }}</div>
+        </div>
+        <div class="row mb-3">
           <div class="col-md-6">
             <div class="small text-muted">Bias</div>
             {% set bias = calibration_data.summary.bias %}
@@ -615,16 +613,16 @@
                 <th>Mid</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody id="calibration-channel-tbody">
               {% for ch_name, ch_cal in calibration_data.summary.channels.items() %}
               <tr>
                 <td>{{ ch_name }}</td>
                 <td>{{ ch_cal.flat.captured }}/{{ ch_cal.flat.planned }}</td>
-                <td class="small">
+                <td class="small cal-mid-cell" data-channel="{{ ch_name }}" data-frame-type="flat">
                   {% if ch_cal.flat.mid_skipped %}—{% elif ch_cal.flat.mid_complete %}✓{% else %}pending{% endif %}
                 </td>
                 <td>{{ ch_cal.dark_flat.captured }}/{{ ch_cal.dark_flat.planned }}</td>
-                <td class="small">
+                <td class="small cal-mid-cell" data-channel="{{ ch_name }}" data-frame-type="dark_flat">
                   {% if ch_cal.dark_flat.mid_skipped %}—{% elif ch_cal.dark_flat.mid_complete %}✓{% else %}pending{% endif %}
                 </td>
               </tr>
@@ -634,6 +632,11 @@
         </div>
         {% endif %}
         {% endif %}
+
+        <div id="calibration-skipped-list" class="border rounded p-2 mb-3 bg-dark small {% if not target.calibration_checkpoint_skips %}d-none{% endif %}">
+          <h6 class="text-info mb-2">Skipped Suggestions</h6>
+          <div id="calibration-skipped-items"></div>
+        </div>
 
         <form method="post" action="{{ url_for('log_calibration_capture', target_id=target.id) }}" id="main-calibration-form">
           <div class="row mb-2">
@@ -658,6 +661,23 @@
             </div>
           </div>
           <div class="row mb-2">
+            <div class="col-md-4" id="cal_log_subexp_wrap">
+              <label class="form-label">Sub-exposure (darks)</label>
+              <select class="form-control form-control-sm" name="sub_exposure_seconds" id="cal_log_subexp">
+                <option value="">—</option>
+                {% if calibration_data and calibration_data.summary.darks.exposures %}
+                  {% for row in calibration_data.summary.darks.exposures %}
+                    <option value="{{ row.sub_exposure_seconds }}">{{ row.sub_exposure_seconds }}s</option>
+                  {% endfor %}
+                {% elif plan_data and plan_data.channels %}
+                  {% for ch in plan_data.channels %}
+                    {% if ch.sub_exposure_seconds %}
+                    <option value="{{ ch.sub_exposure_seconds }}">{{ ch.sub_exposure_seconds }}s ({{ ch.name }})</option>
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+              </select>
+            </div>
             <div class="col-md-4" id="cal_log_channel_wrap">
               <label class="form-label">Channel</label>
               <select class="form-control form-control-sm" name="channel" id="cal_log_channel">
@@ -686,40 +706,6 @@
             <i class="bi bi-plus-circle me-1"></i>Log Calibration
           </button>
         </form>
-
-        {% if target.calibration_captures %}
-        <hr class="border-secondary my-3">
-        <h6 class="text-info">Calibration History</h6>
-        {% set cal_by_date = {} %}
-        {% for cap in target.calibration_captures | sort(attribute='date', reverse=true) %}
-          {% if cap.date not in cal_by_date %}
-            {% set _ = cal_by_date.update({cap.date: []}) %}
-          {% endif %}
-          {% set _ = cal_by_date[cap.date].append(cap) %}
-        {% endfor %}
-        {% for date, caps in cal_by_date.items() %}
-          <div class="border rounded p-2 mb-2 bg-dark small">
-            <div class="text-info mb-1">{{ date.strftime('%Y-%m-%d') }}</div>
-            {% for cap in caps %}
-            <div class="d-flex justify-content-between align-items-center py-1">
-              <span>
-                <span class="badge bg-secondary me-1">{{ cap.frame_type.replace('_', ' ') }}</span>
-                {% if cap.channel %}<span class="badge bg-warning text-dark me-1">{{ cap.channel }}</span>{% endif %}
-                {{ cap.frame_count }} frames
-                {% if cap.checkpoint %}<span class="text-muted">({{ cap.checkpoint }})</span>{% endif %}
-              </span>
-              <span>
-                <a href="{{ url_for('edit_calibration_capture', capture_id=cap.id) }}" class="btn btn-sm btn-outline-info py-0 px-1"><i class="bi bi-pencil"></i></a>
-                <form method="post" action="{{ url_for('delete_calibration_capture', capture_id=cap.id) }}" class="d-inline"
-                      onsubmit="return confirm('Delete this calibration entry?')">
-                  <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"><i class="bi bi-trash"></i></button>
-                </form>
-              </span>
-            </div>
-            {% endfor %}
-          </div>
-        {% endfor %}
-        {% endif %}
       </div>
     </div>
     {% endif %}
@@ -821,116 +807,150 @@
         </form>
       </div>
 
-    <!-- TARGET IMAGING PROGRESS -->
-    {% if target.sessions %}
+    <!-- TARGET IMAGING & CALIBRATION LOG -->
+    {% if imaging_log_days %}
     <div class="card bg-secondary text-light">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Imaging Progress</span>
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span>Imaging &amp; Calibration Log</span>
         <div>
+          {% if target.sessions %}
           <button type="button" class="btn btn-sm btn-outline-warning me-1" data-bs-toggle="modal" data-bs-target="#astroBinExportModal">
             <i class="bi bi-cloud-upload me-1"></i>Export to AstroBin
           </button>
+          {% endif %}
           <a href="{{ url_for('imaging_logs') }}" class="btn btn-sm btn-outline-light">
             <i class="bi bi-journal-text me-1"></i>View All Logs
           </a>
         </div>
       </div>
       <div class="card-body">
-        {% set sessions_by_date = {} %}
-        {% for session in target.sessions %}
-          {% if session.date not in sessions_by_date %}
-            {% set _ = sessions_by_date.update({session.date: []}) %}
-          {% endif %}
-          {% set _ = sessions_by_date[session.date].append(session) %}
-        {% endfor %}
-        
-        {% for date, sessions in sessions_by_date.items() | reverse %}
+        {% for date, entries in imaging_log_days %}
           <div class="border rounded p-3 mb-3 bg-dark">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <h6 class="text-info mb-0">
                 <i class="bi bi-calendar-date me-1"></i>
                 {{ date.strftime('%A, %B %d, %Y') }}
               </h6>
-              <span class="badge bg-primary">{{ sessions|length }} session(s)</span>
+              <span class="badge bg-primary">{{ entries|length }} entr{{ 'y' if entries|length == 1 else 'ies' }}</span>
             </div>
-            
-            {% for session in sessions %}
+
+            {% set daily_light_minutes = [] %}
+            {% set daily_cal_frames = [] %}
+            {% for entry in entries %}
+              {% if entry.kind == 'light' %}
+                {% set _ = daily_light_minutes.append(entry.minutes) %}
+              {% else %}
+                {% set _ = daily_cal_frames.append(entry.frame_count) %}
+              {% endif %}
               <div class="d-flex justify-content-between align-items-center py-2 {% if not loop.last %}border-bottom border-secondary{% endif %}">
                 <div class="flex-grow-1">
-                  <span class="badge bg-warning text-dark me-2">{{ session.channel }}</span>
-                  <span class="text-light">
-                    {{ session.sub_count }}x {{ session.sub_exposure_seconds }}s
-                    <small class="text-muted">
-                      ({{ ((session.sub_count * session.sub_exposure_seconds) / 60) | round(1) }}m)
-                    </small>
-                  </span>
-                  {% if session.notes %}
+                  {% if entry.kind == 'light' %}
+                    <span class="badge bg-warning text-dark me-2">{{ entry.channel }}</span>
+                    <span class="text-light">
+                      {{ entry.sub_count }}x {{ entry.sub_exposure_seconds }}s
+                      <small class="text-muted">({{ entry.minutes | round(1) }}m)</small>
+                    </span>
+                    <span class="badge bg-primary ms-1">Light</span>
+                  {% else %}
+                    <span class="badge bg-secondary me-2">{{ entry.frame_label }}</span>
+                    {% if entry.channel %}<span class="badge bg-warning text-dark me-2">{{ entry.channel }}</span>{% endif %}
+                    <span class="text-light">{{ entry.frame_count }} frames</span>
+                    {% if entry.checkpoint %}<small class="text-muted">({{ entry.checkpoint }})</small>{% endif %}
+                    {% if entry.sub_exposure_seconds %}<small class="text-muted">@ {{ entry.sub_exposure_seconds }}s</small>{% endif %}
+                    <span class="badge bg-info text-dark ms-1">Calibration</span>
+                  {% endif %}
+                  {% if entry.notes %}
                     <div class="mt-1">
-                      <small class="text-light" title="{{ session.notes }}">
-                        <i class="bi bi-chat-quote me-1"></i>{{ session.notes[:30] }}{% if session.notes|length > 30 %}...{% endif %}
+                      <small class="text-light" title="{{ entry.notes }}">
+                        <i class="bi bi-chat-quote me-1"></i>{{ entry.notes[:30] }}{% if entry.notes|length > 30 %}...{% endif %}
                       </small>
                     </div>
                   {% endif %}
                 </div>
                 <div class="text-end d-flex align-items-center">
-                  <!-- Edit button -->
-                  <a href="{{ url_for('edit_session', session_id=session.id) }}" 
-                     class="btn btn-sm btn-outline-info me-1" title="Edit session">
-                    <i class="bi bi-pencil"></i>
-                  </a>
-                  <!-- Delete button -->
-                  <form method="post" action="{{ url_for('delete_session', session_id=session.id) }}" 
-                        style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this session?')">
-                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete session">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
+                  {% if entry.kind == 'light' %}
+                    <a href="{{ url_for('edit_session', session_id=entry.id) }}"
+                       class="btn btn-sm btn-outline-info me-1" title="Edit session">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    <form method="post" action="{{ url_for('delete_session', session_id=entry.id) }}"
+                          style="display: inline;" onsubmit="return confirm('Delete this session?')">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete session">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  {% else %}
+                    <a href="{{ url_for('edit_calibration_capture', capture_id=entry.id) }}"
+                       class="btn btn-sm btn-outline-info me-1" title="Edit calibration">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    <form method="post" action="{{ url_for('delete_calibration_capture', capture_id=entry.id) }}"
+                          style="display: inline;" onsubmit="return confirm('Delete this calibration entry?')">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete calibration">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  {% endif %}
                 </div>
               </div>
             {% endfor %}
-            
-            <!-- Daily summary for this target -->
-            {% set daily_total = [] %}
-            {% for session in sessions %}
-              {% set _ = daily_total.append((session.sub_count * session.sub_exposure_seconds) / 60) %}
-            {% endfor %}
-            
+
             <div class="mt-2 pt-2 border-top border-secondary">
               <small class="text-success">
                 <i class="bi bi-clock me-1"></i>
-                <strong>Day Total: {{ daily_total | sum | round(1) }} minutes</strong>
-                {% if daily_total | sum >= 60 %}
-                  <span class="text-muted">({{ (daily_total | sum / 60) | round(2) }} hours)</span>
+                {% if daily_light_minutes %}
+                  <strong>Light: {{ daily_light_minutes | sum | round(1) }} min</strong>
+                {% endif %}
+                {% if daily_cal_frames %}
+                  <span class="{% if daily_light_minutes %}ms-2{% endif %} text-info">
+                    <strong>Calibration: {{ daily_cal_frames | sum }} frames</strong>
+                  </span>
                 {% endif %}
               </small>
             </div>
           </div>
         {% endfor %}
-        
-        <!-- Overall target progress summary -->
-        {% set total_target_minutes = [] %}
-        {% for session in target.sessions %}
-          {% set _ = total_target_minutes.append((session.sub_count * session.sub_exposure_seconds) / 60) %}
+
+        {% set total_light_minutes = [] %}
+        {% set total_cal_frames = [] %}
+        {% for date, entries in imaging_log_days %}
+          {% for entry in entries %}
+            {% if entry.kind == 'light' %}
+              {% set _ = total_light_minutes.append(entry.minutes) %}
+            {% else %}
+              {% set _ = total_cal_frames.append(entry.frame_count) %}
+            {% endif %}
+          {% endfor %}
         {% endfor %}
-        
+
         <div class="mt-3 pt-3 border-top border-light">
           <div class="row text-center">
-            <div class="col-md-4">
+            <div class="col-md-3">
               <div class="text-primary">
                 <strong>{{ target.sessions|length }}</strong>
-                <small class="d-block text-muted">Total Sessions</small>
+                <small class="d-block text-muted">Light Sessions</small>
               </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
+              <div class="text-info">
+                <strong>{{ target.calibration_captures|length }}</strong>
+                <small class="d-block text-muted">Cal Logs</small>
+              </div>
+            </div>
+            <div class="col-md-3">
               <div class="text-success">
-                <strong>{{ (target.sessions | map(attribute='date') | unique | list) | length }}</strong>
-                <small class="d-block text-muted">Imaging Days</small>
+                <strong>{{ imaging_log_days|length }}</strong>
+                <small class="d-block text-muted">Active Days</small>
               </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
               <div class="text-warning">
-                <strong>{{ total_target_minutes | sum | round(1) }}m</strong>
-                <small class="d-block text-muted">Total Time</small>
+                <strong>{{ total_light_minutes | sum | round(1) }}m</strong>
+                {% if total_cal_frames %}
+                  <small class="d-block text-muted">+ {{ total_cal_frames | sum }} cal frames</small>
+                {% else %}
+                  <small class="d-block text-muted">Light Time</small>
+                {% endif %}
               </div>
             </div>
           </div>
@@ -2375,124 +2395,295 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Calibration log form: channel visibility + suggestion prefill
+  // Calibration log form: channel visibility + suggestion prefill + AJAX skip/restore
   const calLogType = document.getElementById('cal_log_type');
+  const calLogSubexpWrap = document.getElementById('cal_log_subexp_wrap');
+  const calLogSubexp = document.getElementById('cal_log_subexp');
   const calLogChannelWrap = document.getElementById('cal_log_channel_wrap');
+  const calDarksTbody = document.querySelector('#calibration-darks-table tbody');
   const calLogChannel = document.getElementById('cal_log_channel');
   const calLogCheckpoint = document.getElementById('cal_log_checkpoint');
   const calLogCount = document.getElementById('cal_log_count');
   const calCard = document.getElementById('calibration-card');
+  const calSuggestionsEl = document.getElementById('calibration-suggestions');
+  const calSuggestionsPanel = document.getElementById('calibration-suggestions-panel');
+  const calSkippedList = document.getElementById('calibration-skipped-list');
+  const calSkippedItems = document.getElementById('calibration-skipped-items');
+  const calChannelTbody = document.getElementById('calibration-channel-tbody');
+  const calToast = document.getElementById('calibration-toast');
+  const calBootstrapEl = document.getElementById('calibration-bootstrap-data');
+  const TARGET_ID = {{ target.id }};
+  const CAL_SKIP_URL = {{ url_for('skip_calibration_checkpoint', target_id=target.id) | tojson }};
+
+  function calRestoreUrl(skipId) {
+    return '/calibration/skip/' + skipId + '/restore';
+  }
+
+  function escHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function frameLabel(frameType) {
+    return frameType.replace(/_/g, ' ');
+  }
+
+  function midStatusText(detail) {
+    if (detail.mid_skipped) return '—';
+    if (detail.mid_complete) return '✓';
+    return 'pending';
+  }
+
+  function showCalToast(message, level) {
+    if (!calToast) return;
+    calToast.textContent = message;
+    calToast.className = 'alert mb-2 py-2 small alert-' + (level || 'info');
+    calToast.classList.remove('d-none');
+    window.clearTimeout(showCalToast._timer);
+    showCalToast._timer = window.setTimeout(function() {
+      calToast.classList.add('d-none');
+    }, 3500);
+  }
+
+  function renderCalibrationSuggestions(suggestions) {
+    if (!calSuggestionsEl || !calSuggestionsPanel) return;
+    if (!suggestions || !suggestions.length) {
+      calSuggestionsEl.innerHTML = '';
+      calSuggestionsPanel.classList.add('d-none');
+      return;
+    }
+    calSuggestionsPanel.classList.remove('d-none');
+    calSuggestionsEl.innerHTML = suggestions.map(function(s) {
+      return (
+        '<div class="alert alert-warning mb-2 d-flex flex-wrap justify-content-between align-items-center gap-2 cal-suggestion-item">' +
+          '<div>' +
+            '<i class="bi bi-lightning-charge me-1"></i>' +
+            '<strong>' + escHtml(s.channel) + '</strong> — ' + escHtml(s.title) +
+            '<div class="small text-muted mt-1">' + escHtml(s.detail) + '</div>' +
+          '</div>' +
+          '<div class="d-flex gap-1 flex-wrap">' +
+            '<button type="button" class="btn btn-sm btn-primary cal-prefill-btn"' +
+              ' data-channel="' + escHtml(s.channel) + '"' +
+              ' data-frame-type="' + escHtml(s.frame_type) + '"' +
+              ' data-checkpoint="' + escHtml(s.checkpoint) + '"' +
+              ' data-count="' + escHtml(s.suggested_count) + '">Log capture</button>' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary cal-skip-btn"' +
+              ' data-channel="' + escHtml(s.channel) + '"' +
+              ' data-frame-type="' + escHtml(s.frame_type) + '"' +
+              ' data-checkpoint="' + escHtml(s.checkpoint) + '">Skip for now</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function renderCalibrationSkipped(skips) {
+    if (!calSkippedList || !calSkippedItems) return;
+    if (!skips || !skips.length) {
+      calSkippedItems.innerHTML = '';
+      calSkippedList.classList.add('d-none');
+      return;
+    }
+    calSkippedList.classList.remove('d-none');
+    calSkippedItems.innerHTML = skips.map(function(skip, idx) {
+      const border = idx < skips.length - 1 ? ' border-bottom border-secondary' : '';
+      return (
+        '<div class="d-flex justify-content-between align-items-center py-1' + border + '">' +
+          '<span>' +
+            '<span class="badge bg-secondary me-1">' + escHtml(frameLabel(skip.frame_type)) + '</span>' +
+            '<span class="badge bg-warning text-dark me-1">' + escHtml(skip.channel) + '</span>' +
+            '<span class="text-muted">' + escHtml(skip.checkpoint) + '</span>' +
+          '</span>' +
+          '<button type="button" class="btn btn-sm btn-outline-info py-0 px-2 cal-restore-btn" data-skip-id="' + escHtml(skip.id) + '">' +
+            '<i class="bi bi-arrow-counterclockwise me-1"></i>Restore' +
+          '</button>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function renderCalibrationDarksTable(summary) {
+    if (!calDarksTbody || !summary || !summary.darks) return;
+    const rows = summary.darks.exposures || [];
+    if (!rows.length) return;
+    calDarksTbody.innerHTML = rows.map(function(row) {
+      const sub = row.sub_exposure_seconds;
+      const subLabel = (sub % 1 === 0 ? String(sub | 0) : String(sub)) + 's';
+      const pct = row.planned > 0 ? Math.min(100, Math.round(row.captured / row.planned * 100)) : 0;
+      const bar = row.planned > 0
+        ? '<div class="progress mt-1" style="height: 6px;"><div class="progress-bar bg-info" style="width:' + pct + '%"></div></div>'
+        : '';
+      return (
+        '<tr><td>' + escHtml(subLabel) + '</td><td>' +
+          escHtml(row.captured) + '/' + escHtml(row.planned) + bar +
+        '</td></tr>'
+      );
+    }).join('');
+  }
+
+  function renderCalibrationChannelTable(summary) {
+    if (!calChannelTbody || !summary || !summary.channels) return;
+    const channels = summary.channels;
+    calChannelTbody.innerHTML = Object.keys(channels).map(function(chName) {
+      const ch = channels[chName];
+      return (
+        '<tr>' +
+          '<td>' + escHtml(chName) + '</td>' +
+          '<td>' + escHtml(ch.flat.captured) + '/' + escHtml(ch.flat.planned) + '</td>' +
+          '<td class="small cal-mid-cell" data-channel="' + escHtml(chName) + '" data-frame-type="flat">' + escHtml(midStatusText(ch.flat)) + '</td>' +
+          '<td>' + escHtml(ch.dark_flat.captured) + '/' + escHtml(ch.dark_flat.planned) + '</td>' +
+          '<td class="small cal-mid-cell" data-channel="' + escHtml(chName) + '" data-frame-type="dark_flat">' + escHtml(midStatusText(ch.dark_flat)) + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  function updatePlanCalibrationBadges(badges) {
+    if (!badges) return;
+    document.querySelectorAll('#plan-table tbody tr[data-channel]').forEach(function(row) {
+      const ch = row.getAttribute('data-channel');
+      const cell = row.querySelector('.cal-plan-badges');
+      if (!cell) return;
+      const list = badges[ch] || [];
+      cell.innerHTML = list.map(function(label) {
+        return '<span class="badge bg-info text-dark d-block mb-1">' + escHtml(label) + '</span>';
+      }).join('');
+    });
+  }
+
+  function applyCalibrationUI(data) {
+    if (!data) return;
+    renderCalibrationSuggestions(data.suggestions || []);
+    renderCalibrationSkipped(data.skips || []);
+    renderCalibrationDarksTable(data.summary || {});
+    renderCalibrationChannelTable(data.summary || {});
+    updatePlanCalibrationBadges(data.badges || {});
+  }
+
+  async function postCalibrationAction(url, formData, btn, busyLabel) {
+    const prevText = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = busyLabel;
+    }
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: formData,
+      });
+      const payload = await resp.json();
+      if (!resp.ok || !payload.ok) {
+        throw new Error(payload.message || 'Request failed');
+      }
+      applyCalibrationUI(payload.calibration);
+      showCalToast(payload.message, 'success');
+      return payload;
+    } catch (err) {
+      showCalToast(err.message || 'Something went wrong', 'danger');
+      throw err;
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = prevText;
+      }
+    }
+  }
+
+  function bindCalibrationInteractions() {
+    if (calSuggestionsEl) {
+      calSuggestionsEl.addEventListener('click', function(ev) {
+        const skipBtn = ev.target.closest('.cal-skip-btn');
+        if (skipBtn) {
+          const fd = new FormData();
+          fd.append('channel', skipBtn.dataset.channel || '');
+          fd.append('frame_type', skipBtn.dataset.frameType || '');
+          fd.append('checkpoint', skipBtn.dataset.checkpoint || '');
+          postCalibrationAction(CAL_SKIP_URL, fd, skipBtn, 'Skipping…');
+          return;
+        }
+        const prefillBtn = ev.target.closest('.cal-prefill-btn');
+        if (prefillBtn) {
+          if (calLogType) calLogType.value = prefillBtn.dataset.frameType || 'manual';
+          if (calLogChannel) calLogChannel.value = prefillBtn.dataset.channel || '';
+          if (calLogCheckpoint) calLogCheckpoint.value = prefillBtn.dataset.checkpoint || 'manual';
+          if (calLogCount) calLogCount.value = prefillBtn.dataset.count || '1';
+          toggleCalChannelField();
+          if (calCard) calCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+    if (calSkippedItems) {
+      calSkippedItems.addEventListener('click', function(ev) {
+        const restoreBtn = ev.target.closest('.cal-restore-btn');
+        if (!restoreBtn) return;
+        const skipId = restoreBtn.dataset.skipId;
+        postCalibrationAction(calRestoreUrl(skipId), new FormData(), restoreBtn, 'Restoring…');
+      });
+    }
+  }
 
   function toggleCalChannelField() {
-    if (!calLogType || !calLogChannelWrap) return;
+    if (!calLogType) return;
     const t = calLogType.value;
-    calLogChannelWrap.style.display = (t === 'flat' || t === 'dark_flat') ? 'block' : 'none';
+    if (calLogChannelWrap) {
+      calLogChannelWrap.style.display = (t === 'flat' || t === 'dark_flat') ? 'block' : 'none';
+    }
+    if (calLogChannel) {
+      calLogChannel.required = (t === 'flat' || t === 'dark_flat');
+      calLogChannel.disabled = !(t === 'flat' || t === 'dark_flat');
+    }
+    if (calLogSubexpWrap) {
+      calLogSubexpWrap.style.display = (t === 'dark') ? 'block' : 'none';
+    }
+    if (calLogSubexp) {
+      calLogSubexp.required = (t === 'dark');
+    }
   }
   if (calLogType) {
     calLogType.addEventListener('change', toggleCalChannelField);
     toggleCalChannelField();
   }
 
-  document.querySelectorAll('.cal-prefill-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      if (calLogType) calLogType.value = btn.dataset.frameType || 'manual';
-      if (calLogChannel) calLogChannel.value = btn.dataset.channel || '';
-      if (calLogCheckpoint) calLogCheckpoint.value = btn.dataset.checkpoint || 'manual';
-      if (calLogCount) calLogCount.value = btn.dataset.count || '1';
-      toggleCalChannelField();
-      if (calCard) calCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  });
+  if (calBootstrapEl) {
+    try {
+      applyCalibrationUI(JSON.parse(calBootstrapEl.textContent));
+    } catch (e) {
+      console.warn('Calibration bootstrap parse failed', e);
+    }
+  }
+  bindCalibrationInteractions();
+});
+
+// AstroBin export modal: toggle tracked preview vs manual override fields
+document.addEventListener('DOMContentLoaded', function() {
+  const trackedBox = document.getElementById('use_tracked_calibration');
+  const trackedPreview = document.getElementById('astrobin_tracked_preview');
+  const manualCal = document.getElementById('astrobin_manual_cal');
+  if (!trackedBox || !trackedPreview || !manualCal) return;
+  function syncAstrobinCalMode() {
+    const tracked = trackedBox.checked;
+    trackedPreview.classList.toggle('d-none', !tracked);
+    manualCal.classList.toggle('d-none', tracked);
+  }
+  trackedBox.addEventListener('change', syncAstrobinCalMode);
+  syncAstrobinCalMode();
 });
 </script>
 
 <!-- AstroBin Export Modal -->
 <div class="modal fade" id="astroBinExportModal" tabindex="-1" aria-labelledby="astroBinExportModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content bg-dark text-light">
-      <div class="modal-header">
-        <h5 class="modal-title" id="astroBinExportModalLabel">
-          <i class="bi bi-cloud-upload me-2"></i>Export to AstroBin
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <form method="post" action="{{ url_for('export_astrobin_csv', target_id=target.id) }}">
-        <div class="modal-body">
-          <p class="text-muted small mb-3">
-            Export your imaging sessions as a CSV file compatible with AstroBin's acquisition import feature.
-          </p>
-          
-          <!-- Camera Settings -->
-          <h6 class="text-info mb-3"><i class="bi bi-camera me-1"></i>Camera Settings</h6>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <label class="form-label">Binning</label>
-              <select class="form-control" name="binning">
-                <option value="1" selected>1x1</option>
-                <option value="2">2x2</option>
-                <option value="3">3x3</option>
-                <option value="4">4x4</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Gain</label>
-              <input class="form-control" type="number" name="gain" value="100" step="1" min="0">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Sensor Cooling (°C)</label>
-              <input class="form-control" type="number" name="sensor_cooling" value="-10" step="1" min="-274" max="100">
-            </div>
-          </div>
-          
-          <!-- Sky Conditions -->
-          <h6 class="text-info mb-3"><i class="bi bi-moon-stars me-1"></i>Sky Conditions</h6>
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Bortle Scale <small class="text-muted">(optional)</small></label>
-              <select class="form-control" name="bortle">
-                <option value="">-- Not specified --</option>
-                <option value="1">1 - Excellent dark-sky</option>
-                <option value="2">2 - Typical dark site</option>
-                <option value="3">3 - Rural sky</option>
-                <option value="4">4 - Rural/suburban transition</option>
-                <option value="5">5 - Suburban sky</option>
-                <option value="6">6 - Bright suburban sky</option>
-                <option value="7">7 - Suburban/urban transition</option>
-                <option value="8">8 - City sky</option>
-                <option value="9">9 - Inner-city sky</option>
-              </select>
-            </div>
-          </div>
-          
-          <!-- Calibration Frames -->
-          <h6 class="text-info mb-3"><i class="bi bi-sliders me-1"></i>Calibration Frames <small class="text-muted">(optional)</small></h6>
-          <div class="row mb-3">
-            <div class="col-md-3">
-              <label class="form-label">Darks</label>
-              <input class="form-control" type="number" name="darks" placeholder="--" step="1" min="0"
-                     value="{{ calibration_export_totals.darks if calibration_export_totals and calibration_export_totals.darks else '' }}">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Flats</label>
-              <input class="form-control" type="number" name="flats" placeholder="--" step="1" min="0"
-                     value="{{ calibration_export_totals.flats if calibration_export_totals and calibration_export_totals.flats else '' }}">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Flat Darks</label>
-              <input class="form-control" type="number" name="flat_darks" placeholder="--" step="1" min="0"
-                     value="{{ calibration_export_totals.flat_darks if calibration_export_totals and calibration_export_totals.flat_darks else '' }}">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Bias</label>
-              <input class="form-control" type="number" name="bias" placeholder="--" step="1" min="0"
-                     value="{{ calibration_export_totals.bias if calibration_export_totals and calibration_export_totals.bias else '' }}">
-            </div>
-          </div>
-          
-          <!-- Summary -->
-          <div class="alert alert-secondary small">
-            <strong>Sessions to export:</strong> {{ target.sessions|length }} session(s)<br>
-            <strong>Filters used:</strong>
+      <div class="modal-header py-2">
+        <div>
+          <h5 class="modal-title mb-0" id="astroBinExportModalLabel">
+            <i class="bi bi-cloud-upload me-2"></i>Export to AstroBin
+          </h5>
+          <div class="small text-muted mt-1">
+            {{ target.sessions|length }} session(s)
             {% set filter_map = {} %}
             {% if plan_data and plan_data.channels %}
               {% for ch in plan_data.channels %}
@@ -2506,28 +2697,132 @@ document.addEventListener("DOMContentLoaded", function () {
                 {% set _ = base_filters.append(base) %}
               {% endif %}
             {% endfor %}
-            {{ base_filters | join(', ') }}
-            
-            {% set missing_astrobin = [] %}
-            {% for f in base_filters %}
-              {% if f not in astrobin_filter_map %}
-                {% set _ = missing_astrobin.append(f) %}
-              {% endif %}
-            {% endfor %}
+            · {{ base_filters | join(', ') }}
           </div>
-          
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{{ url_for('export_astrobin_csv', target_id=target.id) }}">
+        <div class="modal-body py-2">
+          <div class="row g-2 mb-2">
+            <div class="col-6 col-md-3">
+              <label class="form-label small mb-0">Binning</label>
+              <select class="form-control form-control-sm" name="binning">
+                <option value="1" selected>1×1</option>
+                <option value="2">2×2</option>
+                <option value="3">3×3</option>
+                <option value="4">4×4</option>
+              </select>
+            </div>
+            <div class="col-6 col-md-2">
+              <label class="form-label small mb-0">Gain</label>
+              <input class="form-control form-control-sm" type="number" name="gain" value="100" step="1" min="0">
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label small mb-0">Cooling (°C)</label>
+              <input class="form-control form-control-sm" type="number" name="sensor_cooling" value="-10" step="1" min="-274" max="100">
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label small mb-0">Bortle <span class="text-muted">(opt.)</span></label>
+              <select class="form-control form-control-sm" name="bortle">
+                <option value="">—</option>
+                <option value="1">1 - Excellent</option>
+                <option value="2">2 - Dark site</option>
+                <option value="3">3 - Rural</option>
+                <option value="4">4 - Rural/suburban</option>
+                <option value="5">5 - Suburban</option>
+                <option value="6">6 - Bright suburban</option>
+                <option value="7">7 - Suburban/urban</option>
+                <option value="8">8 - City</option>
+                <option value="9">9 - Inner-city</option>
+              </select>
+            </div>
+          </div>
+
+          {% if target.calibration_captures %}
+          <div class="border rounded p-2 mb-2">
+            <div class="form-check mb-1">
+              <input class="form-check-input" type="checkbox" name="use_tracked_calibration" id="use_tracked_calibration" checked>
+              <label class="form-check-label small" for="use_tracked_calibration">
+                Per-session calibration from logs
+                {% if calibration_export_totals %}
+                <span class="text-muted">(darks {{ calibration_export_totals.darks }}, flats {{ calibration_export_totals.flats }}, flat darks {{ calibration_export_totals.flat_darks }})</span>
+                {% endif %}
+              </label>
+            </div>
+            <div id="astrobin_tracked_preview">
+              {% if astrobin_export_preview %}
+              <div class="table-responsive" style="max-height: 220px;">
+                <table class="table table-sm table-dark table-bordered mb-0 small">
+                  <thead class="sticky-top bg-dark">
+                    <tr>
+                      <th>Date</th>
+                      <th>Filt</th>
+                      <th>#</th>
+                      <th>s</th>
+                      <th>D</th>
+                      <th>F</th>
+                      <th>FD</th>
+                      <th>B</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in astrobin_export_preview %}
+                    <tr>
+                      <td>{{ row.date[5:] }}</td>
+                      <td>{{ row.filter_name }}</td>
+                      <td>{{ row.number if row.number else '—' }}</td>
+                      <td>{{ row.duration | int if row.duration == (row.duration | int) else row.duration }}</td>
+                      <td>{{ row.darks or '—' }}</td>
+                      <td>{{ row.flats or '—' }}</td>
+                      <td>{{ row.flat_darks or '—' }}</td>
+                      <td>{{ row.bias or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% endif %}
+            </div>
+            <div id="astrobin_manual_cal" class="d-none mt-2">
+              <p class="text-muted small mb-1">Same count on every row:</p>
+              <div class="row g-2">
+                <div class="col-3"><input class="form-control form-control-sm" type="number" name="darks" placeholder="Darks" min="0"></div>
+                <div class="col-3"><input class="form-control form-control-sm" type="number" name="flats" placeholder="Flats" min="0"></div>
+                <div class="col-3"><input class="form-control form-control-sm" type="number" name="flat_darks" placeholder="Flat darks" min="0"></div>
+                <div class="col-3"><input class="form-control form-control-sm" type="number" name="bias" placeholder="Bias" min="0"></div>
+              </div>
+            </div>
+          </div>
+          {% else %}
+          <div class="border rounded p-2 mb-2">
+            <div class="small text-muted mb-1">Calibration counts (optional, applied to every row):</div>
+            <div class="row g-2">
+              <div class="col-3"><input class="form-control form-control-sm" type="number" name="darks" placeholder="Darks" min="0"></div>
+              <div class="col-3"><input class="form-control form-control-sm" type="number" name="flats" placeholder="Flats" min="0"></div>
+              <div class="col-3"><input class="form-control form-control-sm" type="number" name="flat_darks" placeholder="Flat darks" min="0"></div>
+              <div class="col-3"><input class="form-control form-control-sm" type="number" name="bias" placeholder="Bias" min="0"></div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% set missing_astrobin = [] %}
+          {% for f in base_filters %}
+            {% if f not in astrobin_filter_map %}
+              {% set _ = missing_astrobin.append(f) %}
+            {% endif %}
+          {% endfor %}
           {% if missing_astrobin %}
-          <div class="alert alert-warning small mb-0">
+          <div class="alert alert-warning small py-2 mb-0">
             <i class="bi bi-exclamation-triangle me-1"></i>
-            <strong>Warning:</strong> The following filters are missing AstroBin IDs: <strong>{{ missing_astrobin | join(', ') }}</strong><br>
-            The exported CSV will use filter names instead of IDs and will need manual editing before import to AstroBin.
-            <a href="{{ url_for('filter_list') }}" class="alert-link">Configure AstroBin IDs in Filter Settings</a>.
+            Missing AstroBin IDs: <strong>{{ missing_astrobin | join(', ') }}</strong>.
+            <a href="{{ url_for('filter_list') }}" class="alert-link">Filter Settings</a>
           </div>
           {% endif %}
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-warning">
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning btn-sm">
             <i class="bi bi-download me-1"></i>Download CSV
           </button>
         </div>

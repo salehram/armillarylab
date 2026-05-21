@@ -1,0 +1,382 @@
+---
+description: SQLite empty-shell corruption incident — timeline, root causes, agent mistakes, and mandatory safe-DB rules. Read before any work touching armillarylab.db.
+alwaysApply: true
+---
+
+# SQLite Database Corruption Incident — Agent Reference
+
+> **Last updated:** 2026-05-21  
+> **Conversation transcript:** `agent-transcripts/a43ac73b-920b-4a23-808a-67eacfd90823.jsonl`  
+> **User environment:** Windows 11, project under **OneDrive** (`OneDrive\Desktop\Python\astroplanner`), Flask dev server with **auto-reload enabled** (`FLASK_DEBUG=1`), SQLite at project root **`armillarylab.db`** (no secondary DB path).
+
+---
+
+## 1. Executive summary
+
+During implementation of **Calibration Frames Management (v2.2.0)**, the user began seeing recurring `sqlite3.OperationalError: no such table: targets` errors. Investigation showed the live database file was repeatedly becoming an **empty shell**: valid SQLite file, **114,688 bytes**, **0 tables**, `PRAGMA integrity_check` still **`ok`**.
+
+**This is NOT random bit-rot.** The fingerprint matches **`DROP TABLE` on all tables** while the file size stays unchanged, or OneDrive replacing the live file with a previously-created empty shell copy from sync.
+
+**`flask migrate-db` did NOT delete rows** — it is additive only (`ALTER TABLE`, `db.create_all()`). The first user report of “migrate-db deleted everything” was caused by **`armillarylab.db` already being empty/wrong** while real data lived in **`old-astroplanner.db`** or git-tracked copies.
+
+The problem **escalated after v2.2.0** because agent sessions increased DB file touches: more Flask reloads, `migrate-db` runs, restore scripts, git checkout of `.db`, auto-restore experiments, and a **destructive corruption test script** that literally wiped tables on the live file.
+
+**User requirements (non-negotiable):**
+- Keep DB in project folder (`armillarylab.db`) — **no secondary path**
+- Keep Flask **auto-reload on** — do not disable
+- **No automatic restore** from backup at runtime
+- **UI/template work must not touch the database**
+- Ask before inserting/restoring data
+
+---
+
+## 2. Timeline — first appearance through final fix
+
+### Phase 0 — Before v2.2.0 (stable baseline)
+
+| Fact | Detail |
+|------|--------|
+| User workflow | OneDrive + Flask + SQLite worked fine with Claude Opus 4.6 / Composer 2.0 |
+| DB location | `armillarylab.db` in project root |
+| Git | `armillarylab.db` is **tracked in git** (6 targets, 40 sessions at HEAD during incident day) |
+| Legacy file | `old-astroplanner.db` existed separately with older/smaller dataset (2 targets, 9 sessions) |
+
+### Phase 1 — v2.2.0 implementation (2026-05-21 ~14:00+)
+
+**Agent actions:**
+- Added `CalibrationCapture`, `CalibrationCheckpointSkip` models
+- Added calibration columns to `GlobalConfig` / `Target`
+- Created `calibration_utils.py`, routes, templates
+- Added `flask migrate-db` command for additive schema upgrades
+- Committed v2.2.0 (`Add calibration frame tracking...`)
+
+**Schema changes require:** `flask migrate-db` on existing SQLite DBs (new columns + tables).
+
+### Phase 2 — **FIRST corruption symptom** (~14:43, message 86)
+
+**User report:** Terminal traceback — `GET /` → 500 → `no such table: targets`
+
+**Context:** Immediately after v2.2.0 implementation; Flask auto-reload active.
+
+**Agent diagnosis at the time:** Missing schema / wrong DB file; advised `flask db info`, `init-db`, or `migrate-db`.
+
+**Likely state:** `armillarylab.db` already had **0 tables** (empty shell) OR was never migrated — exact pre-incident snapshot not preserved, but this is the **first documented appearance** of the corruption symptom in this conversation.
+
+### Phase 3 — **First explicit data-loss report** (~message 97)
+
+**User report:** *“flask migrate-db has deleted all the database entries”*
+
+**Agent investigation findings:**
+| File | State when checked |
+|------|-------------------|
+| `armillarylab.db` | **0 rows** in all tables (empty schema) |
+| `armillarylab.db.backup_20260515_194955` | Also empty |
+| `old-astroplanner.db` | **2 targets, 9 sessions** (real data, wrong file) |
+
+**Root cause of confusion:** App reads `armillarylab.db`; user's richer data was in **`old-astroplanner.db`** or git — not in the active file. **`migrate-db` ran on an already-empty DB** and correctly reported schema work, but could not restore missing rows.
+
+**Agent actions (problematic in hindsight):**
+1. Ran `python scripts/restore_legacy_sqlite.py` — copied 2 targets from `old-astroplanner.db` (partial restore, not full git copy)
+2. Ran `flask init-db` after restore
+3. Hardened `migrate-db` with auto-backup + row count checks
+4. Created `armillarylab.db.backup_20260521_144942`, `backup_20260521_145001`
+
+### Phase 4 — Git restore to full dataset (~message 117)
+
+**User report:** *“It is more than 2 targets, get back armillarylab.db from the repo”*
+
+**Agent actions:**
+1. `git checkout HEAD -- armillarylab.db` → restored **6 targets, 40 sessions**
+2. `flask migrate-db` on restored file → additive schema applied successfully
+3. Backup: `armillarylab.db.backup_before_git_restore_20260521_145143`
+
+**This was the first recovery to the “good” 6-target state.**
+
+### Phase 5 — Recurring empty shell on every Flask reload (~15:00–15:21)
+
+**User reports (messages 142, 156, 203, 224, 231):** After saving `app.py`, `calibration_utils.py`, etc., Flask reloads → `no such table: targets` again.
+
+**Pattern:** Error always follows `Detected change in '...', reloading` + `Restarting with stat`.
+
+**Agent actions during this phase:**
+- Manual restore from `armillarylab.db.backup_20260521_145242` (6 targets, 40 sessions)
+- Saved empty file as `armillarylab.db.backup_empty_20260521_150053`
+- Briefly redirected DB to `%LocalAppData%` — **user rejected**, reverted
+- Added `config/sqlite_health.py` with **automatic restore from `.backup_*`** (later removed per user request)
+- Added `config/flask_process.py` (reloader parent vs worker detection)
+- Changed `config/database.py`: NullPool, WAL off on OneDrive, `journal_mode=DELETE`, `synchronous=FULL`
+- Added `.cursor/rules/flask-migrate-db-safety.mdc`
+
+**File timestamps (2026-05-21) show cascade of corrupt copies:**
+- `corrupt_20260521_152203` at 15:21 — first named corrupt snapshot
+- 17+ subsequent `armillarylab.db.corrupt_*` files same day
+- All **114688 bytes, 0 tables** (except one 0-byte file)
+
+### Phase 6 — User-requested corruption test (~message 268)
+
+**User asked:** Test whether corruption fix works; roll back test changes.
+
+**Agent created:** `scripts/test_db_corruption_resilience.py`
+
+**What it did (CRITICAL):**
+```python
+# Connected to LIVE armillarylab.db and ran:
+for name in tables:
+    cur.execute(f'DROP TABLE IF EXISTS "{name}"')
+```
+While Flask was running. Script had rollback from golden copy, but **interrupted or failed rollback left live DB empty**.
+
+This script **directly reproduces the empty-shell fingerprint** and was a major agent-introduced risk.
+
+### Phase 7 — AstroBin export / UI work → more data issues
+
+- Target 8 (M81_M82 Copy) logs lost during UI/export work
+- `scripts/restore_target8_logs.py` partial restore (missed `dark_flat` rows)
+- Agent ran `python -c "from app import app, db..."` to insert rows — **opened live DB while Flask running** (old `should_open_live_sqlite()` returned `True` for any import)
+
+### Phase 8 — Final comprehensive fix (~16:20+)
+
+**User report:** *“YOU BROKE THE DATABASE AGAIN!!!!”*
+
+**Final agent fixes:**
+1. **`config/flask_process.py`** — bare `import app` no longer opens live SQLite; only Flask worker, Flask CLI, or explicit server entrypoints
+2. **Lazy SQLite init** in `app.py` — `ensure_sqlite_serving_ready()` on first request, not at import time
+3. **`config/destructive_db_guard.py`** — blocks `flask init-db --force` / `flask db reset` when data exists unless `ARMILLARYLAB_CONFIRM_DESTRUCTIVE=1`
+4. **`scripts/test_db_corruption_resilience.py`** — rewritten to wipe **temp copy only**, never live DB
+5. Restored from user's `armillarylab copy.db` (7 targets, 45 sessions, 3 cal logs)
+
+---
+
+## 3. Empty-shell fingerprint (diagnostic)
+
+Use `python scripts/diagnose_db.py` or:
+
+```python
+from config.sqlite_health import classify_sqlite_problem, sqlite_db_info
+# classify_sqlite_problem(path) == "empty_shell"
+```
+
+| Property | Value |
+|----------|-------|
+| File size | **114,688 bytes** (28 pages × 4096) |
+| `sqlite_master` table count | **0** |
+| `PRAGMA integrity_check` | **`ok`** |
+| `PRAGMA page_count` | **28** |
+| User data | **Gone** (not corrupted bytes — tables dropped or file replaced) |
+
+Classified in `config/sqlite_health.py` as `"empty_shell"`.
+
+---
+
+## 4. Root causes (ranked by evidence)
+
+### 4.1 Agent: destructive corruption test script (confirmed)
+
+- **File:** `scripts/test_db_corruption_resilience.py` (original version)
+- **Action:** `DROP TABLE` on every table in **live** `armillarylab.db`
+- **Evidence:** Script source; fingerprint match; first corrupt snapshot at 15:21 during testing phase
+- **Mitigation:** Script now uses temp copy only; live file never touched
+
+### 4.2 Agent: `python -c "from app import app, db"` while Flask running (confirmed)
+
+- **Old behavior:** `is_flask_serving_process()` returned `True` when `WERKZEUG_RUN_MAIN` unset → **any import opened live DB**
+- **Risk:** Second writer on OneDrive-synced SQLite while dev server running
+- **Used for:** Inserting calibration rows, ad-hoc fixes
+- **Mitigation:** Lazy init + stricter `should_open_live_sqlite()` in `config/flask_process.py`
+
+### 4.3 OneDrive sync + Flask auto-reload (environmental, amplified by v2.2.0)
+
+- Project path: `C:\Users\SalehRam\OneDrive\Desktop\Python\astroplanner`
+- Every code save → reload → SQLite close/reopen
+- v2.2.0 caused **many more saves/reloads** than pre-feature development
+- OneDrive may replace `armillarylab.db` with stale cloud copy (including earlier empty shells left in folder)
+- **17+ `corrupt_*` files in project root** increased sync conflict surface
+- **Mitigation:** User should set **Always keep on this device** on `armillarylab.db`; `SQLITE_WAL_MODE=false`, DELETE journal, FULL sync (already in `.env`)
+
+### 4.4 Agent: multiple restore/migrate operations while server running
+
+- `git checkout HEAD -- armillarylab.db` while Flask up
+- `flask migrate-db` without stopping server (before safety rule)
+- Copying `.backup_*` over live file during reload window
+- **Mitigation:** `.cursor/rules/flask-migrate-db-safety.mdc`
+
+### 4.5 File mismatch (first report only — not recurring empty shell)
+
+- `armillarylab.db` empty vs `old-astroplanner.db` / git copy with data
+- User perceived `migrate-db` as deleting data; it was operating on wrong/empty file
+
+---
+
+## 5. What did NOT cause empty-shell corruption
+
+| Action | Verdict |
+|--------|---------|
+| `flask migrate-db` (additive) | Does **not** DELETE rows; only ALTER + create_all |
+| Template / HTML / JS changes | No DB access |
+| `calibration_utils.py` display logic | Read-only at runtime |
+| AstroBin export modal UI | No schema writes |
+| Auto-restore (when it existed briefly) | Could overwrite with wrong backup; removed entirely — not the drop-table mechanism |
+
+---
+
+## 6. Agent mistakes catalog (do not repeat)
+
+1. **Running destructive test against live DB** — never DROP/wipe `armillarylab.db`
+2. **`from app import ...` for one-off data fixes** — use `sqlite3` directly or Flask CLI with server stopped
+3. **Auto-restore without user consent** — user explicitly forbade; removed from `config/sqlite_health.py`
+4. **Moving DB outside project** — user reverted LocalAppData redirect
+5. **Partial restores presented as complete** — `restore_target8_logs.py` missed dark_flat rows
+6. **Silent DB writes during UI-only tasks** — user angry about data loss during AstroBin dialog work
+7. **Suggesting `SQLITE_PATH` outside OneDrive** — user rejected secondary path
+8. **Disabling auto-reload** — user rejected
+
+---
+
+## 7. Current safe architecture (post-fix)
+
+### Process detection — `config/flask_process.py`
+
+`should_open_live_sqlite()` is **True** only when:
+- `WERKZEUG_RUN_MAIN=true` (Flask reloader **worker**)
+- `FLASK_RUN_FROM_CLI=true` (Flask CLI commands)
+- Explicit server entrypoint (gunicorn, `ARMILLARYLAB_SERVE=1`, `python app.py`)
+
+**False** for: pytest/`TESTING=1`, `python -c "from app import..."`, helper scripts.
+
+### Lazy init — `app.py`
+
+- `ensure_sqlite_serving_ready()` runs on **first HTTP request**, not import
+- Health check + additive schema sync only in serving process
+
+### Destructive guard — `config/destructive_db_guard.py`
+
+- `flask init-db --force` and `flask db reset` refused when DB has data
+- Override: `ARMILLARYLAB_CONFIRM_DESTRUCTIVE=1` (user must set explicitly)
+
+### Health check — `config/sqlite_health.py`
+
+- **Read-only** validation; **never** auto-restore
+- Manual restore only: `python scripts/restore_db.py`
+
+### SQLite pragmas — `config/database.py`
+
+On OneDrive (auto-detected):
+- `SQLITE_WAL_MODE=false` (default)
+- `journal_mode=DELETE`, `synchronous=FULL`
+- `NullPool` (no stale pooled connections across reloads)
+
+---
+
+## 8. Mandatory agent rules
+
+### NEVER
+
+- Run `DROP TABLE`, `db.drop_all()`, or corruption test against live `armillarylab.db`
+- Run `python -c "from app import app, db..."` while Flask dev server is running
+- Run `flask migrate-db`, copy, restore, or `git checkout -- armillarylab.db` while server is running — **ask user to stop Flask first** (see `flask-migrate-db-safety.mdc`)
+- Auto-restore or silently overwrite `armillarylab.db`
+- Move DB to secondary path without explicit user request
+- Disable Flask auto-reload to “fix” corruption
+- Use `flask init-db --force` without user approval + `ARMILLARYLAB_CONFIRM_DESTRUCTIVE=1`
+- Modify DB during UI-only / template-only tasks
+
+### ALWAYS
+
+- Diagnose with `python scripts/diagnose_db.py` (read-only)
+- Use `python scripts/inspect_db.py armillarylab.db` for row counts
+- For data fixes: **ask user first**, prefer UI, or use `sqlite3` scripts that do not import `app`
+- Set `TESTING=1` when running pytest (`run_tests.py` does this)
+- After any manual restore: tell user to **restart Flask**
+
+### Safe data fix pattern
+
+```python
+# scripts/my_fix.py — NO import app
+import sqlite3
+from pathlib import Path
+conn = sqlite3.connect(Path(__file__).resolve().parent.parent / "armillarylab.db")
+# ... SQL ...
+conn.commit()
+conn.close()
+```
+
+---
+
+## 9. Recovery procedures (manual only)
+
+```powershell
+# 1. Stop Flask (Ctrl+C)
+
+# 2. Diagnose
+python scripts/diagnose_db.py
+
+# 3. Restore from best backup (does not auto-pick if current is richer)
+python scripts/restore_db.py
+# or copy a known-good file:
+# Copy-Item "armillarylab copy.db" armillarylab.db -Force
+
+# 4. Migrate schema if needed
+flask migrate-db
+
+# 5. Restart Flask
+```
+
+**Known-good references (2026-05-21 end of day):**
+- `armillarylab copy.db` — user manual copy (7 targets, 45 sessions, 3 cal)
+- `armillarylab.db.backup_20260521_161301` — richest auto-backup (same counts)
+- Git `HEAD` `armillarylab.db` — 6 targets, 40 sessions (pre–target 8 work)
+
+---
+
+## 10. Key files reference
+
+| File | Role |
+|------|------|
+| `armillarylab.db` | Live SQLite (project root, OneDrive-synced) |
+| `config/flask_process.py` | Who may open live DB |
+| `config/sqlite_health.py` | Diagnose empty_shell; manual restore helper |
+| `config/destructive_db_guard.py` | Block accidental wipe |
+| `config/database.py` | Path, NullPool, OneDrive pragmas |
+| `scripts/diagnose_db.py` | Read-only diagnosis |
+| `scripts/restore_db.py` | Manual restore from `.backup_*` |
+| `scripts/inspect_db.py` | Quick row counts |
+| `scripts/test_db_corruption_resilience.py` | **Temp copy only** — safe test |
+| `.cursor/rules/flask-migrate-db-safety.mdc` | Stop Flask before migrate |
+| `templates/db_unavailable.html` | Shown when DB empty/invalid (no auto-restore) |
+
+---
+
+## 11. Why it “suddenly” happened with v2.2.0
+
+Pre-v2.2.0: occasional reloads, stable DB file for days.
+
+With v2.2.0 agent work:
+- **Many** file saves → constant Flask reloads
+- **New schema** → repeated `migrate-db` attempts
+- **Multiple restore scripts** and git checkouts of `.db`
+- **Corruption test script** that DROP TABLEd live file
+- **Auto-restore experiments** (later removed)
+- **Ad-hoc `import app` scripts** with server running
+- **Many backup/corrupt copies** in OneDrive folder → sync conflicts
+
+The calibration **feature code** is innocent; the **development process around it** multiplied DB file risk on OneDrive.
+
+---
+
+## 12. Related conversation topics (same transcript)
+
+- Dark flats not logged after partial restore (missing `dark_flat` rows)
+- Edit calibration form channel selection bug (dark type hides channel)
+- AstroBin export per-row calibration fixes
+- Darks per sub-exposure duration (not per channel)
+- User manual copy: `armillarylab copy.db`
+
+---
+
+## 13. Quick checklist before any DB-touching agent task
+
+- [ ] Is Flask dev server stopped? (If not, ask user.)
+- [ ] Is this task UI-only? (If yes, do not touch DB.)
+- [ ] Am I importing `app` from a script? (Use sqlite3 instead.)
+- [ ] Am I running anything with `drop_all` / `DROP TABLE`? (Stop; use temp DB.)
+- [ ] Did I run `diagnose_db.py` before and after?

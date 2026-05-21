@@ -21,6 +21,7 @@ def run_tests(test_type='all', database='all', verbose=False, coverage=False):
     test_env = os.environ.copy()
     test_env['PYTHONPATH'] = str(base_dir)
     test_env['FLASK_ENV'] = 'testing'
+    test_env['TESTING'] = '1'
     test_env['DATABASE_TYPE'] = 'sqlite'  # Default to SQLite for tests
     
     # Build pytest command
@@ -120,9 +121,9 @@ def main():
     )
     
     if exit_code == 0:
-        print("\n✓ All tests passed!")
+        print("\nAll tests passed!")
     else:
-        print(f"\n✗ Tests failed with exit code {exit_code}")
+        print(f"\nTests failed with exit code {exit_code}")
     
     return exit_code
 

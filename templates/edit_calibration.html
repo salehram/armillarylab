@@ -26,16 +26,29 @@
             </div>
             <div class="mb-3">
               <label class="form-label">Frame type</label>
-              <select class="form-control" name="frame_type" id="cal_frame_type" required>
+              <select class="form-select" name="frame_type" id="cal_frame_type" required>
                 <option value="dark" {% if capture.frame_type == 'dark' %}selected{% endif %}>Darks</option>
                 <option value="flat" {% if capture.frame_type == 'flat' %}selected{% endif %}>Flats</option>
                 <option value="dark_flat" {% if capture.frame_type == 'dark_flat' %}selected{% endif %}>Dark flats</option>
                 <option value="bias" {% if capture.frame_type == 'bias' %}selected{% endif %}>Bias</option>
               </select>
+              <div class="form-text text-muted" id="cal_type_hint"></div>
+            </div>
+            <div class="mb-3" id="cal_subexp_group">
+              <label class="form-label">Sub-exposure (seconds)</label>
+              <select class="form-select" name="sub_exposure_seconds" id="cal_subexp">
+                <option value="">Select duration...</option>
+                {% for sub in sub_exposures %}
+                  <option value="{{ sub }}" {% if capture.sub_exposure_seconds == sub %}selected{% endif %}>{{ sub }}s</option>
+                {% endfor %}
+                {% if capture.sub_exposure_seconds and capture.sub_exposure_seconds not in sub_exposures %}
+                  <option value="{{ capture.sub_exposure_seconds }}" selected>{{ capture.sub_exposure_seconds }}s</option>
+                {% endif %}
+              </select>
             </div>
             <div class="mb-3" id="cal_channel_group">
-              <label class="form-label">Channel</label>
-              <select class="form-control" name="channel" id="cal_channel">
+              <label class="form-label">Channel <span class="text-danger">*</span></label>
+              <select class="form-select" name="channel" id="cal_channel">
                 <option value="">Select channel...</option>
                 {% for ch in channels %}
                   <option value="{{ ch }}" {% if capture.channel == ch %}selected{% endif %}>{{ ch }}</option>
@@ -44,6 +57,9 @@
                   <option value="{{ capture.channel }}" selected>{{ capture.channel }}</option>
                 {% endif %}
               </select>
+              {% if not channels %}
+              <div class="form-text text-warning">No plan channels found — add a capture plan on the target first.</div>
+              {% endif %}
             </div>
             <div class="row mb-3">
               <div class="col-md-6">
@@ -53,7 +69,7 @@
               </div>
               <div class="col-md-6">
                 <label class="form-label">Checkpoint</label>
-                <select class="form-control" name="checkpoint">
+                <select class="form-select" name="checkpoint">
                   <option value="manual" {% if capture.checkpoint == 'manual' or not capture.checkpoint %}selected{% endif %}>Manual</option>
                   <option value="midpoint" {% if capture.checkpoint == 'midpoint' %}selected{% endif %}>Midpoint</option>
                   <option value="end" {% if capture.checkpoint == 'end' %}selected{% endif %}>End</option>
@@ -78,12 +94,40 @@
 document.addEventListener('DOMContentLoaded', function() {
   const typeSelect = document.getElementById('cal_frame_type');
   const channelGroup = document.getElementById('cal_channel_group');
-  function toggleChannel() {
+  const subexpGroup = document.getElementById('cal_subexp_group');
+  const subexpSelect = document.getElementById('cal_subexp');
+  const channelSelect = document.getElementById('cal_channel');
+  const typeHint = document.getElementById('cal_type_hint');
+
+  function toggleFields() {
     const t = typeSelect.value;
-    channelGroup.style.display = (t === 'flat' || t === 'dark_flat') ? 'block' : 'none';
+    const needsChannel = (t === 'flat' || t === 'dark_flat');
+    const needsSubexp = (t === 'dark');
+
+    channelGroup.style.display = needsChannel ? 'block' : 'none';
+    subexpGroup.style.display = needsSubexp ? 'block' : 'none';
+
+    if (channelSelect) {
+      channelSelect.required = needsChannel;
+      channelSelect.disabled = !needsChannel;
+    }
+    if (subexpSelect) {
+      subexpSelect.required = needsSubexp;
+      subexpSelect.disabled = !needsSubexp;
+    }
+
+    if (typeHint) {
+      if (needsChannel) {
+        typeHint.textContent = 'Flats and dark flats require a filter channel (e.g. G, R).';
+      } else if (needsSubexp) {
+        typeHint.textContent = 'Darks use sub-exposure duration, not a channel.';
+      } else {
+        typeHint.textContent = '';
+      }
+    }
   }
-  typeSelect.addEventListener('change', toggleChannel);
-  toggleChannel();
+  typeSelect.addEventListener('change', toggleFields);
+  toggleFields();
 });
 </script>
 {% endblock %}

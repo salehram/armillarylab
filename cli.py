@@ -433,8 +433,16 @@ def reset():
     if not click.confirm("Are you sure you want to reset the database? This will delete ALL data!"):
         click.echo("Reset cancelled")
         return
-    
+
     from app import db
+    from config.destructive_db_guard import destructive_db_allowed
+
+    db_config = get_database_config()
+    db_path = db_config.sqlite_file_path() if db_config.db_type == "sqlite" else None
+    allowed, refuse_msg = destructive_db_allowed(db_path, "flask db reset")
+    if not allowed:
+        click.echo(refuse_msg)
+        return
     
     try:
         click.echo("Dropping all tables...")

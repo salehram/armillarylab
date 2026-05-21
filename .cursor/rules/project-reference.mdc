@@ -284,6 +284,7 @@ Relationships: `plans` → TargetPlan, `sessions` → ImagingSession, `calibrati
 |-----|---------|----------|---------|
 | `/target/<id>/calibration/log` | POST | `log_calibration_capture(id)` | Log calibration capture |
 | `/target/<id>/calibration/skip` | POST | `skip_calibration_checkpoint(id)` | Skip midpoint/end suggestion |
+| `/calibration/skip/<skip_id>/restore` | POST | `restore_calibration_checkpoint(skip_id)` | Undo skip; restore suggestion banner |
 | `/calibration/<id>/edit` | GET, POST | `edit_calibration_capture(id)` | Edit capture |
 | `/calibration/<id>/delete` | POST | `delete_calibration_capture(id)` | Delete capture |
 | `/api/target/<id>/calibration` | GET | `api_target_calibration(id)` | JSON status + suggestions |
@@ -392,7 +393,15 @@ Moon phase, weather, seeing, and channel suggestion with caching + offline fallb
 ### `config/database.py` — `configure_app(app)`
 Sets `SQLALCHEMY_DATABASE_URI` from env `DATABASE_URL`, configures engine options:
 - **PostgreSQL**: `pool_pre_ping=True`, `pool_size=5`, `max_overflow=10`
-- **SQLite**: `check_same_thread=False`
+- **SQLite**: absolute path, `NullPool`, WAL disabled by default on OneDrive paths, `journal_mode=DELETE` + `synchronous=FULL`, PRAGMA on connect
+- **`sqlite_file_path()`** — resolved Path to the `.db` file
+
+### `config/sqlite_health.py` — SQLite health (no auto-restore)
+- `sqlite_db_info(path)` / `sqlite_has_core_schema(path)` — validate file has `targets` table
+- `check_sqlite_database(path)` — remove WAL sidecars, validate; **never replaces the file**
+- `find_best_sqlite_backup(project_dir)` — pick richest `.backup_*` (sessions + calibration)
+- `restore_sqlite_from_backup(path, project_dir)` — **manual only** via `scripts/restore_db.py`
+- Used at app startup (check only), `flask migrate-db` (check only), and `scripts/restore_db.py`
 
 ### `config/migration.py` — `DatabaseMigrator` class
 Full bidirectional database migration engine for SQLite ↔ PostgreSQL:

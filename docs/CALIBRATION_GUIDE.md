@@ -43,13 +43,17 @@ Suppose you set **100 flats** and **100 dark flats per channel**, with two-point
 
 | Milestone | Light progress | Suggestion |
 |-----------|----------------|------------|
-| Midpoint | 10 frames logged (50%) | Capture **50 flats** + **50 dark flats** for R |
-| End | 20 frames logged (100%) | Capture **remaining 50** of each (or full 100 if midpoint was skipped) |
+| Midpoint | 10 frames logged (50%) | Log **50** of **100** planned flats + dark flats for R |
+| End | 20 frames logged (100%) | Log **remaining** frames to reach **100** total (e.g. 50 if midpoint done, or full 100 if midpoint was skipped/missed) |
+
+Banners show the batch to log now plus your **X / 100 captured** progress so totals never look additive (50 + 100).
 
 ### Skip for now
 
 - **Skip midpoint**: obligation moves to the end checkpoint when R channel completes
-- **Skip end**: no further prompts; log manually whenever you want
+- **Skip end**: no further prompts until you restore the skip; log manually whenever you want
+
+To bring a skipped suggestion back, open **Calibration Frames** → **Skipped Suggestions** and click **Restore**. The action banner reappears if light progress still meets that checkpoint threshold.
 
 ---
 
@@ -94,10 +98,14 @@ See [AstroBin Export Guide](ASTROBIN_EXPORT.md).
 
 ## Database migration
 
-After upgrading to v2.2.0 on an existing database, run:
+After upgrading, on **existing SQLite**:
 
 ```bash
+flask db info
+flask db backup      # optional; migrate-db auto-backs up SQLite
 flask migrate-db
 ```
 
-This adds calibration columns and creates `calibration_captures` / `calibration_checkpoint_skips` tables.
+`migrate-db` is **additive only** (new columns/tables). It does not delete rows. Always confirm the database path with `flask db info` first.
+
+**Never** run `flask init-db --force` unless you intend to wipe all data.

@@ -5,13 +5,15 @@ from datetime import datetime, time, timezone, timedelta
 import os
 import io
 import json
+from pathlib import Path
 
 from flask import (
     Flask, render_template, request, redirect,
     url_for, flash, send_from_directory, jsonify,
-    send_file
+    send_file, g
 )
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import relationship
 from werkzeug.utils import secure_filename
 
@@ -25,6 +27,11 @@ from time_utils import register_time_filters, format_hms, parse_hms, hms_to_minu
 from calibration_utils import (
     get_calibration_payload,
     aggregate_calibration_for_export,
+    resolve_astrobin_calibration_columns,
+    build_astrobin_export_rows,
+    build_target_imaging_log_days,
+    build_global_imaging_log_days,
+    calibration_log_stats,
     format_suggestion_flash,
     channel_calibration_badges,
 )
@@ -32,6 +39,15 @@ from zoneinfo import ZoneInfo
 
 # Import database configuration
 from config.database import get_flask_config
+from config.sqlite_health import (
+    check_sqlite_database,
+    sqlite_has_core_schema,
+)
+
+from config.flask_process import (
+    is_flask_serving_process,
+    should_open_live_sqlite,
+)
 
 # Import CLI commands
 from cli import register_cli_commands
@@ -59,6 +75,219 @@ flask_config, db_config = get_flask_config(BASE_DIR)
 app.config.update(flask_config)
 
 db = SQLAlchemy(app)
+
+
+def _register_sqlite_pragmas(engine, db_configuration):
+    if db_configuration.db_type != "sqlite":
+        return
+    from sqlalchemy import event
+
+    pragmas = db_configuration.sqlite_connect_pragmas()
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        for key, value in pragmas:
+            cursor.execute(f"PRAGMA {key}={value}")
+        cursor.close()
+
+
+def _register_sqlite_shutdown():
+    """Release SQLite file handles when the dev server or a reload child exits."""
+    import atexit
+
+    def _dispose():
+        if not is_flask_serving_process():
+            return
+        try:
+            db.session.remove()
+            db.engine.dispose()
+        except Exception:
+            pass
+
+    atexit.register(_dispose)
+
+
+def apply_additive_schema_migrations(log=print):
+    """Apply idempotent additive schema updates. Safe to call on every startup."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    if "targets" not in inspector.get_table_names():
+        return []
+
+    applied = []
+
+    def add_column_if_missing(table, column, ddl):
+        if table not in inspector.get_table_names():
+            return
+        columns = [col["name"] for col in inspector.get_columns(table)]
+        if column not in columns:
+            with db.engine.connect() as conn:
+                conn.execute(text(ddl))
+                conn.commit()
+            applied.append(f"{table}.{column}")
+            log(f"Added '{column}' column to {table} table.")
+
+    if "filters" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("filters")]
+        if "astrobin_id" not in columns:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE filters ADD COLUMN astrobin_id INTEGER"))
+                conn.commit()
+            applied.append("filters.astrobin_id")
+            log("Added 'astrobin_id' column to filters table.")
+
+    for col, ddl in (
+        ("default_calibration_darks", "ALTER TABLE global_config ADD COLUMN default_calibration_darks INTEGER DEFAULT 0"),
+        ("default_calibration_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_flats_per_channel INTEGER DEFAULT 0"),
+        ("default_calibration_dark_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_dark_flats_per_channel INTEGER DEFAULT 0"),
+        ("default_calibration_bias", "ALTER TABLE global_config ADD COLUMN default_calibration_bias INTEGER DEFAULT 0"),
+        ("default_calibration_two_point", "ALTER TABLE global_config ADD COLUMN default_calibration_two_point BOOLEAN DEFAULT 1"),
+    ):
+        add_column_if_missing("global_config", col, ddl)
+
+    for col, ddl in (
+        ("calibration_tracking_enabled", "ALTER TABLE targets ADD COLUMN calibration_tracking_enabled BOOLEAN DEFAULT 0"),
+        ("override_calibration_darks", "ALTER TABLE targets ADD COLUMN override_calibration_darks INTEGER"),
+        ("override_calibration_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_flats_per_channel INTEGER"),
+        ("override_calibration_dark_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_dark_flats_per_channel INTEGER"),
+        ("override_calibration_bias", "ALTER TABLE targets ADD COLUMN override_calibration_bias INTEGER"),
+        ("override_calibration_two_point", "ALTER TABLE targets ADD COLUMN override_calibration_two_point BOOLEAN"),
+    ):
+        add_column_if_missing("targets", col, ddl)
+
+    add_column_if_missing(
+        "calibration_captures",
+        "sub_exposure_seconds",
+        "ALTER TABLE calibration_captures ADD COLUMN sub_exposure_seconds REAL",
+    )
+
+    db.create_all()
+    if applied:
+        log(f"Schema sync applied: {', '.join(applied)}")
+    return applied
+
+
+_sqlite_serving_initialized = False
+
+
+def ensure_sqlite_serving_ready():
+    """
+    Open and validate SQLite once per serving process.
+
+    Must NOT run at import time — ``import app`` from helper scripts must not
+    touch armillarylab.db while Flask is already running.
+    """
+    global _sqlite_serving_initialized
+    if _sqlite_serving_initialized:
+        return
+    if db_config.db_type != "sqlite" or app.config.get("TESTING"):
+        _sqlite_serving_initialized = True
+        return
+    if not should_open_live_sqlite():
+        return
+    _register_sqlite_pragmas(db.engine, db_config)
+    _init_sqlite_for_serving_process()
+    _sqlite_serving_initialized = True
+
+
+def _init_sqlite_for_serving_process():
+    if db_config.db_type != "sqlite" or app.config.get("TESTING"):
+        return
+    if not should_open_live_sqlite():
+        return
+    db_path = db_config.sqlite_file_path()
+    if not db_path:
+        return
+    ok, msg, _info = check_sqlite_database(db_path, clean_sidecars=True)
+    if not ok:
+        app.logger.error("SQLite startup check failed: %s", msg)
+        return
+    if "Removed sidecars" in msg:
+        app.logger.info("SQLite startup: %s", msg)
+        db.engine.dispose()
+    applied = apply_additive_schema_migrations(log=app.logger.info)
+    if applied:
+        db.engine.dispose()
+
+
+_register_sqlite_shutdown()
+
+
+def _check_sqlite_health() -> tuple[bool, str]:
+    """Validate on-disk SQLite. Read-only — never removes sidecars or restores."""
+    if db_config.db_type != "sqlite" or app.config.get("TESTING"):
+        return True, ""
+    if not should_open_live_sqlite():
+        return True, ""
+    db_path = db_config.sqlite_file_path()
+    if not db_path:
+        return True, ""
+    if sqlite_has_core_schema(db_path):
+        return True, ""
+    ok, msg, _info = check_sqlite_database(db_path, clean_sidecars=False)
+    if not ok:
+        db.session.remove()
+        db.engine.dispose()
+        app.logger.error("SQLite unavailable: %s", msg)
+    return ok, msg
+
+
+@app.before_request
+def _ensure_sqlite_before_request():
+    """Block requests when the on-disk database is unavailable."""
+    if not should_open_live_sqlite():
+        return
+    if db_config.db_type != "sqlite" or app.config.get("TESTING"):
+        return
+    ensure_sqlite_serving_ready()
+    ok, msg = _check_sqlite_health()
+    if ok:
+        return
+    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "Database unavailable", "detail": msg}), 503
+    return render_template("db_unavailable.html", message=msg), 503
+
+
+@app.errorhandler(OperationalError)
+def _handle_sqlite_schema_errors(e):
+    """Retry once after schema sync (missing columns) or sidecar cleanup — never restore."""
+    if app.config.get("TESTING"):
+        raise e
+    err = str(getattr(e, "orig", e)).lower()
+    if "no such table" not in err and "no such column" not in err:
+        raise e
+    if "no such column" in err and not getattr(g, "_schema_sync_attempted", False):
+        g._schema_sync_attempted = True
+        try:
+            applied = apply_additive_schema_migrations(log=app.logger.info)
+            if applied:
+                db.session.remove()
+                db.engine.dispose()
+                if request.path.startswith("/api/"):
+                    return jsonify({"error": "Schema updated — please retry", "repaired": True}), 503
+                return redirect(request.url), 302
+        except Exception as sync_exc:
+            app.logger.error("Schema sync failed: %s", sync_exc)
+    if "no such table" not in err:
+        raise e
+    if not getattr(g, "_sqlite_recheck_attempted", False):
+        g._sqlite_recheck_attempted = True
+        ok, msg = _check_sqlite_health()
+        if ok:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Database recovered — please retry", "repaired": True}), 503
+            return redirect(request.url), 302
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Database unavailable", "detail": msg}), 503
+        return render_template("db_unavailable.html", message=msg), 503
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Database unavailable", "detail": err}), 503
+    return render_template(
+        "db_unavailable.html",
+        message="Database schema error. Stop Flask and inspect armillarylab.db — automatic restore is disabled.",
+    ), 503
 
 # Register CLI commands
 register_cli_commands(app)
@@ -386,6 +615,7 @@ class CalibrationCapture(db.Model):
     date = db.Column(db.Date, nullable=False, default=datetime.now().date)
     frame_type = db.Column(db.String(16), nullable=False)  # dark, flat, dark_flat, bias
     channel = db.Column(db.String(16))  # required for flat/dark_flat
+    sub_exposure_seconds = db.Column(db.Float)  # required for dark — matches plan light sub-exp
     checkpoint = db.Column(db.String(16))  # midpoint, end, manual
     frame_count = db.Column(db.Integer, nullable=False)
     notes = db.Column(db.Text)
@@ -521,6 +751,23 @@ def get_effective_calibration_config(target):
         ),
         "two_point": bool(two_point),
     }
+
+
+def get_target_plan_form_context(target):
+    """Channels and sub-exposure options from the target's latest plan."""
+    plan = (
+        TargetPlan.query.filter_by(target_id=target.id)
+        .order_by(TargetPlan.created_at.desc())
+        .first()
+    )
+    if not plan:
+        return [], [], None
+    plan_data = json.loads(plan.plan_json)
+    channels = [c.get("name") for c in plan_data.get("channels", []) if c.get("name")]
+    from calibration_utils import plan_unique_sub_exposures
+
+    sub_exposures = plan_unique_sub_exposures(plan_data)
+    return channels, sub_exposures, plan_data
 
 
 def get_observer_location():
@@ -937,22 +1184,36 @@ def target_detail(target_id):
     calibration_data = None
     calibration_badges = {}
     calibration_export_totals = None
+    calibration_api = None
+    imaging_log_days = []
     if calibration_config["enabled"]:
-        calibration_data = get_calibration_payload(
-            calibration_config,
-            plan_data,
-            progress_seconds,
-            target.calibration_captures,
-            target.calibration_checkpoint_skips,
-        )
-        calibration_badges = channel_calibration_badges(
-            calibration_config,
-            plan_data,
-            progress_seconds,
-            target.calibration_captures,
-            target.calibration_checkpoint_skips,
-        )
+        calibration_api = _build_calibration_api_response(target)
+        calibration_data = {
+            "summary": calibration_api["summary"],
+            "suggestions": calibration_api["suggestions"],
+        }
+        calibration_badges = calibration_api["badges"]
+    if target.calibration_captures:
         calibration_export_totals = aggregate_calibration_for_export(target.calibration_captures)
+    astrobin_export_preview = None
+    if target.sessions:
+        export_filter_map = {}
+        if plan_data:
+            for ch in plan_data.get("channels", []):
+                ch_name = ch.get("name", "")
+                base_filter = (ch.get("nina_filter") or "").strip() or ch_name
+                if ch_name:
+                    export_filter_map[ch_name] = base_filter
+        astrobin_export_preview = build_astrobin_export_rows(
+            target.sessions,
+            target.calibration_captures,
+            export_filter_map,
+            plan_data,
+        )
+    if target.sessions or target.calibration_captures:
+        imaging_log_days = build_target_imaging_log_days(
+            target.sessions, target.calibration_captures
+        )
 
     return render_template(
         "target_detail.html",
@@ -971,8 +1232,11 @@ def target_detail(target_id):
         astrobin_filter_map=astrobin_filter_map,
         calibration_config=calibration_config,
         calibration_data=calibration_data,
+        calibration_api=calibration_api,
         calibration_badges=calibration_badges,
         calibration_export_totals=calibration_export_totals,
+        astrobin_export_preview=astrobin_export_preview,
+        imaging_log_days=imaging_log_days,
     )
 
 @app.post("/target/<int:target_id>/export_nina")
@@ -1103,10 +1367,63 @@ def export_astrobin_csv(target_id):
     gain = request.form.get("gain", "100")
     sensor_cooling = request.form.get("sensor_cooling", "-10")
     bortle = request.form.get("bortle", "")
-    darks = request.form.get("darks", "")
-    flats = request.form.get("flats", "")
-    flat_darks = request.form.get("flat_darks", "")
-    bias = request.form.get("bias", "")
+    use_tracked = request.form.get("use_tracked_calibration") == "on"
+    plan_data = None
+    if plan:
+        try:
+            plan_data = json.loads(plan.plan_json)
+        except json.JSONDecodeError:
+            pass
+
+    include_darks = include_flats = include_flat_darks = include_bias = False
+    uniform_cal = {"darks": "", "flats": "", "flat_darks": "", "bias": ""}
+
+    if use_tracked and target.calibration_captures:
+        export_rows = build_astrobin_export_rows(
+            target.sessions,
+            target.calibration_captures,
+            filter_name_map,
+            plan_data,
+        )
+        include_darks = any(r["darks"] for r in export_rows)
+        include_flats = any(r["flats"] for r in export_rows)
+        include_flat_darks = any(r["flat_darks"] for r in export_rows)
+        include_bias = any(r["bias"] for r in export_rows)
+    else:
+        cal_cols = resolve_astrobin_calibration_columns(
+            {
+                "darks": request.form.get("darks", ""),
+                "flats": request.form.get("flats", ""),
+                "flat_darks": request.form.get("flat_darks", ""),
+                "bias": request.form.get("bias", ""),
+            },
+            target.calibration_captures,
+            use_tracked=use_tracked,
+        )
+        uniform_cal = cal_cols
+        include_darks = bool(cal_cols["darks"])
+        include_flats = bool(cal_cols["flats"])
+        include_flat_darks = bool(cal_cols["flat_darks"])
+        include_bias = bool(cal_cols["bias"])
+        from collections import defaultdict
+        sessions_grouped = defaultdict(lambda: {"number": 0, "duration": None})
+        for session in target.sessions:
+            base_filter = filter_name_map.get(session.channel, session.channel)
+            key = (session.date.strftime("%Y-%m-%d"), base_filter, session.sub_exposure_seconds)
+            sessions_grouped[key]["number"] += session.sub_count
+            sessions_grouped[key]["duration"] = session.sub_exposure_seconds
+        export_rows = []
+        for (date, filter_name, duration), data in sorted(sessions_grouped.items()):
+            export_rows.append({
+                "date": date,
+                "filter_name": filter_name,
+                "number": data["number"],
+                "duration": duration,
+                "darks": int(uniform_cal["darks"]) if uniform_cal["darks"] else 0,
+                "flats": int(uniform_cal["flats"]) if uniform_cal["flats"] else 0,
+                "flat_darks": int(uniform_cal["flat_darks"]) if uniform_cal["flat_darks"] else 0,
+                "bias": int(uniform_cal["bias"]) if uniform_cal["bias"] else 0,
+            })
     
     # Build CSV in memory
     output = io.StringIO()
@@ -1114,57 +1431,45 @@ def export_astrobin_csv(target_id):
     
     # Write header
     header = ["date", "filter", "number", "duration", "binning", "gain", "sensorCooling"]
-    if darks:
+    if include_darks:
         header.append("darks")
-    if flats:
+    if include_flats:
         header.append("flats")
-    if flat_darks:
+    if include_flat_darks:
         header.append("flatDarks")
-    if bias:
+    if include_bias:
         header.append("bias")
     if bortle:
         header.append("bortle")
     writer.writerow(header)
     
-    # Group sessions by date and BASE filter to consolidate
-    # Map channel names to their base filter names
-    from collections import defaultdict
-    sessions_grouped = defaultdict(lambda: {"number": 0, "duration": None})
-    
-    for session in target.sessions:
-        # Map channel name to base filter name
-        base_filter = filter_name_map.get(session.channel, session.channel)
-        key = (session.date.strftime("%Y-%m-%d"), base_filter, session.sub_exposure_seconds)
-        sessions_grouped[key]["number"] += session.sub_count
-        sessions_grouped[key]["duration"] = session.sub_exposure_seconds
-    
     # Track filters missing AstroBin IDs
     filters_missing_ids = []
     
     # Write rows
-    for (date, filter_name, duration), data in sorted(sessions_grouped.items()):
-        # Use AstroBin ID if available, otherwise use filter name as fallback
+    for row_data in export_rows:
+        filter_name = row_data["filter_name"]
         filter_value = astrobin_id_map.get(filter_name, filter_name)
         if filter_name not in astrobin_id_map and filter_name not in filters_missing_ids:
             filters_missing_ids.append(filter_name)
         
         row = [
-            date,
+            row_data["date"],
             filter_value,
-            data["number"],
-            duration,
+            row_data["number"],
+            row_data["duration"],
             binning,
             gain,
-            sensor_cooling
+            sensor_cooling,
         ]
-        if darks:
-            row.append(darks)
-        if flats:
-            row.append(flats)
-        if flat_darks:
-            row.append(flat_darks)
-        if bias:
-            row.append(bias)
+        if include_darks:
+            row.append(row_data["darks"] or "")
+        if include_flats:
+            row.append(row_data["flats"] or "")
+        if include_flat_darks:
+            row.append(row_data["flat_darks"] or "")
+        if include_bias:
+            row.append(row_data["bias"] or "")
         if bortle:
             row.append(bortle)
         writer.writerow(row)
@@ -1626,11 +1931,19 @@ def edit_session(session_id):
     # GET request - show edit form
     # Get all channel names from target plan for dropdown
     channels = []
-    if target.plans:
-        plan = target.plans[0]  # Get the first/main plan
+    plan = (
+        TargetPlan.query
+        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
+        .order_by(TargetPlan.created_at.desc())
+        .first()
+    )
+    if plan:
         plan_data = json.loads(plan.plan_json)
-        for channel_name in plan_data.keys():
-            channels.append(channel_name)
+        channels = [
+            ch.get("name")
+            for ch in plan_data.get("channels", [])
+            if ch.get("name")
+        ]
     
     return render_template("edit_session.html", session=session, target=target, channels=channels)
 
@@ -1646,6 +1959,58 @@ def delete_session(session_id):
     
     flash("Session deleted successfully.", "success")
     return redirect(url_for("target_detail", target_id=target_id))
+
+
+def _wants_json_response():
+    """True for fetch/XHR requests expecting JSON instead of a redirect."""
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return True
+    best = request.accept_mimetypes.best_match(["application/json", "text/html"])
+    return best == "application/json" and request.accept_mimetypes[best] > request.accept_mimetypes["text/html"]
+
+
+def _build_calibration_api_response(target):
+    """Shared calibration payload for JSON API and AJAX actions."""
+    from collections import defaultdict
+
+    plan = (
+        TargetPlan.query
+        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
+        .order_by(TargetPlan.created_at.desc())
+        .first()
+    )
+    plan_data = json.loads(plan.plan_json) if plan else None
+
+    progress_seconds = defaultdict(float)
+    for s in target.sessions:
+        progress_seconds[s.channel] += s.sub_exposure_seconds * s.sub_count
+
+    cal_config = get_effective_calibration_config(target)
+    payload = get_calibration_payload(
+        cal_config,
+        plan_data,
+        progress_seconds,
+        target.calibration_captures,
+        target.calibration_checkpoint_skips,
+    )
+    payload["skips"] = [
+        {
+            "id": skip.id,
+            "channel": skip.channel,
+            "frame_type": skip.frame_type,
+            "checkpoint": skip.checkpoint,
+        }
+        for skip in target.calibration_checkpoint_skips
+    ]
+    payload["badges"] = channel_calibration_badges(
+        cal_config,
+        plan_data,
+        progress_seconds,
+        target.calibration_captures,
+        target.calibration_checkpoint_skips,
+    )
+    payload["enabled"] = cal_config["enabled"]
+    return payload
 
 
 @app.route("/target/<int:target_id>/calibration/log", methods=["POST"])
@@ -1666,6 +2031,21 @@ def log_calibration_capture(target_id):
         return redirect(url_for("target_detail", target_id=target.id))
     if frame_type in ("dark", "bias"):
         channel = None
+
+    sub_exposure_seconds = None
+    if frame_type == "dark":
+        sub_raw = (request.form.get("sub_exposure_seconds") or "").strip()
+        if not sub_raw:
+            flash("Sub-exposure duration is required for darks (match your light frame length).", "danger")
+            return redirect(url_for("target_detail", target_id=target.id))
+        try:
+            sub_exposure_seconds = float(sub_raw)
+        except (TypeError, ValueError):
+            flash("Invalid sub-exposure duration for darks.", "danger")
+            return redirect(url_for("target_detail", target_id=target.id))
+        if sub_exposure_seconds <= 0:
+            flash("Sub-exposure duration must be greater than zero.", "danger")
+            return redirect(url_for("target_detail", target_id=target.id))
 
     try:
         frame_count = int(request.form.get("frame_count", 0))
@@ -1691,6 +2071,7 @@ def log_calibration_capture(target_id):
         date=capture_date,
         frame_type=frame_type,
         channel=channel,
+        sub_exposure_seconds=sub_exposure_seconds,
         checkpoint=checkpoint,
         frame_count=frame_count,
         notes=request.form.get("notes"),
@@ -1709,7 +2090,10 @@ def skip_calibration_checkpoint(target_id):
     checkpoint = (request.form.get("checkpoint") or "").strip().lower()
 
     if frame_type not in ("flat", "dark_flat") or checkpoint not in ("midpoint", "end"):
-        flash("Invalid skip request.", "danger")
+        message = "Invalid skip request."
+        if _wants_json_response():
+            return jsonify({"ok": False, "message": message}), 400
+        flash(message, "danger")
         return redirect(url_for("target_detail", target_id=target.id))
 
     existing = CalibrationCheckpointSkip.query.filter_by(
@@ -1728,8 +2112,37 @@ def skip_calibration_checkpoint(target_id):
             )
         )
         db.session.commit()
-    flash(f"Skipped {frame_type.replace('_', ' ')} {checkpoint} for {channel}.", "info")
+    message = f"Skipped {frame_type.replace('_', ' ')} {checkpoint} for {channel}."
+    if _wants_json_response():
+        db.session.refresh(target)
+        return jsonify({
+            "ok": True,
+            "message": message,
+            "calibration": _build_calibration_api_response(target),
+        })
+    flash(message, "info")
     return redirect(url_for("target_detail", target_id=target.id))
+
+
+@app.route("/calibration/skip/<int:skip_id>/restore", methods=["POST"])
+def restore_calibration_checkpoint(skip_id):
+    skip = CalibrationCheckpointSkip.query.get_or_404(skip_id)
+    target_id = skip.target_id
+    label = (
+        f"{skip.frame_type.replace('_', ' ')} {skip.checkpoint} for {skip.channel}"
+    )
+    db.session.delete(skip)
+    db.session.commit()
+    message = f"Restored calibration suggestion: {label}."
+    if _wants_json_response():
+        target = Target.query.get_or_404(target_id)
+        return jsonify({
+            "ok": True,
+            "message": message,
+            "calibration": _build_calibration_api_response(target),
+        })
+    flash(message, "success")
+    return redirect(url_for("target_detail", target_id=target_id))
 
 
 @app.route("/calibration/<int:capture_id>/edit", methods=["GET", "POST"])
@@ -1750,8 +2163,23 @@ def edit_calibration_capture(capture_id):
         if frame_type in ("dark", "bias"):
             channel = None
 
+        sub_exposure_seconds = capture.sub_exposure_seconds
+        if frame_type == "dark":
+            sub_raw = (request.form.get("sub_exposure_seconds") or "").strip()
+            if not sub_raw:
+                flash("Sub-exposure duration is required for darks.", "danger")
+                return redirect(url_for("edit_calibration_capture", capture_id=capture.id))
+            try:
+                sub_exposure_seconds = float(sub_raw)
+            except (TypeError, ValueError):
+                flash("Invalid sub-exposure duration.", "danger")
+                return redirect(url_for("edit_calibration_capture", capture_id=capture.id))
+        elif frame_type != "dark":
+            sub_exposure_seconds = None
+
         capture.frame_type = frame_type
         capture.channel = channel
+        capture.sub_exposure_seconds = sub_exposure_seconds
         capture.frame_count = int(request.form.get("frame_count", capture.frame_count))
         capture.notes = request.form.get("notes")
         checkpoint = (request.form.get("checkpoint") or "manual").strip().lower()
@@ -1766,22 +2194,14 @@ def edit_calibration_capture(capture_id):
         flash("Calibration capture updated.", "success")
         return redirect(url_for("target_detail", target_id=target.id))
 
-    channels = []
-    plan = (
-        TargetPlan.query
-        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-        .order_by(TargetPlan.created_at.desc())
-        .first()
-    )
-    if plan:
-        plan_data = json.loads(plan.plan_json)
-        channels = [c.get("name") for c in plan_data.get("channels", []) if c.get("name")]
+    channels, sub_exposures, _plan_data = get_target_plan_form_context(target)
 
     return render_template(
         "edit_calibration.html",
         capture=capture,
         target=target,
         channels=channels,
+        sub_exposures=sub_exposures,
     )
 
 
@@ -1798,64 +2218,44 @@ def delete_calibration_capture(capture_id):
 @app.route("/api/target/<int:target_id>/calibration")
 def api_target_calibration(target_id):
     target = Target.query.get_or_404(target_id)
-    plan = (
-        TargetPlan.query
-        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-        .order_by(TargetPlan.created_at.desc())
-        .first()
-    )
-    plan_data = json.loads(plan.plan_json) if plan else None
-
-    from collections import defaultdict
-    progress_seconds = defaultdict(float)
-    for s in target.sessions:
-        progress_seconds[s.channel] += s.sub_exposure_seconds * s.sub_count
-
-    cal_config = get_effective_calibration_config(target)
-    payload = get_calibration_payload(
-        cal_config,
-        plan_data,
-        progress_seconds,
-        target.calibration_captures,
-        target.calibration_checkpoint_skips,
-    )
-    return jsonify(payload)
+    return jsonify(_build_calibration_api_response(target))
 
 
 @app.route("/imaging-logs")
 def imaging_logs():
-    """Display all imaging sessions grouped by date to track imaging days."""
+    """Display light sessions and calibration captures grouped by date."""
     sessions = (
         ImagingSession.query
         .join(Target)
         .order_by(ImagingSession.date.desc(), ImagingSession.id.desc())
         .all()
     )
-    
-    # Group sessions by date
-    from collections import defaultdict
-    sessions_by_date = defaultdict(list)
-    
-    for session in sessions:
-        sessions_by_date[session.date].append(session)
-    
-    # Convert to list of tuples for template
-    grouped_sessions = sorted(sessions_by_date.items(), key=lambda x: x[0], reverse=True)
-    
-    # Calculate some statistics
-    total_sessions = len(sessions)
-    unique_dates = len(sessions_by_date)
-    unique_targets = len(set(session.target_id for session in sessions))
-    
+    captures = (
+        CalibrationCapture.query
+        .join(Target)
+        .order_by(CalibrationCapture.date.desc(), CalibrationCapture.id.desc())
+        .all()
+    )
+
+    grouped_log_days = build_global_imaging_log_days(sessions, captures)
+
+    session_dates = {s.date for s in sessions}
+    capture_dates = {c.date for c in captures}
+    unique_dates = session_dates | capture_dates
+    unique_targets = {s.target_id for s in sessions} | {c.target_id for c in captures}
+
     stats = {
-        'total_sessions': total_sessions,
-        'imaging_days': unique_dates,
-        'targets_imaged': unique_targets
+        "total_sessions": len(sessions),
+        "total_calibration_captures": len(captures),
+        "imaging_days": len(unique_dates),
+        "targets_imaged": len(unique_targets),
     }
-    
-    return render_template("imaging_logs.html", 
-                         grouped_sessions=grouped_sessions,
-                         stats=stats)
+
+    return render_template(
+        "imaging_logs.html",
+        grouped_log_days=grouped_log_days,
+        stats=stats,
+    )
 
 
 @app.route("/target/<int:target_id>/upload-final", methods=["POST"])
@@ -2895,59 +3295,87 @@ def list_filter_presets():
 
 @app.cli.command("migrate-db")
 def migrate_db():
-    """Run database migrations for schema changes."""
+    """Run additive schema migrations (never deletes rows).
+
+    Safe workflow:
+      1. flask db info          # confirm which database file/server is active
+      2. flask db backup        # snapshot before schema changes
+      3. flask migrate-db       # add missing columns/tables only
+    """
+    import shutil
     from sqlalchemy import inspect, text
-    
-    inspector = inspect(db.engine)
+    from config.database import get_database_config
+    from config.sqlite_health import check_sqlite_database, sqlite_has_core_schema, sqlite_db_info
 
-    def add_column_if_missing(table, column, ddl):
-        if table not in inspector.get_table_names():
-            print(f"Table '{table}' does not exist. Run 'flask init-db' first.")
+    db_config = get_database_config(BASE_DIR)
+
+    def sqlite_row_counts():
+        counts = {}
+        for table in ("targets", "target_plans", "imaging_sessions", "filters"):
+            try:
+                counts[table] = db.session.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+            except Exception:
+                counts[table] = None
+        return counts
+
+    print(f"Database type: {db_config.db_type}")
+    print(f"Connection: {db_config.connection_string}")
+
+    if db_config.db_type == "sqlite":
+        source_path = db_config.sqlite_file_path()
+        if not source_path:
+            print("ERROR: Could not resolve SQLite file path.")
             return
-        columns = [col["name"] for col in inspector.get_columns(table)]
-        if column not in columns:
-            with db.engine.connect() as conn:
-                conn.execute(text(ddl))
-                conn.commit()
-            print(f"Added '{column}' column to {table} table.")
+
+        ensure_sqlite_serving_ready()
+        ok, msg, info = check_sqlite_database(source_path)
+        print(msg)
+        if not ok:
+            print(
+                "Cannot migrate until the database has a valid schema. "
+                "Run: python scripts/diagnose_db.py"
+            )
+            return
+
+        if info and info.get("valid") and info.get("imaging_sessions", 0) >= 0:
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = source_path.parent / f"{source_path.name}.backup_{stamp}"
+            shutil.copy2(source_path, backup_path)
+            print(f"Auto-backup created: {backup_path}")
         else:
-            print(f"Column '{column}' already exists in {table} table.")
-    
-    # Legacy filter migration
-    if 'filters' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('filters')]
-        if 'astrobin_id' not in columns:
-            with db.engine.connect() as conn:
-                conn.execute(text('ALTER TABLE filters ADD COLUMN astrobin_id INTEGER'))
-                conn.commit()
-            print("Added 'astrobin_id' column to filters table.")
-        else:
-            print("Column 'astrobin_id' already exists in filters table.")
+            info = sqlite_db_info(source_path)
+            print(f"ERROR: Database still invalid after repair attempt: {info}")
+            return
 
-    # GlobalConfig calibration defaults
-    for col, ddl in (
-        ("default_calibration_darks", "ALTER TABLE global_config ADD COLUMN default_calibration_darks INTEGER DEFAULT 0"),
-        ("default_calibration_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_flats_per_channel INTEGER DEFAULT 0"),
-        ("default_calibration_dark_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_dark_flats_per_channel INTEGER DEFAULT 0"),
-        ("default_calibration_bias", "ALTER TABLE global_config ADD COLUMN default_calibration_bias INTEGER DEFAULT 0"),
-        ("default_calibration_two_point", "ALTER TABLE global_config ADD COLUMN default_calibration_two_point BOOLEAN DEFAULT 1"),
-    ):
-        add_column_if_missing("global_config", col, ddl)
+    before_counts = sqlite_row_counts()
+    if any(v is not None for v in before_counts.values()):
+        print("Row counts before migration:", before_counts)
 
-    # Target calibration settings
-    for col, ddl in (
-        ("calibration_tracking_enabled", "ALTER TABLE targets ADD COLUMN calibration_tracking_enabled BOOLEAN DEFAULT 0"),
-        ("override_calibration_darks", "ALTER TABLE targets ADD COLUMN override_calibration_darks INTEGER"),
-        ("override_calibration_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_flats_per_channel INTEGER"),
-        ("override_calibration_dark_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_dark_flats_per_channel INTEGER"),
-        ("override_calibration_bias", "ALTER TABLE targets ADD COLUMN override_calibration_bias INTEGER"),
-        ("override_calibration_two_point", "ALTER TABLE targets ADD COLUMN override_calibration_two_point BOOLEAN"),
-    ):
-        add_column_if_missing("targets", col, ddl)
+    inspector = inspect(db.engine)
+    table_names = inspector.get_table_names()
 
-    db.create_all()
-    print("Ensured calibration tables exist (calibration_captures, calibration_checkpoint_skips).")
-    print("Database migration complete.")
+    if "targets" not in table_names:
+        print(
+            "ERROR: Core schema still missing after auto-repair. "
+            "Run 'flask init-db' to create an empty schema, then restore data."
+        )
+        return
+
+    apply_additive_schema_migrations()
+
+    after_counts = sqlite_row_counts()
+    if any(v is not None for v in after_counts.values()):
+        print("Row counts after migration:", after_counts)
+        for table in ("targets", "target_plans", "imaging_sessions"):
+            if before_counts.get(table) is not None and after_counts.get(table) is not None:
+                if after_counts[table] < before_counts[table]:
+                    print(
+                        f"WARNING: {table} row count decreased "
+                        f"({before_counts[table]} -> {after_counts[table]}). "
+                        f"Restore from backup: {backup_path or 'flask db backup'}"
+                    )
+
+    print("Database migration complete (additive only — no rows deleted).")
 
 
 @app.cli.command("init-db")
@@ -2987,9 +3415,18 @@ def init_db(mode, filter_preset, force):
         base_preset = load_preset_file(base_preset_path)
     
     filter_preset_data = load_preset_file(filter_preset_path)
-    
+
+    ensure_sqlite_serving_ready()
+
     # Handle force flag
     if force:
+        from config.destructive_db_guard import destructive_db_allowed
+
+        db_path = db_config.sqlite_file_path()
+        allowed, refuse_msg = destructive_db_allowed(db_path, "flask init-db --force")
+        if not allowed:
+            print(refuse_msg)
+            return
         print("Force flag set - clearing existing data...")
         # Drop all tables and recreate - cleanest approach
         db.drop_all()
@@ -3305,4 +3742,9 @@ def import_preset(input_file, merge, include_wheels):
 
 if __name__ == "__main__":
     # For local dev. In Docker/K8s use gunicorn or `flask run`.
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
+    os.environ.setdefault("ARMILLARYLAB_SERVE", "1")
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        debug=True,
+    )

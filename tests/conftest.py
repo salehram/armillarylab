@@ -8,6 +8,9 @@ import os
 import tempfile
 from pathlib import Path
 
+# Must run before any test module imports app.py — prevents live DB access on import.
+os.environ.setdefault("TESTING", "1")
+
 import pytest
 from config.database import DatabaseConfig
 

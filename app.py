@@ -174,7 +174,23 @@ def apply_additive_schema_migrations(log=print):
     return applied
 
 
-_sqlite_serving_initialized = False
+_serving_initialized = False
+
+
+def _ensure_pg_schema_ready():
+    """Run additive schema sync once for PostgreSQL on first request."""
+    global _serving_initialized
+    if _serving_initialized:
+        return
+    _serving_initialized = True
+    if app.config.get("TESTING"):
+        return
+    try:
+        applied = apply_additive_schema_migrations(log=app.logger.info)
+        if applied:
+            db.engine.dispose()
+    except Exception as exc:
+        app.logger.warning("PostgreSQL startup schema sync skipped: %s", exc)
 
 
 def ensure_sqlite_serving_ready():
@@ -184,17 +200,17 @@ def ensure_sqlite_serving_ready():
     Must NOT run at import time — ``import app`` from helper scripts must not
     touch armillarylab.db while Flask is already running.
     """
-    global _sqlite_serving_initialized
-    if _sqlite_serving_initialized:
+    global _serving_initialized
+    if _serving_initialized:
         return
     if db_config.db_type != "sqlite" or app.config.get("TESTING"):
-        _sqlite_serving_initialized = True
+        _serving_initialized = True
         return
     if not should_open_live_sqlite():
         return
     _register_sqlite_pragmas(db.engine, db_config)
     _init_sqlite_for_serving_process()
-    _sqlite_serving_initialized = True
+    _serving_initialized = True
 
 
 def _init_sqlite_for_serving_process():
@@ -240,11 +256,14 @@ def _check_sqlite_health() -> tuple[bool, str]:
 
 
 @app.before_request
-def _ensure_sqlite_before_request():
-    """Block requests when the on-disk database is unavailable."""
-    if not should_open_live_sqlite():
+def _ensure_db_before_request():
+    """Run startup schema sync and block requests when DB is unavailable."""
+    if app.config.get("TESTING"):
         return
-    if db_config.db_type != "sqlite" or app.config.get("TESTING"):
+    if db_config.db_type == "postgresql":
+        _ensure_pg_schema_ready()
+        return
+    if not should_open_live_sqlite():
         return
     ensure_sqlite_serving_ready()
     ok, msg = _check_sqlite_health()

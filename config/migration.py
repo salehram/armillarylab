@@ -148,10 +148,11 @@ class DatabaseMigrator:
                 records = []
                 
                 for row in result:
-                    # Convert row to dictionary, handling special types
                     record = {}
                     for key, value in row._mapping.items():
                         if isinstance(value, datetime):
+                            record[key] = value.isoformat()
+                        elif hasattr(value, 'isoformat'):
                             record[key] = value.isoformat()
                         else:
                             record[key] = value
@@ -192,12 +193,11 @@ class DatabaseMigrator:
                     
                     logger.info(f"Importing {len(records)} records to {table_name}")
                     
-                    # Convert datetime strings back to datetime objects
                     processed_records = []
                     for record in records:
                         processed_record = {}
                         for key, value in record.items():
-                            if key.endswith('_at') or key.endswith('date') and isinstance(value, str):
+                            if isinstance(value, str) and (key.endswith('_at') or key == 'date'):
                                 try:
                                     processed_record[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
                                 except (ValueError, AttributeError):
@@ -301,11 +301,13 @@ class DatabaseMigrator:
                 # Test basic connectivity
                 conn.execute(text('SELECT 1'))
                 
-                # Check if main tables exist
                 inspector = inspect(engine)
                 tables = inspector.get_table_names()
                 
-                required_tables = ['targets', 'target_plans', 'imaging_sessions']
+                required_tables = [
+                    'targets', 'target_plans', 'imaging_sessions',
+                    'calibration_captures', 'calibration_checkpoint_skips',
+                ]
                 missing_tables = [table for table in required_tables if table not in tables]
                 
                 if missing_tables:

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **SQLite sample data**: The repository commits **`armillarylab.db`** (project root) as a **demonstration dataset** (bundled presets, demo targets/sessions/calibration). `.gitignore` now ignores every `*.db` **except** that file so local clones get the showcase catalog by default.
 - **Documentation**: Describes **Option A** (keep bundled DB + `migrate-db`) versus **Option B** (delete + `init-db` for blank). README, Database Guide, and Docker Guide updated accordingly.
+- **`uploads/`**: Personal final astro images removed from revision control (folder ignored except **`uploads/.gitkeep`**). Bundled **`armillarylab.db`** no longer points sample targets at removed filenames.
 
 ---
 

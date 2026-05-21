@@ -202,6 +202,10 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# Final result images uploaded via the UI (never commit — personal astro work)
+uploads/*
+!uploads/.gitkeep
+
 # Conditions cache (weather / seeing forecasts)
 cache/
 

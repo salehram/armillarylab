@@ -399,9 +399,9 @@ armillarylab/
 │   └── imaging_logs.html
 ├── static/                # Static assets (CSS, JS, fonts)
 ├── dev/                   # Virtual environment
-├── uploads/               # File uploads directory
+├── uploads/               # Final images saved via UI (personal — contents gitignored; keep `.gitkeep`)
 ├── cache/                 # Weather/seeing forecast cache (gitignored)
-└── armillarylab.db        # SQLite database (created after init)
+└── armillarylab.db        # Bundled sample SQLite (`migrate-db`), or recreate with `init-db`
 ```
 
 ## ⚙️ Configuration

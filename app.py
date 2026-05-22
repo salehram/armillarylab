@@ -53,7 +53,7 @@ from config.flask_process import (
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.2.1"
+APP_VERSION = "2.3.0"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -2495,6 +2495,23 @@ def api_conditions(target_id):
         window_end_utc=window_end_utc,
         max_cloud_cover_pct=config.max_cloud_cover_pct or 25,
     )
+
+    # Inject target context for Seeing Guide tab
+    target_context = None
+    if target_id > 0:
+        tgt = Target.query.get(target_id)
+        if tgt:
+            type_name = tgt.target_type  # string column (backward compat)
+            if not type_name and tgt.target_type_id:
+                tt = TargetType.query.get(tgt.target_type_id)
+                if tt:
+                    type_name = tt.name
+            target_context = {
+                "target_name": tgt.name,
+                "target_type": type_name,
+            }
+    result["target_context"] = target_context
+
     return jsonify(result)
 
 

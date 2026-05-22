@@ -109,7 +109,7 @@
       border-radius: 6px; padding: 8px 10px; margin-top: 4px;
     }
     .cp-spinner { text-align: center; padding: 30px 0; }
-    .conditions-popup.cp-wide { width: 580px; }
+    .conditions-popup.cp-wide { width: 640px; }
     .cp-columns { display: flex; gap: 16px; }
     .cp-col { flex: 1; min-width: 0; }
     .cp-col-divider { width: 1px; background: rgba(255,255,255,.08); flex-shrink: 0; }
@@ -147,7 +147,7 @@
       color: #c8d4e8;
     }
     @media (max-width: 640px) {
-      .conditions-popup.cp-wide { width: 340px; }
+      .conditions-popup.cp-wide { width: 360px; }
       .cp-columns { flex-direction: column; gap: 8px; }
       .cp-col-divider { width: auto; height: 1px; }
     }
@@ -251,7 +251,7 @@
   function fetchConditions(){
     const el = document.getElementById('currentTargetId');
     const tid = el ? el.dataset.targetId : '0';
-    const cacheKey = 'cp_' + tid;
+    const cacheKey = 'cp2_' + tid;
     const cached = sessionStorage.getItem(cacheKey);
     const cacheAge = sessionStorage.getItem(cacheKey + '_ts');
     if (cached && cacheAge && (Date.now() - parseInt(cacheAge)) < 600000) {
@@ -471,13 +471,215 @@
     return h;
   }
 
+  // ---- Seeing Guide tab -----------------------------------------------
+  var SEEING_SCALE = [
+    { raw: [1,2], range: '<0.75"',   quality: 'Excellent',      color: 'success',  note: 'Rare. Every target benefits — ideal for fine detail.' },
+    { raw: [3,4], range: '0.75–1.25"', quality: 'Good',         color: 'success',  note: 'Great for galaxies, globular clusters, planetary nebulae.' },
+    { raw: [5],   range: '1.25–1.5"', quality: 'Average',       color: 'warning',  note: 'Fine for large emission / reflection nebulae.' },
+    { raw: [6],   range: '1.5–2"',   quality: 'Below Average',  color: 'warning',  note: 'OK for large emission, dark nebulae (narrowband). Skip detail targets.' },
+    { raw: [7,8], range: '>2"',       quality: 'Poor',           color: 'danger',   note: 'Widefield only. High-resolution targets will be blurred.' },
+  ];
+
+  var SEEING_TYPES = [
+    { label: 'Galaxy',              maxRaw: 4, note: 'Fine spiral detail needs ≤1.25"' },
+    { label: 'Globular Cluster',    maxRaw: 4, note: 'Star resolution needs ≤1.25"' },
+    { label: 'Planetary Nebula',    maxRaw: 4, note: 'Small angular size — needs ≤1.25"' },
+    { label: 'Supernova Remnant',   maxRaw: 5, note: 'Delicate filaments prefer ≤1.5"' },
+    { label: 'Reflection Nebula',   maxRaw: 5, note: 'Contrast-sensitive — prefers ≤1.5"' },
+    { label: 'Open Cluster',        maxRaw: 6, note: 'Large and bright — tolerates ≤2"' },
+    { label: 'Emission Nebula',     maxRaw: 6, note: 'Large targets — tolerates ≤2" (NB especially)' },
+    { label: 'HII Region',          maxRaw: 6, note: 'Like emission nebulae — tolerates ≤2"' },
+    { label: 'Dark Nebula',         maxRaw: 6, note: 'Transparency matters more than seeing' },
+  ];
+
+  function buildSeeingTab(d){
+    var h = '';
+
+    // --- What is seeing? explanation block ---
+    h += '<details style="margin-bottom:12px;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:8px 10px;background:rgba(255,255,255,.03);">';
+    h += '<summary style="cursor:pointer;font-size:.78rem;font-weight:600;color:#b8c8e0;list-style:none;display:flex;align-items:center;gap:6px;">'
+       + '<i class="bi bi-question-circle me-1"></i>What is "seeing" and why does it matter?'
+       + '</summary>';
+    h += '<div style="margin-top:8px;font-size:.74rem;color:#c0cce0;line-height:1.5;">';
+    h += '<p style="margin:0 0 7px;">'
+       + '<strong style="color:#e0e8f0;">Seeing is atmospheric turbulence</strong> — tiny pockets of air at different temperatures constantly mixing in the layers above you. '
+       + 'Each pocket bends light slightly differently, causing stars to shimmer and blur rather than appearing as sharp points. '
+       + 'In a long-exposure photo, that shimmer averages into a bloated star disk, which sets a ceiling on the detail your image can capture no matter how good your optics are.'
+       + '</p>';
+    h += '<p style="margin:0 0 7px;">'
+       + '<strong style="color:#e0e8f0;">It is NOT the same as:</strong>'
+       + '</p>';
+    h += '<ul style="margin:0 0 7px;padding-left:1.2rem;">'
+       + '<li style="margin-bottom:4px;"><strong>Light pollution</strong> — that brightens the sky background but does not blur stars. Narrowband filters fight light pollution; they do nothing for seeing.</li>'
+       + '<li style="margin-bottom:4px;"><strong>Clouds or humidity</strong> — those block or scatter light. You can have perfectly clear, cloud-free skies and still have terrible seeing.</li>'
+       + '<li style="margin-bottom:4px;"><strong>Wind at ground level</strong> — a breeze can shake your mount, but high-altitude jet-stream winds are the main driver of poor seeing (the turbulence happens kilometres above you).</li>'
+       + '<li style="margin-bottom:4px;"><strong>Heat shimmer near the ground</strong> — a hot roof or concrete nearby can create local bad seeing, but the dominant factor is usually upper-atmosphere stability.</li>'
+       + '</ul>';
+    h += '<p style="margin:0 0 7px;">'
+       + '<strong style="color:#e0e8f0;">When does seeing matter most?</strong> '
+       + 'For targets with fine detail — galaxy spiral arms, globular cluster star resolution, planetary nebula shells — poor seeing directly costs you detail. '
+       + 'For large emission nebulae shot in narrowband, seeing matters much less because the structures are huge and the narrowband signal is unaffected by turbulence.'
+       + '</p>';
+    h += '<p style="margin:0;">'
+       + '<strong style="color:#e0e8f0;">Seeing is measured in arcseconds (″)</strong> — the apparent diameter of the blur disk a star produces. '
+       + 'Under 1″ is excellent. Above 2″ means high-resolution work will be noticeably soft. '
+       + 'The 7Timer ASTRO model estimates this from forecast upper-atmosphere wind shear and temperature profiles.'
+       + '</p>';
+    h += '</div></details>';
+
+    // Determine current/window seeing raw value for highlighting
+    var curRaw = null;
+    var curLabel = null;
+    var curArc = null;
+    if (d.window_astro && d.window_astro.seeing_raw_avg != null) {
+      curRaw = d.window_astro.seeing_raw_avg;
+      curLabel = d.window_astro.seeing_avg_label;
+      curArc = d.window_astro.seeing_avg;
+    } else if (d.astro && d.astro.seeing_raw != null) {
+      curRaw = d.astro.seeing_raw;
+      curLabel = d.astro.seeing_label;
+      curArc = d.astro.seeing_arcsec;
+    }
+
+    // Target-type callout (if we have context)
+    if (d.target_context && d.target_context.target_type) {
+      var tName = d.target_context.target_name || '';
+      var tType = d.target_context.target_type;
+      var matched = null;
+      for (var i = 0; i < SEEING_TYPES.length; i++) {
+        if (SEEING_TYPES[i].label.toLowerCase() === tType.toLowerCase()) {
+          matched = SEEING_TYPES[i];
+          break;
+        }
+      }
+      var calloutColor = 'secondary';
+      var calloutVerdict = 'No seeing data yet';
+      var calloutIcon = 'bi-question-circle';
+      if (matched && curRaw !== null) {
+        if (curRaw <= matched.maxRaw) {
+          calloutColor = 'success'; calloutVerdict = 'Conditions good for this target'; calloutIcon = 'bi-check-circle-fill';
+        } else if (curRaw === matched.maxRaw + 1) {
+          calloutColor = 'warning'; calloutVerdict = 'Marginal — seeing slightly above ideal'; calloutIcon = 'bi-exclamation-triangle-fill';
+        } else {
+          calloutColor = 'danger'; calloutVerdict = 'Poor seeing for this target type — consider skipping'; calloutIcon = 'bi-x-octagon-fill';
+        }
+      } else if (!matched && curRaw !== null) {
+        calloutColor = 'info'; calloutVerdict = 'Seeing data available (no threshold defined for this type)'; calloutIcon = 'bi-info-circle';
+      }
+      h += '<div class="cp-section border-start border-4 border-'+calloutColor+' ps-2 ms-1 mb-2" style="background:rgba(255,255,255,.04);border-radius:4px;padding:8px 8px 8px 10px;">';
+      h += '<div style="font-size:.78rem;font-weight:600;margin-bottom:3px;"><i class="bi '+calloutIcon+' me-1 text-'+calloutColor+'"></i>'+calloutVerdict+'</div>';
+      h += '<div style="font-size:.74rem;color:#c0cce0;line-height:1.35;">';
+      if (tName) h += '<strong>'+tName+'</strong> ';
+      h += '('+tType+')';
+      if (curRaw !== null) h += ' &nbsp;·&nbsp; Tonight\'s seeing: <strong>'+curLabel+'</strong> ('+curArc+')';
+      h += '</div></div>';
+    }
+
+    // Seeing scale reference
+    h += '<div class="cp-label" style="margin-top:8px;"><i class="bi bi-eye me-1"></i>7Timer Seeing Scale</div>';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:.74rem;margin-bottom:10px;">';
+    h += '<thead><tr style="color:#8888aa;border-bottom:1px solid rgba(255,255,255,.1);">'
+       + '<th style="padding:3px 4px;">Range</th><th style="padding:3px 4px;">Quality</th><th style="padding:3px 4px;">Best for</th></tr></thead><tbody>';
+    for (var j = 0; j < SEEING_SCALE.length; j++) {
+      var row = SEEING_SCALE[j];
+      var isActive = curRaw !== null && row.raw.indexOf(curRaw) >= 0;
+      var rowBg = isActive ? 'background:rgba(255,255,255,.06);' : '';
+      var activeTag = isActive ? ' <span style="font-size:.65rem;font-weight:700;color:#6cf;vertical-align:middle;">&#9664; tonight</span>' : '';
+      h += '<tr style="border-bottom:1px solid rgba(255,255,255,.05);'+rowBg+'">';
+      h += '<td style="padding:4px;font-weight:600;color:'+(row.color==='success'?'#5cba7d':row.color==='warning'?'#f0c060':'#e07070')+';">'+row.range+'</td>';
+      h += '<td style="padding:4px;">'+row.quality+activeTag+'</td>';
+      h += '<td style="padding:4px;color:#b0bccc;">'+row.note+'</td>';
+      h += '</tr>';
+    }
+    h += '</tbody></table>';
+
+    // Target type guide
+    h += '<div class="cp-label" style="margin-top:4px;"><i class="bi bi-crosshair me-1"></i>Seeing Requirements by Target Type</div>';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:.74rem;">';
+    h += '<thead><tr style="color:#8888aa;border-bottom:1px solid rgba(255,255,255,.1);">'
+       + '<th style="padding:3px 4px;">Target Type</th><th style="padding:3px 4px;">Max Seeing</th><th style="padding:3px 4px;">Notes</th></tr></thead><tbody>';
+    var targetType = (d.target_context && d.target_context.target_type) ? d.target_context.target_type.toLowerCase() : null;
+    for (var k = 0; k < SEEING_TYPES.length; k++) {
+      var st = SEEING_TYPES[k];
+      var isHighlighted = targetType && st.label.toLowerCase() === targetType;
+      var thresholdRow = null;
+      for (var m = 0; m < SEEING_SCALE.length; m++) {
+        if (SEEING_SCALE[m].raw.indexOf(st.maxRaw) >= 0) { thresholdRow = SEEING_SCALE[m]; break; }
+      }
+      var maxLabel = thresholdRow ? thresholdRow.range : '≤'+st.maxRaw;
+      var rowStyle = isHighlighted ? 'background:rgba(255,255,255,.07);font-weight:600;' : '';
+      var highlightTag = isHighlighted ? ' <span style="font-size:.65rem;color:#6cf;">&#9664; your target</span>' : '';
+      h += '<tr style="border-bottom:1px solid rgba(255,255,255,.05);'+rowStyle+'">';
+      h += '<td style="padding:4px;">'+st.label+highlightTag+'</td>';
+      h += '<td style="padding:4px;color:'+(st.maxRaw<=4?'#5cba7d':st.maxRaw<=5?'#f0c060':'#b0c0d0')+';">'+maxLabel+'</td>';
+      h += '<td style="padding:4px;color:#b0bccc;">'+st.note+'</td>';
+      h += '</tr>';
+    }
+    h += '</tbody></table>';
+
+    h += '<p class="cp-readable-note" style="margin-top:8px;border-top:1px solid rgba(255,255,255,.07);padding-top:6px;">Seeing data from 7Timer ASTRO (3-hour resolution). Quality labels are practical guidance — a well-tracked equatorial mount can often recover one level.</p>';
+    return h;
+  }
+
+  // ---- 5-Day Forecast tab ---------------------------------------------
+  function buildForecastTab(d){
+    var h = '';
+    if (!d.forecast_days || d.forecast_days.length === 0) {
+      return '<div class="text-muted text-center py-4"><i class="bi bi-cloud-slash me-2"></i>5-day forecast unavailable — connect to the internet to fetch conditions.</div>';
+    }
+    var VERDICT_COLOR = {go:'success', caution:'warning', marginal:'info', skip:'danger'};
+    var VERDICT_LABEL = {go:'Clear', caution:'Caution', marginal:'Marginal', skip:'Poor'};
+
+    h += '<p class="cp-readable-note" style="margin-bottom:8px;"><i class="bi bi-info-circle me-1"></i>Night windows use tonight\'s imaging slot applied to each date.</p>';
+
+    h += '<table style="width:100%;border-collapse:collapse;font-size:.75rem;">';
+    h += '<thead><tr style="color:#8888aa;border-bottom:1px solid rgba(255,255,255,.12);">'
+       + '<th style="padding:4px 3px;">Night</th>'
+       + '<th style="padding:4px 3px;">Sky</th>'
+       + '<th style="padding:4px 3px;">Cloud avg/max</th>'
+       + '<th style="padding:4px 3px;">Wind / Gusts</th>'
+       + '<th style="padding:4px 3px;">Seeing</th>'
+       + '</tr></thead><tbody>';
+
+    for (var i = 0; i < d.forecast_days.length; i++) {
+      var day = d.forecast_days[i];
+      var vc = VERDICT_COLOR[day.verdict] || 'secondary';
+      var vl = VERDICT_LABEL[day.verdict] || day.verdict;
+      var dotColor = vc === 'success' ? '#5cba7d' : vc === 'warning' ? '#f0c060' : vc === 'info' ? '#60b8f0' : '#e07070';
+      var seeingCell = day.seeing_available && day.seeing_avg
+        ? '<span title="'+day.seeing_avg_label+'">'+day.seeing_avg+'</span>'
+        : '<span style="color:#555;">—</span>';
+
+      h += '<tr style="border-bottom:1px solid rgba(255,255,255,.05);">';
+      h += '<td style="padding:5px 3px;font-weight:600;">'+day.day_label+'</td>';
+      h += '<td style="padding:5px 3px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+dotColor+';margin-right:4px;"></span>'
+           + '<span style="font-size:.72rem;color:'+dotColor+';">'+vl+'</span></td>';
+      h += '<td style="padding:5px 3px;color:#c0cce0;">'+(day.cloud_avg_pct != null ? day.cloud_avg_pct+'%' : '—')
+           + (day.cloud_max_pct != null && day.cloud_max_pct !== day.cloud_avg_pct ? '<span style="color:#7a8898;"> / '+day.cloud_max_pct+'%</span>' : '')
+           + '</td>';
+      h += '<td style="padding:5px 3px;color:#c0cce0;">'+(day.wind_max_kmh != null ? day.wind_max_kmh : '—')
+           + (day.gusts_max_kmh != null ? '<span style="color:#7a8898;"> / '+day.gusts_max_kmh+'</span>' : '')
+           + ' <span style="color:#555;font-size:.65rem;">km/h</span></td>';
+      h += '<td style="padding:5px 3px;">'+seeingCell+'</td>';
+      h += '</tr>';
+    }
+    h += '</tbody></table>';
+
+    h += '<p class="cp-readable-note" style="margin-top:8px;border-top:1px solid rgba(255,255,255,.07);padding-top:6px;">';
+    h += 'Weather: Open-Meteo (5 days). Seeing: 7Timer (72 h — days 4–5 seeing unavailable). Not 100% accurate; use for planning only.';
+    h += '</p>';
+    return h;
+  }
+
   function render(d){
     status.innerHTML = badge(d.status);
     var hasWindow = d.window_weather || d.window_astro;
-    popup.classList.toggle('cp-wide', hasWindow);
+    popup.classList.toggle('cp-wide', !!(hasWindow || (d.forecast_days && d.forecast_days.length)));
 
-    var overviewHtml = buildOverviewTab(d);
-    var windHtml = buildWindTab(d);
+    var overviewHtml  = buildOverviewTab(d);
+    var windHtml      = buildWindTab(d);
+    var seeingHtml    = buildSeeingTab(d);
+    var forecastHtml  = buildForecastTab(d);
 
     var tabsHtml = ''
       + '<ul class="nav nav-tabs cp-nav-tabs" role="tablist">'
@@ -487,10 +689,18 @@
       + '<li class="nav-item" role="presentation">'
       + '<button class="nav-link" id="cp-tab-wind" data-bs-toggle="tab" data-bs-target="#cp-pane-wind" type="button" role="tab" aria-selected="false"><i class="bi bi-wind me-1"></i>Wind</button>'
       + '</li>'
+      + '<li class="nav-item" role="presentation">'
+      + '<button class="nav-link" id="cp-tab-seeing" data-bs-toggle="tab" data-bs-target="#cp-pane-seeing" type="button" role="tab" aria-selected="false"><i class="bi bi-eye me-1"></i>Seeing</button>'
+      + '</li>'
+      + '<li class="nav-item" role="presentation">'
+      + '<button class="nav-link" id="cp-tab-forecast" data-bs-toggle="tab" data-bs-target="#cp-pane-forecast" type="button" role="tab" aria-selected="false"><i class="bi bi-calendar3 me-1"></i>Forecast</button>'
+      + '</li>'
       + '</ul>'
       + '<div class="tab-content cp-tab-content" id="cpTabPanes">'
-      + '<div class="tab-pane fade show active" id="cp-pane-overview" role="tabpanel">' + overviewHtml + '</div>'
-      + '<div class="tab-pane fade" id="cp-pane-wind" role="tabpanel">' + windHtml + '</div>'
+      + '<div class="tab-pane fade show active" id="cp-pane-overview"  role="tabpanel">' + overviewHtml  + '</div>'
+      + '<div class="tab-pane fade"             id="cp-pane-wind"      role="tabpanel">' + windHtml      + '</div>'
+      + '<div class="tab-pane fade"             id="cp-pane-seeing"    role="tabpanel">' + seeingHtml    + '</div>'
+      + '<div class="tab-pane fade"             id="cp-pane-forecast"  role="tabpanel">' + forecastHtml  + '</div>'
       + '</div>';
 
     body.innerHTML = tabsHtml;

@@ -725,8 +725,10 @@ def _aggregate_window_astro(
     return {
         "seeing_avg": avg_arc,
         "seeing_avg_label": avg_lbl,
+        "seeing_raw_avg": avg_seeing,
         "seeing_worst": worst_arc,
         "seeing_worst_label": worst_lbl,
+        "seeing_raw_worst": worst_seeing,
         "transparency_avg_label": _TRANSPARENCY_MAP.get(avg_transp, "Unknown"),
         "points": len(window_points),
     }
@@ -794,7 +796,189 @@ def suggest_tonight_channel(
 
 
 # ---------------------------------------------------------------------------
-# 5. Cache management
+# 5. Multi-night forecast  (derived from already-fetched raw data)
+# ---------------------------------------------------------------------------
+
+def compute_forecast_days(
+    weather_raw: dict | None,
+    astro_raw: dict | None,
+    window_start_local: str | None,
+    window_end_local: str | None,
+    tz_name: str,
+    max_cloud_pct: int = 25,
+    n_days: int = 5,
+) -> list[dict] | None:
+    """Return night-by-night summaries for the next *n_days* nights.
+
+    Uses tonight's actual imaging window HH:MM as the template for each
+    future night (applied to successive calendar dates).  The 7Timer seeing
+    data covers ~72 h, so seeing is only populated for roughly the first 3
+    nights; later nights show weather only.
+    """
+    if not weather_raw or "hourly" not in weather_raw:
+        return None
+
+    hourly = weather_raw["hourly"]
+    times = hourly.get("time", [])
+    if not times or not window_start_local or not window_end_local:
+        return None
+
+    # Parse tonight's window into (start_hour, start_minute, end_hour, end_minute)
+    # Format: "YYYY-MM-DD HH:MM:SS"
+    try:
+        ws_dt = datetime.datetime.strptime(window_start_local[:16], "%Y-%m-%d %H:%M")
+        we_dt = datetime.datetime.strptime(window_end_local[:16], "%Y-%m-%d %H:%M")
+    except (ValueError, TypeError):
+        return None
+
+    start_hhmm = ws_dt.strftime("%H:%M")
+    end_hhmm = we_dt.strftime("%H:%M")
+    crosses_midnight = we_dt.time() < ws_dt.time()
+
+    # 7Timer init time for seeing offset calculation
+    astro_init_dt = None
+    astro_series = []
+    if astro_raw:
+        astro_series = astro_raw.get("dataseries", [])
+        init_str = astro_raw.get("init", "")
+        if len(init_str) >= 10:
+            try:
+                astro_init_dt = datetime.datetime.strptime(init_str, "%Y%m%d%H").replace(
+                    tzinfo=datetime.timezone.utc
+                )
+            except ValueError:
+                astro_init_dt = None
+
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = datetime.timezone(datetime.timedelta(hours=3))
+
+    today_local = datetime.datetime.now(tz).date()
+    results = []
+
+    for offset in range(1, n_days + 1):
+        night_start_date = today_local + datetime.timedelta(days=offset)
+        night_start_str = f"{night_start_date.strftime('%Y-%m-%d')}T{start_hhmm[:2]}"
+
+        if crosses_midnight:
+            night_end_date = night_start_date + datetime.timedelta(days=1)
+        else:
+            night_end_date = night_start_date
+        night_end_str = f"{night_end_date.strftime('%Y-%m-%d')}T{end_hhmm[:2]}"
+
+        # Filter Open-Meteo hourly indices for this night's window
+        indices = [i for i, t in enumerate(times) if night_start_str <= t <= night_end_str]
+        if not indices:
+            continue
+
+        def _safe_avg(key: str) -> float | None:
+            vals = [hourly[key][i] for i in indices if i < len(hourly.get(key, [])) and hourly[key][i] is not None]
+            return round(sum(vals) / len(vals), 1) if vals else None
+
+        def _safe_max(key: str) -> float | None:
+            vals = [hourly[key][i] for i in indices if i < len(hourly.get(key, [])) and hourly[key][i] is not None]
+            return round(max(vals), 1) if vals else None
+
+        def _safe_min(key: str) -> float | None:
+            vals = [hourly[key][i] for i in indices if i < len(hourly.get(key, [])) and hourly[key][i] is not None]
+            return round(min(vals), 1) if vals else None
+
+        cloud_avg = _safe_avg("cloud_cover")
+        cloud_max = _safe_max("cloud_cover")
+        wind_max = _safe_max("wind_speed_10m")
+        gusts_max = _safe_max("wind_gusts_10m")
+        temp_min = _safe_min("temperature_2m")
+        temp_max = _safe_max("temperature_2m")
+
+        # Build minimal weather/window_weather dicts compatible with advice functions
+        mock_weather = None
+        if gusts_max is not None:
+            mock_weather = {"wind_gusts_kmh": gusts_max, "gust_factor": None}
+        mock_window = None
+        if gusts_max is not None or cloud_max is not None:
+            mock_window = {
+                "gusts_max_kmh": gusts_max or 0,
+                "cloud_cover_max_pct": cloud_max or 0,
+                "cloud_cover_avg_pct": cloud_avg or 0,
+                "gust_factor": None,
+                "peak_gust_local": None,
+            }
+
+        wind_adv = compute_wind_session_advice(mock_weather, mock_window)
+        cloud_adv = compute_cloud_session_advice(mock_weather, mock_window, max_cloud_pct)
+        session_adv = compute_session_advice(wind_adv, cloud_adv)
+
+        verdict = session_adv["verdict"] if session_adv else "go"
+        verdict_title = session_adv["title"] if session_adv else ""
+
+        # Seeing from 7Timer (only within ~72h of init)
+        seeing_avg_raw = None
+        seeing_worst_raw = None
+        seeing_avg_arc = None
+        seeing_avg_lbl = None
+        seeing_available = False
+
+        if astro_init_dt and astro_series:
+            # Convert night window to UTC for comparison with 7Timer timepoints
+            try:
+                ws_utc = datetime.datetime(
+                    night_start_date.year, night_start_date.month, night_start_date.day,
+                    int(start_hhmm[:2]), int(start_hhmm[3:5])
+                )
+                we_utc = datetime.datetime(
+                    night_end_date.year, night_end_date.month, night_end_date.day,
+                    int(end_hhmm[:2]), int(end_hhmm[3:5])
+                )
+                # Approximate local→UTC by subtracting tz offset (rough; 7Timer accuracy is 3h anyway)
+                try:
+                    utc_offset_h = int(datetime.datetime.now(tz).utcoffset().total_seconds() / 3600)
+                except Exception:
+                    utc_offset_h = 3
+                ws_utc_aware = (ws_utc - datetime.timedelta(hours=utc_offset_h)).replace(
+                    tzinfo=datetime.timezone.utc
+                )
+                we_utc_aware = (we_utc - datetime.timedelta(hours=utc_offset_h)).replace(
+                    tzinfo=datetime.timezone.utc
+                )
+                seeing_pts = []
+                for pt in astro_series:
+                    tp_dt = astro_init_dt + datetime.timedelta(hours=pt["timepoint"])
+                    if ws_utc_aware <= tp_dt <= we_utc_aware:
+                        seeing_pts.append(pt.get("seeing", 5))
+                if seeing_pts:
+                    seeing_avg_raw = round(sum(seeing_pts) / len(seeing_pts))
+                    seeing_worst_raw = max(seeing_pts)
+                    seeing_avg_arc, seeing_avg_lbl = _SEEING_MAP.get(seeing_avg_raw, ("?", "Unknown"))
+                    seeing_available = True
+            except (ValueError, AttributeError):
+                pass
+
+        day_dt = night_start_date
+        results.append({
+            "date": day_dt.strftime("%Y-%m-%d"),
+            "day_label": day_dt.strftime("%a %b ") + str(day_dt.day),
+            "cloud_avg_pct": cloud_avg,
+            "cloud_max_pct": cloud_max,
+            "wind_max_kmh": wind_max,
+            "gusts_max_kmh": gusts_max,
+            "temp_min_c": temp_min,
+            "temp_max_c": temp_max,
+            "seeing_avg": seeing_avg_arc,
+            "seeing_avg_label": seeing_avg_lbl,
+            "seeing_raw_avg": seeing_avg_raw,
+            "seeing_worst_raw": seeing_worst_raw,
+            "seeing_available": seeing_available,
+            "verdict": verdict,
+            "verdict_title": verdict_title,
+            "window_hours": len(indices),
+        })
+
+    return results if results else None
+
+
+# ---------------------------------------------------------------------------
+# 6. Cache management
 # ---------------------------------------------------------------------------
 
 def _cache_path(lat: float, lon: float) -> Path:
@@ -835,7 +1019,7 @@ def _read_cache(lat: float, lon: float) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# 6. Orchestrator
+# 7. Orchestrator
 # ---------------------------------------------------------------------------
 
 def get_tonight_conditions(
@@ -863,6 +1047,8 @@ def get_tonight_conditions(
     astro = None
     window_weather = None
     window_astro = None
+    _forecast_weather_raw = None
+    _forecast_astro_raw = None
 
     if online:
         if weather_raw and "hourly" in weather_raw:
@@ -877,6 +1063,9 @@ def get_tonight_conditions(
                 window_astro = _aggregate_window_astro(
                     astro_raw, window_start_utc, window_end_utc
                 )
+
+        _forecast_weather_raw = weather_raw
+        _forecast_astro_raw = astro_raw
 
         cache_payload = {
             "weather_raw": weather_raw,
@@ -901,6 +1090,8 @@ def get_tonight_conditions(
                     window_astro = _aggregate_window_astro(
                         ca, window_start_utc, window_end_utc
                     )
+            _forecast_weather_raw = cw
+            _forecast_astro_raw = ca
             status = "cached"
         elif moon:
             status = "offline_moon"
@@ -912,6 +1103,16 @@ def get_tonight_conditions(
     wind_session = compute_wind_session_advice(weather, window_weather)
     cloud_session = compute_cloud_session_advice(weather, window_weather, max_cloud_cover_pct)
     session_advice = compute_session_advice(wind_session, cloud_session)
+
+    forecast_days = compute_forecast_days(
+        _forecast_weather_raw,
+        _forecast_astro_raw,
+        window_start_local,
+        window_end_local,
+        tz_name,
+        max_cloud_cover_pct,
+        n_days=5,
+    )
 
     message = None
     if status == "offline":
@@ -933,5 +1134,6 @@ def get_tonight_conditions(
         "cloud_session": cloud_session,
         "session_advice": session_advice,
         "suggestion": suggestion,
+        "forecast_days": forecast_days,
         "message": message,
     }

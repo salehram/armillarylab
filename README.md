@@ -2,7 +2,7 @@
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
-![Version](https://img.shields.io/badge/version-2.4.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.4.1-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
@@ -541,7 +541,7 @@ docker-compose up --build
 
 ## 📊 Current Status
 
-**Shipping version:** **2.4.0** (`APP_VERSION` in `app.py`; tag `v2.4.0` on GitHub). Install from `main` or check out that tag for a frozen snapshot.
+**Shipping version:** **2.4.1** (`APP_VERSION` in `app.py`; tag `v2.4.1` on GitHub). Install from `main` or check out that tag for a frozen snapshot. v2.4.1 is a patch on top of the v2.4.0 resolver release that fixes per-channel manual time overrides in the plan editor (see [CHANGELOG.md](CHANGELOG.md)).
 
 ### ✅ New in v2.4.0 (Comprehensive Object Resolver)
 

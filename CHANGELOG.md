@@ -13,6 +13,14 @@ _Nothing yet._
 
 ---
 
+## [2.4.1] - 2026-05-25
+
+### Fixed
+
+- **Plan editor: per-channel manual time overrides are now preserved on Save.** Previously, if the user changed both the master total integration time and one or more per-channel minutes in the same Save Plan submit, the backend would silently discard the per-channel edits and proportionally rescale the prior channel ratios to fit the new total instead. This caused user-specified splits like H=20h / O=20h / S=30h on a 70h total to be saved back as H=35h / O=21h / S=14h. The `update_plan` route now always honors per-channel `ch_*_minutes` form values, with the proportional rescale acting only as a baseline for channels left unspecified. Added regression test `test_update_plan_per_channel_overrides_win_over_master_total`.
+
+---
+
 ## [2.4.0] - 2026-05-25
 
 ### Version 2.4.0 - Comprehensive Object Resolver

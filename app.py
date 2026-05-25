@@ -53,7 +53,7 @@ from config.flask_process import (
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -1951,31 +1951,32 @@ def update_plan(target_id):
         except ValueError:
             new_total = None
 
-    # If user raised/lowered the master total vs the saved plan, rescale proportionally first.
-    # Stale POST fields for each channel minute would undo that rescale unless we skip them.
-    master_total_rescaled = False
+    # If the user changed the master total relative to the saved plan, rescale
+    # the existing channel minutes proportionally as a baseline. This only
+    # affects channels that are NOT explicitly overridden in the form below,
+    # so manual per-channel edits always win.
     if new_total is not None and new_total > 0 and scale_denom > 0:
         delta = abs(new_total - scale_denom)
         if delta > 0.001:
-            master_total_rescaled = True
             scale = new_total / scale_denom
             for c in channels:
                 c["planned_minutes"] = c["planned_minutes"] * scale
 
-    # Then apply per-channel overrides from the form (minutes only if master total did not drive rescale).
+    # Apply per-channel overrides from the form. These always take precedence
+    # over the proportional rescale so users can customize individual channel
+    # times even when changing the master total in the same submit.
     for c in channels:
         name = c.get("name")
         # Per-channel minutes override
-        if not master_total_rescaled:
-            field_name = f"ch_{name}_minutes"
-            field_val = request.form.get(field_name)
-            if field_val is not None and field_val != "":
-                try:
-                    mins = float(field_val)
-                    if mins >= 0:
-                        c["planned_minutes"] = mins
-                except ValueError:
-                    pass  # ignore bad values, keep previous
+        field_name = f"ch_{name}_minutes"
+        field_val = request.form.get(field_name)
+        if field_val is not None and field_val != "":
+            try:
+                mins = float(field_val)
+                if mins >= 0:
+                    c["planned_minutes"] = mins
+            except ValueError:
+                pass  # ignore bad values, keep previous
 
         # Per-channel sub-exposure override
         sub_field = f"ch_{name}_subexp"

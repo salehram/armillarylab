@@ -599,3 +599,68 @@ def test_build_target_imaging_log_days(client):
         assert len(days[0][1]) == 2
         kinds = {e["kind"] for e in days[0][1]}
         assert kinds == {"light", "calibration"}
+
+
+def test_update_plan_per_channel_overrides_win_over_master_total(client):
+    """Regression: manual per-channel minutes must persist even when the master
+    total is changed in the same Save Plan submit (v2.4.1 fix)."""
+    with app.app_context():
+        target = Target(
+            name="C 33 plan test",
+            ra_hours=20.939,
+            dec_deg=31.74,
+            preferred_palette="SHO",
+        )
+        db.session.add(target)
+        db.session.flush()
+        plan = TargetPlan(
+            target_id=target.id,
+            palette_name="SHO",
+            plan_json=json.dumps(
+                {
+                    "palette": "SHO",
+                    "total_planned_minutes": 546,
+                    "channels": [
+                        {"name": "H", "label": "Halpha", "planned_minutes": 273,
+                         "sub_exposure_seconds": 300, "weight": 0.5,
+                         "weight_fraction": 0.5},
+                        {"name": "O", "label": "OIII", "planned_minutes": 164,
+                         "sub_exposure_seconds": 300, "weight": 0.3,
+                         "weight_fraction": 0.3},
+                        {"name": "S", "label": "SII", "planned_minutes": 109,
+                         "sub_exposure_seconds": 300, "weight": 0.2,
+                         "weight_fraction": 0.2},
+                    ],
+                }
+            ),
+        )
+        db.session.add(plan)
+        db.session.commit()
+        target_id = target.id
+
+    resp = client.post(
+        f"/target/{target_id}/plan/update",
+        data={
+            "total_planned_minutes": "4200",
+            "ch_H_minutes": "1200",
+            "ch_O_minutes": "1200",
+            "ch_S_minutes": "1800",
+            "ch_H_subexp": "300",
+            "ch_O_subexp": "300",
+            "ch_S_subexp": "300",
+        },
+    )
+    assert resp.status_code == 302
+
+    with app.app_context():
+        saved = (
+            TargetPlan.query.filter_by(target_id=target_id)
+            .order_by(TargetPlan.created_at.desc())
+            .first()
+        )
+        data = json.loads(saved.plan_json)
+        channels = {c["name"]: c["planned_minutes"] for c in data["channels"]}
+        assert channels["H"] == pytest.approx(1200.0)
+        assert channels["O"] == pytest.approx(1200.0)
+        assert channels["S"] == pytest.approx(1800.0)
+        assert data["total_planned_minutes"] == 4200

@@ -13,6 +13,19 @@ _Nothing yet._
 
 ---
 
+## [2.4.4] - 2026-05-25
+
+### Fixed
+
+- **5-day Forecast tab: seeing column no longer silently empty for targets with short imaging windows.** v2.4.2 added a nearest-7Timer-point fallback to `_aggregate_window_astro()` (Overview tab "Imaging Window Seeing" block) but the 5-day Forecast tab had its own independent seeing-aggregation loop inside `compute_forecast_days()` that still required points to fall strictly inside the window. For targets like Eastern Veil / C 33 with a packup-time-clipped window of ~84 min that landed between 7Timer's 3-hour grid points, every future night's Seeing cell showed "--" while wide-window targets like M 101 showed real values — a confusing inconsistency.
+
+### Changed
+
+- Extracted the nearest-neighbor fallback into a shared helper `_collect_seeing_points_for_window()` and reused it from both `_aggregate_window_astro()` and `compute_forecast_days()`. The helper caps the fallback distance to ~1.6 h (slightly more than half of 7Timer's 3-hour grid) so nights beyond 7Timer's ~72 h horizon still correctly render as empty rather than reaching backwards for stale data.
+- Expanded `tests/test_conditions_window_astro.py` to cover the shared helper, the fallback-distance cap, and the forecast path (5 tests total).
+
+---
+
 ## [2.4.3] - 2026-05-25
 
 ### Fixed

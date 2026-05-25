@@ -675,6 +675,49 @@ def _pick_current_astro(data: dict) -> dict | None:
     }
 
 
+def _collect_seeing_points_for_window(
+    series: list,
+    init_dt: datetime.datetime,
+    ws: datetime.datetime,
+    we: datetime.datetime,
+    max_fallback_hours: float = 1.6,
+) -> tuple[list, bool]:
+    """Return 7Timer points covering [ws, we], with a bounded nearest-neighbor
+    fallback when zero points fall strictly inside.
+
+    7Timer publishes seeing on a fixed 3-hour UTC grid. Short imaging windows
+    can land entirely between two grid points and produce zero hits. In that
+    case we substitute the single closest point as long as it sits within
+    ``max_fallback_hours`` of the window midpoint (default 1.6 h, slightly
+    more than half the 3-hour grid). This keeps the right-now "Imaging Window
+    Seeing" block and the per-night Forecast cells populated whenever 7Timer
+    actually covers the date, while still returning an empty list for nights
+    beyond 7Timer's ~72-hour horizon.
+
+    Returns ``(points, nearest_used)``.
+    """
+    inside = []
+    for point in series:
+        tp_dt = init_dt + datetime.timedelta(hours=point["timepoint"])
+        if ws <= tp_dt <= we:
+            inside.append(point)
+    if inside:
+        return inside, False
+
+    mid = ws + (we - ws) / 2
+    best = None
+    best_diff = float("inf")
+    for point in series:
+        tp_dt = init_dt + datetime.timedelta(hours=point["timepoint"])
+        diff = abs((tp_dt - mid).total_seconds())
+        if diff < best_diff:
+            best_diff = diff
+            best = point
+    if best is None or best_diff > max_fallback_hours * 3600:
+        return [], False
+    return [best], True
+
+
 def _aggregate_window_astro(
     data: dict,
     window_start_utc: str,
@@ -704,32 +747,11 @@ def _aggregate_window_astro(
     except (ValueError, TypeError):
         return None
 
-    window_points = []
-    for point in series:
-        tp_dt = init_dt + datetime.timedelta(hours=point["timepoint"])
-        if ws <= tp_dt <= we:
-            window_points.append(point)
-
-    # Fallback: 7Timer is a 3-hour grid. Short imaging windows (e.g. heavy
-    # packup-time clipping) can land entirely between two grid points and
-    # produce zero hits. In that case use the single 7Timer point closest to
-    # the window midpoint so the UI still shows a seeing estimate instead of
-    # silently dropping the whole block.
-    nearest_used = False
+    window_points, nearest_used = _collect_seeing_points_for_window(
+        series, init_dt, ws, we
+    )
     if not window_points:
-        mid = ws + (we - ws) / 2
-        best = None
-        best_diff = float("inf")
-        for point in series:
-            tp_dt = init_dt + datetime.timedelta(hours=point["timepoint"])
-            diff = abs((tp_dt - mid).total_seconds())
-            if diff < best_diff:
-                best_diff = diff
-                best = point
-        if best is None:
-            return None
-        window_points = [best]
-        nearest_used = True
+        return None
 
     seeing_vals = [p.get("seeing", 5) for p in window_points]
     transp_vals = [p.get("transparency", 3) for p in window_points]
@@ -960,11 +982,15 @@ def compute_forecast_days(
                 we_utc_aware = (we_utc - datetime.timedelta(hours=utc_offset_h)).replace(
                     tzinfo=datetime.timezone.utc
                 )
-                seeing_pts = []
-                for pt in astro_series:
-                    tp_dt = astro_init_dt + datetime.timedelta(hours=pt["timepoint"])
-                    if ws_utc_aware <= tp_dt <= we_utc_aware:
-                        seeing_pts.append(pt.get("seeing", 5))
+                # Use the shared nearest-neighbor helper so short imaging
+                # windows that fall between 7Timer's 3-hour grid points still
+                # get a seeing estimate (matches the Overview tab behaviour).
+                # The helper enforces a ~1.6h max distance so nights beyond
+                # 7Timer's ~72h horizon still legitimately show no data.
+                seeing_window_pts, _seeing_nearest_used = _collect_seeing_points_for_window(
+                    astro_series, astro_init_dt, ws_utc_aware, we_utc_aware
+                )
+                seeing_pts = [p.get("seeing", 5) for p in seeing_window_pts]
                 if seeing_pts:
                     seeing_avg_raw = round(sum(seeing_pts) / len(seeing_pts))
                     seeing_worst_raw = max(seeing_pts)

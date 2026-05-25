@@ -13,6 +13,14 @@ _Nothing yet._
 
 ---
 
+## [2.4.3] - 2026-05-25
+
+### Fixed
+
+- **Night Conditions → Seeing tab: "your target" highlight now works for multi-word target types.** The backend sends `target_type` as snake_case strings (`supernova_remnant`, `emission_nebula`, `planetary_nebula`, etc.) while the client-side `SEEING_TYPES` lookup table used spaced labels (`"Supernova Remnant"`, ...). The lookup compared lowercased strings only, so the underscore mismatch silently broke matching for every multi-word type — the target-type callout fell back to the grey "no threshold defined for this type" message and the per-row "◀ your target" tag never appeared. Single-word types like `galaxy` happened to work, masking the bug. The Seeing tab now normalises both sides of the comparison by lowercasing and replacing underscores with spaces. The verdict callout (good / marginal / poor) and the per-row highlight both work for every type in the taxonomy.
+
+---
+
 ## [2.4.2] - 2026-05-25
 
 ### Fixed

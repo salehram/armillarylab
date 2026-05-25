@@ -2,7 +2,7 @@
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
-![Version](https://img.shields.io/badge/version-2.4.2-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.4.3-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
@@ -541,7 +541,7 @@ docker-compose up --build
 
 ## 📊 Current Status
 
-**Shipping version:** **2.4.2** (`APP_VERSION` in `app.py`; tag `v2.4.2` on GitHub). Install from `main` or check out that tag for a frozen snapshot. v2.4.2 is a patch on top of v2.4.1 that restores the Imaging-Window Seeing block in the Night Conditions panel when the imaging window is shorter than 7Timer's 3-hour grid (see [CHANGELOG.md](CHANGELOG.md)).
+**Shipping version:** **2.4.3** (`APP_VERSION` in `app.py`; tag `v2.4.3` on GitHub). Install from `main` or check out that tag for a frozen snapshot. v2.4.3 is a patch on top of v2.4.2 that fixes the "your target" highlight in the Seeing tab for multi-word target types (e.g. `supernova_remnant`, `emission_nebula`) in the Night Conditions panel (see [CHANGELOG.md](CHANGELOG.md)).
 
 ### ✅ New in v2.4.0 (Comprehensive Object Resolver)
 

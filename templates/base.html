@@ -542,12 +542,17 @@
     }
 
     // Target-type callout (if we have context)
+    // Note: backend sends snake_case strings like "supernova_remnant" while
+    // SEEING_TYPES labels are spaced like "Supernova Remnant". Normalise both
+    // by replacing underscores with spaces and lowercasing before matching.
+    function _normType(s){ return (s || '').toString().toLowerCase().replace(/_/g, ' ').trim(); }
     if (d.target_context && d.target_context.target_type) {
       var tName = d.target_context.target_name || '';
       var tType = d.target_context.target_type;
+      var tTypeNorm = _normType(tType);
       var matched = null;
       for (var i = 0; i < SEEING_TYPES.length; i++) {
-        if (SEEING_TYPES[i].label.toLowerCase() === tType.toLowerCase()) {
+        if (_normType(SEEING_TYPES[i].label) === tTypeNorm) {
           matched = SEEING_TYPES[i];
           break;
         }
@@ -598,10 +603,10 @@
     h += '<table style="width:100%;border-collapse:collapse;font-size:.74rem;">';
     h += '<thead><tr style="color:#8888aa;border-bottom:1px solid rgba(255,255,255,.1);">'
        + '<th style="padding:3px 4px;">Target Type</th><th style="padding:3px 4px;">Max Seeing</th><th style="padding:3px 4px;">Notes</th></tr></thead><tbody>';
-    var targetType = (d.target_context && d.target_context.target_type) ? d.target_context.target_type.toLowerCase() : null;
+    var targetType = (d.target_context && d.target_context.target_type) ? _normType(d.target_context.target_type) : null;
     for (var k = 0; k < SEEING_TYPES.length; k++) {
       var st = SEEING_TYPES[k];
-      var isHighlighted = targetType && st.label.toLowerCase() === targetType;
+      var isHighlighted = targetType && _normType(st.label) === targetType;
       var thresholdRow = null;
       for (var m = 0; m < SEEING_SCALE.length; m++) {
         if (SEEING_SCALE[m].raw.indexOf(st.maxRaw) >= 0) { thresholdRow = SEEING_SCALE[m]; break; }

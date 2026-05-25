@@ -21,7 +21,7 @@ Welcome to the ArmillaryLab documentation. This folder contains detailed guides 
 |----------|-------------|
 | [Palette & Filter Guide](PALETTE_FILTER_GUIDE.md) | **Start here!** Understand palettes, filters, and target plans |
 | [Equipment Presets Guide](PRESETS_GUIDE.md) | Configure and share filter setups using JSON presets |
-| [Features Roadmap §17](FEATURES_ROADMAP.md) | **Calibration Frames** — tracking, two-point flats, skip/defer |
+| [Features Roadmap §17](FEATURES_ROADMAP.md) | **Calibration Frames** — tracking, end-of-channel reminder, skip/defer |
 | [Calibration Guide](CALIBRATION_GUIDE.md) | Enable tracking, log captures, read suggestions |
 | [Features Roadmap §16](FEATURES_ROADMAP.md) | **Night Conditions** — moon phase, weather, seeing, channel suggestion (built into the app UI) |
 | [NINA Integration Guide](NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. |

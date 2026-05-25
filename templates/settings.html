@@ -96,13 +96,6 @@
                      step="1" min="0" value="{{ config.default_calibration_bias or 0 }}">
             </div>
           </div>
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="default_calibration_two_point" name="default_calibration_two_point" value="1"
-                   {% if config.default_calibration_two_point %}checked{% endif %}>
-            <label class="form-check-label" for="default_calibration_two_point">
-              Use two-point flat capture by default (half at channel midpoint, remainder at channel end)
-            </label>
-          </div>
         </div>
       </div>
 

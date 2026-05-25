@@ -13,6 +13,34 @@ _Nothing yet._
 
 ---
 
+## [2.5.0] - 2026-05-25
+
+### Changed
+
+- **Calibration suggestions are now end-of-channel only.** The v2.2.0 "two-point" workflow pinged users at 50% channel light progress to log half their flats, with the remainder due at end-of-channel. ArmillaryLab is a tracker, not a stacker — it never applies or averages flats — so forcing a mid-channel capture rhythm imposed workflow without improving stack quality. v2.5.0 fires a single suggestion per channel/frame-type when the channel's light frames complete and frames are still owed. *When* and *how* you capture (per-session, end-of-run, or any mix) is now entirely your call.
+- `checkpoint` on each `CalibrationCapture` is now treated as free-form metadata; the log endpoint, the edit form, and the manual-log dropdown all still accept `midpoint`, `end`, and `manual` for backward compatibility, plus any tag clients send via the API. The suggestion engine no longer reads it as workflow state.
+- The `/target/<id>/calibration/skip` endpoint now accepts `checkpoint="end"` only (rejects `midpoint` with HTTP 400).
+- `get_effective_calibration_config()` no longer emits `two_point` in its payload, and `/api/target/<id>/calibration` follows suit. No first-party UI consumed the field; verify any external integrations.
+- Rewrote [docs/CALIBRATION_GUIDE.md](docs/CALIBRATION_GUIDE.md) around the "tracking, not processing" framing.
+
+### Removed
+
+- The **"Use two-point flat capture by default"** checkbox on **Settings → Default Calibration Frames**.
+- The **"Two-point flat capture"** override on **Target → Settings → Calibration Tracking**.
+- `test_midpoint_suggestion_at_half_light_frames` and `test_skip_midpoint_end_includes_full_remainder` (replaced by `test_no_midpoint_suggestion_at_half_light_frames`, `test_calibration_suggestion_fires_only_at_channel_end`, `test_skip_calibration_rejects_midpoint`, `test_calibration_log_preserves_midpoint_checkpoint_tag`, and `test_migration_clears_legacy_midpoint_skips`).
+
+### Deprecated
+
+- The `GlobalConfig.default_calibration_two_point` and `Target.override_calibration_two_point` columns are no longer read or written by any code path. They are retained in this release for safe downgrade; **scheduled for removal in v2.6** (see [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) §19).
+- The `two_point` field on the `/api/target/<id>/calibration` JSON payload is gone. External clients still depending on it should pin to v2.4.x or update.
+
+### Migration
+
+- `apply_additive_schema_migrations()` (runs on startup) now performs a one-time idempotent `DELETE FROM calibration_checkpoint_skips WHERE checkpoint = 'midpoint'` to clear stale skip rows that would otherwise be orphaned (no UI path remains to manage them).
+- Existing `CalibrationCapture` rows with `checkpoint = 'midpoint'` are **left untouched** — historical capture metadata is preserved.
+
+---
+
 ## [2.4.4] - 2026-05-25
 
 ### Fixed

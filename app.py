@@ -53,7 +53,7 @@ from config.flask_process import (
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.4.4"
+APP_VERSION = "2.5.0"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -223,6 +223,23 @@ def apply_additive_schema_migrations(log=print):
         except Exception as exc:
             db.session.rollback()
             log(f"WARNING: canonical TargetType seed skipped: {exc}")
+
+    # v2.5.0 data cleanup: the two-point flat workflow was dropped, so any
+    # historical "midpoint" skip rows are now noise. Idempotent — once the
+    # rows are gone subsequent runs delete nothing.
+    if "calibration_checkpoint_skips" in inspector.get_table_names():
+        try:
+            with db.engine.connect() as conn:
+                result = conn.execute(text(
+                    "DELETE FROM calibration_checkpoint_skips WHERE checkpoint = 'midpoint'"
+                ))
+                conn.commit()
+                removed = result.rowcount or 0
+            if removed > 0:
+                applied.append(f"calibration_checkpoint_skips(-{removed} midpoint)")
+                log(f"Removed {removed} legacy midpoint skip rows (v2.5.0 cleanup).")
+        except Exception as exc:
+            log(f"WARNING: legacy midpoint skip cleanup skipped: {exc}")
 
     if applied:
         log(f"Schema sync applied: {', '.join(applied)}")
@@ -877,13 +894,13 @@ def get_effective_min_altitude(target):
 
 
 def get_effective_calibration_config(target):
-    """Resolved calibration settings for a target (global defaults + overrides)."""
+    """Resolved calibration settings for a target (global defaults + overrides).
+
+    Note: ``default_calibration_two_point`` / ``override_calibration_two_point``
+    columns are retained this release but no longer read — the two-point flat
+    nudge was dropped in v2.5.0. Columns will be removed in v2.6 (see roadmap).
+    """
     global_config = get_global_config()
-    two_point = (
-        target.override_calibration_two_point
-        if target.override_calibration_two_point is not None
-        else global_config.default_calibration_two_point
-    )
     return {
         "enabled": bool(target.calibration_tracking_enabled),
         "darks": (
@@ -906,7 +923,6 @@ def get_effective_calibration_config(target):
             if target.override_calibration_bias is not None
             else global_config.default_calibration_bias
         ),
-        "two_point": bool(two_point),
     }
 
 
@@ -2262,7 +2278,7 @@ def skip_calibration_checkpoint(target_id):
     frame_type = (request.form.get("frame_type") or "").strip().lower()
     checkpoint = (request.form.get("checkpoint") or "").strip().lower()
 
-    if frame_type not in ("flat", "dark_flat") or checkpoint not in ("midpoint", "end"):
+    if frame_type not in ("flat", "dark_flat") or checkpoint != "end":
         message = "Invalid skip request."
         if _wants_json_response():
             return jsonify({"ok": False, "message": message}), 400
@@ -2700,7 +2716,6 @@ def global_settings():
             request.form.get("default_calibration_dark_flats_per_channel", 0) or 0
         )
         config.default_calibration_bias = int(request.form.get("default_calibration_bias", 0) or 0)
-        config.default_calibration_two_point = request.form.get("default_calibration_two_point") == "1"
 
         # Resolver settings (Phase 8)
         config.resolver_offline_mode  = bool(request.form.get("resolver_offline_mode"))
@@ -2949,7 +2964,6 @@ def target_settings(target_id):
             "override_calibration_dark_flats_per_channel", ""
         ).strip()
         override_bias = request.form.get("override_calibration_bias", "").strip()
-        override_two_point = request.form.get("override_calibration_two_point", "").strip()
 
         target.override_calibration_darks = int(override_darks) if override_darks else None
         target.override_calibration_flats_per_channel = (
@@ -2959,12 +2973,9 @@ def target_settings(target_id):
             int(override_dark_flats) if override_dark_flats else None
         )
         target.override_calibration_bias = int(override_bias) if override_bias else None
-        if override_two_point == "1":
-            target.override_calibration_two_point = True
-        elif override_two_point == "0":
-            target.override_calibration_two_point = False
-        else:
-            target.override_calibration_two_point = None
+        # Note: override_calibration_two_point column is retained but no longer
+        # written from the UI (two-point nudge removed in v2.5.0). Column will
+        # be dropped in v2.6.
         
         try:
             db.session.commit()

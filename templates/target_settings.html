@@ -47,7 +47,7 @@
               Enable calibration frame tracking for this target
             </label>
           </div>
-          <p class="text-muted small">Track darks, flats, dark flats, and bias. Flats/dark flats can use two-point capture suggestions per channel.</p>
+          <p class="text-muted small">Track darks, flats, dark flats, and bias. You decide when to capture them — we just remind you at the end of each channel if you still owe frames.</p>
           <div class="row">
             <div class="col-md-6 mb-2">
               <label for="override_calibration_darks" class="form-label">Darks override</label>
@@ -72,16 +72,6 @@
               <input type="number" class="form-control" id="override_calibration_dark_flats_per_channel" name="override_calibration_dark_flats_per_channel"
                      min="0" step="1" value="{{ target.override_calibration_dark_flats_per_channel if target.override_calibration_dark_flats_per_channel is not none else '' }}"
                      placeholder="Global: {{ global_config.default_calibration_dark_flats_per_channel or 0 }}">
-            </div>
-            <div class="col-md-12">
-              <label for="override_calibration_two_point" class="form-label">Two-point flat capture</label>
-              <select class="form-select" id="override_calibration_two_point" name="override_calibration_two_point">
-                <option value="" {% if target.override_calibration_two_point is none %}selected{% endif %}>
-                  Use global default ({{ 'On' if global_config.default_calibration_two_point else 'Off' }})
-                </option>
-                <option value="1" {% if target.override_calibration_two_point == true %}selected{% endif %}>On — midpoint + end</option>
-                <option value="0" {% if target.override_calibration_two_point == false %}selected{% endif %}>Off — end of channel only</option>
-              </select>
             </div>
           </div>
         </div>

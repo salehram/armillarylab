@@ -921,6 +921,32 @@ A unified, layered resolver that turns any astronomical designation (NGC, IC, Me
 
 ---
 
+## 🛠 19. v2.6 candidates — calibration cleanup carry-over from v2.5.0
+
+v2.5.0 removed the two-point flat-capture workflow nudge and replaced it with simple end-of-channel suggestions plus free-form `checkpoint` metadata tags. To keep that release zero-downtime / fully reversible, two deprecation shims were left in place. v2.6 should:
+
+### 19.1 Drop deprecated calibration columns
+- Remove `GlobalConfig.default_calibration_two_point` (Boolean, was `default=True`)
+- Remove `Target.override_calibration_two_point` (nullable Boolean)
+- One-shot migration: `ALTER TABLE ... DROP COLUMN ...` for both, guarded by `_safe_exec` so re-runs are idempotent
+
+### 19.2 Drop `two_point` from `/api/target/<id>/calibration` payload
+- If v2.5.0 emitted it as a `false` shim (Phase 2 audit decision), remove it entirely once any front-end JS that still reads it is updated
+
+### 19.3 Per-session flat pairing (optional richer model)
+- Stamp each `CalibrationCapture` with a session/capture date (likely already present via `created_at` — verify)
+- Add a per-target "flat library" timeline view sorted by capture date
+- Document the pairing rule explicitly: *each light frame uses the newest flat set captured ≤ its own date; never average across sessions*
+- Lets users commit to per-session flats when convenient and gracefully fall back to most-recent when not — without ever silently halving real dust corrections
+
+### 19.4 Preset / export cleanup
+- Remove any `default_calibration_two_point` references from `config/presets/base.json` or other settings export paths once the columns are dropped
+
+### Status
+**🆕 Planned for v2.6.**
+
+---
+
 # Next Recommended Focus
 **11. Session Recommendation Engine** - AI-driven session optimization  
 Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, enhanced custom filter system, Night Conditions, and calibration frame tracking), the next major enhancement is implementing an intelligent session recommendation engine. Note that weather integration and moon phase awareness are now partially delivered through the Night Conditions popup (feature 16), which provides real-time weather data, seeing conditions, and moon-aware channel suggestions. Calibration tracking (feature 17) covers flat/dark-flat workflow suggestions per channel. The remaining scope for this feature includes:

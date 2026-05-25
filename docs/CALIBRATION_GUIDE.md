@@ -1,6 +1,16 @@
 # Calibration Frames Guide
 
-Track darks, flats, dark flats, and bias per imaging target—with optional two-point flat capture suggestions tied to your light frame progress.
+Track darks, flats, dark flats, and bias per imaging target. ArmillaryLab is a
+**tracker, not a stacker** — we record what you captured and remind you at the
+end of each channel if you still owe frames. *When* and *how* you capture
+(per-session, all at the end, or any mix) is entirely up to you.
+
+> **v2.5.0 change:** the old "two-point" mid-channel nudge was dropped. Since
+> ArmillaryLab never applies or averages flats, forcing a capture rhythm gained
+> nothing. You now get one suggestion per channel — at the end — and the
+> `checkpoint` field on each capture is free-form metadata. See the
+> [features roadmap](FEATURES_ROADMAP.md) for the v2.6 column cleanup that
+> follows.
 
 ---
 
@@ -8,12 +18,12 @@ Track darks, flats, dark flats, and bias per imaging target—with optional two-
 
 Calibration tracking is **opt-in per target**. When enabled:
 
-| Frame type | Scope | Suggestions |
-|------------|-------|-------------|
-| Darks | Whole target | Manual logging only |
-| Bias | Whole target | Manual logging only |
-| Flats | Per channel (same count for every channel) | Midpoint + end (if two-point enabled) |
-| Dark flats | Per channel | Midpoint + end (if two-point enabled) |
+| Frame type | Scope | Suggestion |
+|------------|-------|------------|
+| Darks | Whole target | None — log whenever you capture |
+| Bias | Whole target | None — log whenever you capture |
+| Flats | Per channel (same count for every channel) | One reminder when the channel's lights are complete |
+| Dark flats | Per channel | One reminder when the channel's lights are complete |
 
 ---
 
@@ -24,36 +34,37 @@ Calibration tracking is **opt-in per target**. When enabled:
 Open **Settings** → **Default Calibration Frames**:
 
 - Set counts for darks, flats per channel, dark flats per channel, and optional bias
-- Enable **Use two-point flat capture by default** to split flats/dark-flats at channel midpoint and end
-
-Use `0` to disable a frame type.
+- Use `0` to disable a frame type
 
 ### 2. Enable on a target
 
 Open **Target → Settings** → **Calibration Tracking**:
 
 - Check **Enable calibration frame tracking for this target**
-- Optionally override any count or two-point behavior (blank = global default)
+- Optionally override any count (blank = global default)
 
 ---
 
-## Two-point workflow (example: R channel)
+## End-of-channel workflow (example: R channel)
 
-Suppose you set **100 flats** and **100 dark flats per channel**, with two-point enabled, and your R channel plan is **20×300s** light frames.
+Suppose you set **100 flats** and **100 dark flats per channel**, and your R
+channel plan is **20×300s** light frames.
 
-| Milestone | Light progress | Suggestion |
-|-----------|----------------|------------|
-| Midpoint | 10 frames logged (50%) | Log **50** of **100** planned flats + dark flats for R |
-| End | 20 frames logged (100%) | Log **remaining** frames to reach **100** total (e.g. 50 if midpoint done, or full 100 if midpoint was skipped/missed) |
+| Moment | What you see |
+|--------|--------------|
+| Mid-channel (10/20 frames logged) | No nudge — capture flats now if you want, or wait |
+| End of channel (20/20 frames logged) | One suggestion: *log remaining flats/dark flats for R* |
 
-Banners show the batch to log now plus your **X / 100 captured** progress so totals never look additive (50 + 100).
+The banner shows **X / 100 captured** so totals never look additive. The
+`checkpoint` tag you pick when logging (`midpoint`, `end`, `manual`, or any
+text via the API) is preserved as-is — it's metadata, not workflow state.
 
 ### Skip for now
 
-- **Skip midpoint**: obligation moves to the end checkpoint when R channel completes
-- **Skip end**: no further prompts until you restore the skip; log manually whenever you want
+- **Skip end**: silence the channel's end-of-run reminder until you restore it
 
-To bring a skipped suggestion back, open **Calibration Frames** → **Skipped Suggestions** and click **Restore**. The action banner reappears if light progress still meets that checkpoint threshold.
+To bring a skipped suggestion back, open **Calibration Frames** → **Skipped
+Suggestions** and click **Restore**.
 
 ---
 
@@ -61,13 +72,17 @@ To bring a skipped suggestion back, open **Calibration Frames** → **Skipped Su
 
 On the target detail page, use the **Calibration Frames** card:
 
-1. Choose date, frame type, count, channel (for flats/dark flats), checkpoint, optional notes
+1. Choose date, frame type, count, channel (for flats/dark flats), checkpoint tag, optional notes
 2. Click **Log Calibration**
 
-From **action item** banners (when a threshold is crossed):
+You can log captures at **any time** — before, during, or after lights for a
+channel. The `checkpoint` field is a free-form tag for your own bookkeeping;
+ArmillaryLab counts the frames toward the channel total regardless of tag.
 
-- **Log capture** — prefills the form
-- **Skip for now** — defers that checkpoint
+From the **end-of-channel banner**:
+
+- **Log capture** — prefills the form with the remaining count
+- **Skip for now** — silences that channel's reminder
 
 You can also log darks in small batches across sessions (e.g. 2–3 at the start/end of a night) to chip away at the total.
 
@@ -76,7 +91,7 @@ You can also log darks in small batches across sessions (e.g. 2–3 at the start
 ## Reading progress
 
 - **Darks / Bias**: target-level progress bars (`captured / planned`)
-- **Per-channel table**: flats and dark flats with midpoint status (✓, pending, or — if skipped)
+- **Per-channel table**: flats and dark flats with end-of-channel status (✓ complete, pending, or — if skipped)
 - **Plan table**: **Cal** column badges when a suggestion is active
 - **History**: captures grouped by date with edit/delete
 

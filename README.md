@@ -2,7 +2,7 @@
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
-![Version](https://img.shields.io/badge/version-2.4.4-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.5.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
@@ -14,7 +14,7 @@ A comprehensive web-based tool for planning astrophotography sessions and managi
 
 **v2.3.0** adds the **Seeing Guide** and **5-Day Forecast** tabs to the Night Conditions popup for richer at-a-glance planning.
 
-**v2.2.0** adds optional **calibration frame tracking**: global defaults, per-target opt-in, manual dark/bias logging, and two-point flat/dark-flat suggestions at channel midpoint and end—with skip/defer and AstroBin export prefill. See [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§17).
+**v2.2.0** added optional **calibration frame tracking**: global defaults, per-target opt-in, manual dark/bias logging, and per-channel flat/dark-flat suggestions — with skip/defer and AstroBin export prefill. As of v2.5.0 a single end-of-channel reminder fires instead of the original two-point nudge (ArmillaryLab tracks captures but never applies flats, so capture rhythm is the user's call). See [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§17, §19).
 
 **v2.1.0** adds the **Night Conditions** navbar popup: live moon phase (offline via astroplan), Open-Meteo weather, 7Timer seeing/transparency, weighted filter-channel suggestions, imaging-window aggregates when a target has a valid window, and a three-tier offline fallback with local caching.
 
@@ -77,9 +77,9 @@ A comprehensive web-based tool for planning astrophotography sessions and managi
 
 ### 📐 Calibration Frames Management
 - **Opt-in tracking**: Enable per target; global defaults for darks, flats per channel, dark flats, and bias
-- **Two-point flats workflow**: Suggest half the flat + dark-flat count at channel light midpoint, remainder at channel end
+- **End-of-channel reminder**: one suggestion per channel when its lights finish, showing remaining flats + dark-flats to capture
 - **Manual darks/bias**: Log any amount anytime (e.g. a few darks per session or batch at project end)
-- **Skip/defer**: Skip midpoint suggestions; end checkpoint covers remaining; manual catch-up always available
+- **Skip/defer**: Silence the end-of-channel reminder per channel; restore anytime; manual catch-up always available
 - **AstroBin prefill**: Tracked totals prefill export modal when tracking is enabled
 - **📚 Documentation**: See [Calibration Guide](docs/CALIBRATION_GUIDE.md) and [Features Roadmap §17](docs/FEATURES_ROADMAP.md)
 
@@ -113,7 +113,7 @@ Detailed documentation is available in the [docs/](docs/) folder:
 | [NINA Integration Guide](docs/NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. |
 | [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV |
 | [Database Guide](docs/DATABASE_GUIDE.md) | SQLite/PostgreSQL setup and migration |
-| [Calibration Guide](docs/CALIBRATION_GUIDE.md) | Track darks, flats, dark flats, and bias with two-point suggestions |
+| [Calibration Guide](docs/CALIBRATION_GUIDE.md) | Track darks, flats, dark flats, and bias with end-of-channel reminders |
 | [Features Roadmap](docs/FEATURES_ROADMAP.md) | Completed features, Calibration (§17), Night Conditions (§16), and future plans |
 
 ## 🚀 Quick Start
@@ -541,7 +541,7 @@ docker-compose up --build
 
 ## 📊 Current Status
 
-**Shipping version:** **2.4.4** (`APP_VERSION` in `app.py`; tag `v2.4.4` on GitHub). Install from `main` or check out that tag for a frozen snapshot. v2.4.4 extends the v2.4.2 short-window seeing fallback into the 5-day Forecast tab, so per-night seeing now renders consistently for targets with short imaging windows (see [CHANGELOG.md](CHANGELOG.md)).
+**Shipping version:** **2.5.0** (`APP_VERSION` in `app.py`; tag `v2.5.0` on GitHub). Install from `main` or check out that tag for a frozen snapshot. v2.5.0 drops the v2.2.0 two-point flat nudge in favour of a single end-of-channel reminder; the `checkpoint` field is now free-form metadata, and the deprecated `default_calibration_two_point` / `override_calibration_two_point` columns are scheduled for removal in v2.6 (see [CHANGELOG.md](CHANGELOG.md) and [FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) §19).
 
 ### ✅ New in v2.4.0 (Comprehensive Object Resolver)
 
@@ -560,7 +560,7 @@ docker-compose up --build
 ### ✅ New in v2.2.0 (Calibration Frames)
 
 - 📐 **Calibration tracking**: Opt-in per target; global defaults; manual dark/bias logging
-- 🎯 **Two-point flats**: Midpoint + end suggestions per channel based on light frame progress
+- 🎯 **End-of-channel reminder**: one suggestion per channel when its lights complete, showing remaining flats + dark-flats
 - ⏭️ **Skip/defer**: Skip checkpoints; log manually later; AstroBin export prefill from tracked totals
 - 🧩 **`calibration_utils.py`** + `/api/target/<id>/calibration`
 

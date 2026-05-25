@@ -1,4 +1,16 @@
-"""Calibration frame tracking and two-point flat/dark-flat suggestion logic."""
+"""Calibration frame tracking and end-of-channel flat/dark-flat suggestion logic.
+
+ArmillaryLab is a tracker, not a stacker. We record what the user captured and
+remind them when a channel finishes if they still owe frames. *When* and *how*
+they capture (per-session, end-of-run, or any mix) is up to them; the
+``checkpoint`` field on each capture is free-form metadata, not workflow state.
+
+Historical note: v2.5.0 removed the v2.2.0 "two-point" suggestion nudge that
+pinged users at 50%% channel progress to log half their flats. The nudge
+forced a capture strategy without improving stack quality (we never apply or
+average flats), so it was dropped in favour of a single end-of-channel
+suggestion.
+"""
 
 from __future__ import annotations
 
@@ -111,26 +123,21 @@ def _channel_checkpoint_detail(
     frame_type: str,
     channel: str,
     total_per_channel: int,
-    two_point: bool,
     captures: list[dict],
     skips: list[dict],
 ) -> dict:
+    """Per-channel calibration progress detail.
+
+    The ``mid_*`` fields are retained at zero/True for backward-compatible
+    response shape; nothing in the suggestion engine reads them. The
+    ``captured_mid`` / ``captured_end`` counts still surface historical
+    ``checkpoint`` tags so the UI can display them as honest metadata.
+    """
     captured_total = _captured_total(captures, channel, frame_type)
-    mid_target = total_per_channel // 2 if two_point else 0
     captured_mid = _captured_at_checkpoint(captures, channel, frame_type, "midpoint")
     captured_end = _captured_at_checkpoint(captures, channel, frame_type, "end")
-    mid_skipped = _is_skipped(skips, channel, frame_type, "midpoint")
     end_skipped = _is_skipped(skips, channel, frame_type, "end")
 
-    mid_complete = (
-        not two_point
-        or mid_skipped
-        or mid_target <= 0
-        or captured_mid >= mid_target
-        or captured_total >= mid_target  # manual / bulk logs count toward midpoint
-        or captured_total >= total_per_channel
-        or total_per_channel <= 0
-    )
     end_complete = (
         end_skipped
         or total_per_channel <= 0
@@ -140,12 +147,12 @@ def _channel_checkpoint_detail(
     return {
         "planned": total_per_channel,
         "captured": captured_total,
-        "mid_target": mid_target,
+        "mid_target": 0,
         "captured_mid": captured_mid,
         "captured_end": captured_end,
-        "mid_skipped": mid_skipped,
+        "mid_skipped": False,
         "end_skipped": end_skipped,
-        "mid_complete": mid_complete,
+        "mid_complete": True,
         "end_complete": end_complete,
     }
 
@@ -191,7 +198,6 @@ def get_calibration_status(
 
     flats_per = config.get("flats_per_channel", 0)
     dark_flats_per = config.get("dark_flats_per_channel", 0)
-    two_point = config.get("two_point", True)
 
     for ch in plan_data["channels"]:
         ch_name = ch.get("name")
@@ -207,7 +213,6 @@ def get_calibration_status(
                 frame_type="flat",
                 channel=ch_name,
                 total_per_channel=flats_per,
-                two_point=two_point,
                 captures=capture_dicts,
                 skips=skip_dicts,
             ),
@@ -215,7 +220,6 @@ def get_calibration_status(
                 frame_type="dark_flat",
                 channel=ch_name,
                 total_per_channel=dark_flats_per,
-                two_point=two_point,
                 captures=capture_dicts,
                 skips=skip_dicts,
             ),
@@ -231,17 +235,23 @@ def get_calibration_suggestions(
     captures,
     skips,
 ) -> list[dict]:
-    """Return actionable calibration suggestions for flats and dark flats."""
+    """Return actionable end-of-channel calibration suggestions.
+
+    One suggestion fires per channel/frame-type when the channel's light frames
+    are complete and the user still owes flats or dark flats. The user remains
+    free to log captures at any time before that point (capture-anytime
+    workflow); we just don't pester them mid-run.
+    """
     if not config.get("enabled"):
         return []
 
     status = get_calibration_status(config, plan_data, progress_seconds, captures, skips)
     suggestions: list[dict] = []
-    two_point = config.get("two_point", True)
 
     for ch_name, ch_status in status.get("channels", {}).items():
-        ratio = ch_status["light_ratio"]
         lights_complete = ch_status["lights_complete"]
+        if not lights_complete:
+            continue
 
         for frame_type in ("flat", "dark_flat"):
             total_per = config.get(
@@ -251,48 +261,25 @@ def get_calibration_suggestions(
                 continue
 
             detail = ch_status[frame_type]
+            if detail["end_complete"]:
+                continue
 
-            mid_target = detail["mid_target"]
-            captured_mid = detail["captured_mid"]
             captured_total = detail["captured"]
             remaining_total = max(total_per - captured_total, 0)
+            if remaining_total <= 0:
+                continue
 
-            # Midpoint only while lights are still in progress — once complete, end covers all remainder.
-            if two_point and ratio >= 0.5 and not detail["mid_complete"] and not lights_complete:
-                suggested = max(mid_target - captured_mid, 0)
-                if suggested > 0:
-                    suggestions.append(
-                        _build_suggestion(
-                            channel=ch_name,
-                            frame_type=frame_type,
-                            checkpoint="midpoint",
-                            suggested_count=suggested,
-                            planned_total=total_per,
-                            captured_total=captured_total,
-                            remaining_total=remaining_total,
-                        )
-                    )
-
-            if lights_complete and not detail["end_complete"]:
-                end_needed = remaining_total
-                if end_needed > 0:
-                    midpoint_missed = (
-                        two_point
-                        and not detail["mid_complete"]
-                        and not detail["mid_skipped"]
-                    )
-                    suggestions.append(
-                        _build_suggestion(
-                            channel=ch_name,
-                            frame_type=frame_type,
-                            checkpoint="end",
-                            suggested_count=end_needed,
-                            planned_total=total_per,
-                            captured_total=captured_total,
-                            remaining_total=end_needed,
-                            midpoint_missed=midpoint_missed,
-                        )
-                    )
+            suggestions.append(
+                _build_suggestion(
+                    channel=ch_name,
+                    frame_type=frame_type,
+                    checkpoint="end",
+                    suggested_count=remaining_total,
+                    planned_total=total_per,
+                    captured_total=captured_total,
+                    remaining_total=remaining_total,
+                )
+            )
 
     return suggestions
 
@@ -306,32 +293,19 @@ def _build_suggestion(
     planned_total: int,
     captured_total: int,
     remaining_total: int,
-    midpoint_missed: bool = False,
 ) -> dict:
-    """Build a suggestion dict with display fields for UI and API."""
+    """Build an end-of-channel suggestion dict for UI and API."""
     frame_label = frame_type.replace("_", " ")
-    if checkpoint == "midpoint":
-        title = f"Log {suggested_count} {frame_label} at midpoint"
+    title = f"Log {suggested_count} {frame_label} at end"
+    if captured_total > 0:
         detail = (
-            f"First half of your {planned_total}-frame plan for {channel} "
+            f"{remaining_total} remaining of {planned_total} planned for {channel} "
             f"({captured_total} captured so far)"
         )
     else:
-        title = f"Log {suggested_count} {frame_label} at end"
-        if midpoint_missed and captured_total == 0:
-            detail = (
-                f"Full {planned_total}-frame set still needed for {channel} "
-                f"(midpoint was not captured)"
-            )
-        elif captured_total > 0:
-            detail = (
-                f"{remaining_total} remaining of {planned_total} planned for {channel} "
-                f"({captured_total} captured so far)"
-            )
-        else:
-            detail = (
-                f"{remaining_total} remaining of {planned_total} planned for {channel}"
-            )
+        detail = (
+            f"{remaining_total} remaining of {planned_total} planned for {channel}"
+        )
 
     return {
         "channel": channel,
@@ -341,7 +315,7 @@ def _build_suggestion(
         "planned_total": planned_total,
         "captured_total": captured_total,
         "remaining_total": remaining_total,
-        "midpoint_missed": midpoint_missed,
+        "midpoint_missed": False,
         "title": title,
         "detail": detail,
         "actions": ["log", "skip"],

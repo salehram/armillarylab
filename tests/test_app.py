@@ -38,7 +38,6 @@ def client():
             default_calibration_flats_per_channel=100,
             default_calibration_dark_flats_per_channel=100,
             default_calibration_bias=30,
-            default_calibration_two_point=True,
         )
         db.session.add(config)
         db.session.commit()
@@ -87,7 +86,8 @@ def test_effective_calibration_config_uses_target_override(client):
         assert cfg["enabled"] is True
         assert cfg["darks"] == 40
         assert cfg["flats_per_channel"] == 100
-        assert cfg["two_point"] is True
+        # v2.5.0: two_point dropped from effective config payload.
+        assert "two_point" not in cfg
 
 
 def test_global_settings_saves_max_cloud_cover_pct(client):
@@ -114,12 +114,12 @@ def test_global_settings_saves_max_cloud_cover_pct(client):
         assert GlobalConfig.query.first().max_cloud_cover_pct == 15
 
 
-def test_midpoint_suggestion_at_half_light_frames(client):
+def test_no_midpoint_suggestion_at_half_light_frames(client):
+    """v2.5.0: the midpoint nudge is gone — no suggestion fires mid-channel."""
     with app.app_context():
         target = _seed_target()
         plan = TargetPlan.query.filter_by(target_id=target.id).first()
         plan_data = json.loads(plan.plan_json)
-        # 100 min / 300s = 20 frames; 10 frames = 50%
         db.session.add(
             ImagingSession(
                 target_id=target.id,
@@ -135,14 +135,11 @@ def test_midpoint_suggestion_at_half_light_frames(client):
         suggestions = get_calibration_suggestions(
             cfg, plan_data, progress_seconds, [], []
         )
-        flat_mid = [s for s in suggestions if s["frame_type"] == "flat" and s["checkpoint"] == "midpoint"]
-        assert len(flat_mid) == 1
-        assert flat_mid[0]["suggested_count"] == 50
-        assert flat_mid[0]["planned_total"] == 100
-        assert flat_mid[0]["title"] == "Log 50 flat at midpoint"
+        assert suggestions == []
 
 
-def test_lights_complete_shows_only_end_not_midpoint(client):
+def test_calibration_suggestion_fires_only_at_channel_end(client):
+    """Suggestion appears only once lights for the channel are complete."""
     with app.app_context():
         target = _seed_target()
         plan = TargetPlan.query.filter_by(target_id=target.id).first()
@@ -165,39 +162,8 @@ def test_lights_complete_shows_only_end_not_midpoint(client):
         assert flat[0]["checkpoint"] == "end"
         assert flat[0]["suggested_count"] == 100
         assert flat[0]["planned_total"] == 100
-        assert flat[0]["midpoint_missed"] is True
-
-
-def test_skip_midpoint_end_includes_full_remainder(client):
-    with app.app_context():
-        target = _seed_target()
-        plan = TargetPlan.query.filter_by(target_id=target.id).first()
-        plan_data = json.loads(plan.plan_json)
-        db.session.add(
-            ImagingSession(
-                target_id=target.id,
-                date=date.today(),
-                channel="R",
-                sub_exposure_seconds=300,
-                sub_count=20,
-            )
-        )
-        skip = CalibrationCheckpointSkip(
-            target_id=target.id,
-            channel="R",
-            frame_type="flat",
-            checkpoint="midpoint",
-        )
-        db.session.add(skip)
-        db.session.commit()
-        progress_seconds = {"R": 6000.0}
-        cfg = get_effective_calibration_config(target)
-        suggestions = get_calibration_suggestions(
-            cfg, plan_data, progress_seconds, [], [skip]
-        )
-        end_flat = [s for s in suggestions if s["frame_type"] == "flat" and s["checkpoint"] == "end"]
-        assert len(end_flat) == 1
-        assert end_flat[0]["suggested_count"] == 100
+        # midpoint_missed retained as False for response-shape stability.
+        assert flat[0]["midpoint_missed"] is False
 
 
 def test_partial_midpoint_capture_reduces_end_suggestion(client):
@@ -380,7 +346,7 @@ def test_skip_calibration_json(client):
         data={
             "channel": "R",
             "frame_type": "flat",
-            "checkpoint": "midpoint",
+            "checkpoint": "end",
         },
         headers={"X-Requested-With": "XMLHttpRequest"},
     )
@@ -388,7 +354,63 @@ def test_skip_calibration_json(client):
     data = resp.get_json()
     assert data["ok"] is True
     assert "calibration" in data
-    assert any(s["checkpoint"] == "midpoint" for s in data["calibration"]["skips"])
+    assert any(s["checkpoint"] == "end" for s in data["calibration"]["skips"])
+
+
+def test_skip_calibration_rejects_midpoint(client):
+    """v2.5.0: only end-of-channel skips are accepted."""
+    with app.app_context():
+        target = _seed_target()
+        tid = target.id
+    resp = client.post(
+        f"/target/{tid}/calibration/skip",
+        data={
+            "channel": "R",
+            "frame_type": "flat",
+            "checkpoint": "midpoint",
+        },
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 400
+
+
+def test_calibration_log_preserves_midpoint_checkpoint_tag(client):
+    """checkpoint is free-form metadata — 'midpoint' is still a valid tag."""
+    with app.app_context():
+        target = _seed_target()
+        tid = target.id
+    resp = client.post(
+        f"/target/{tid}/calibration/log",
+        data={
+            "frame_type": "flat",
+            "channel": "R",
+            "frame_count": "25",
+            "checkpoint": "midpoint",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    with app.app_context():
+        cap = CalibrationCapture.query.filter_by(target_id=tid, frame_type="flat").one()
+        assert cap.checkpoint == "midpoint"
+        assert cap.frame_count == 25
+
+
+def test_migration_clears_legacy_midpoint_skips(client):
+    """apply_additive_schema_migrations sweeps stale midpoint skip rows."""
+    from app import apply_additive_schema_migrations
+    with app.app_context():
+        target = _seed_target()
+        db.session.add(CalibrationCheckpointSkip(
+            target_id=target.id, channel="R", frame_type="flat", checkpoint="midpoint",
+        ))
+        db.session.add(CalibrationCheckpointSkip(
+            target_id=target.id, channel="G", frame_type="flat", checkpoint="end",
+        ))
+        db.session.commit()
+        apply_additive_schema_migrations(log=lambda *_a, **_k: None)
+        remaining = CalibrationCheckpointSkip.query.filter_by(target_id=target.id).all()
+        assert [s.checkpoint for s in remaining] == ["end"]
 
 
 def test_restore_calibration_skip_route(client):
@@ -398,7 +420,7 @@ def test_restore_calibration_skip_route(client):
             target_id=target.id,
             channel="R",
             frame_type="flat",
-            checkpoint="midpoint",
+            checkpoint="end",
         )
         db.session.add(skip)
         db.session.commit()

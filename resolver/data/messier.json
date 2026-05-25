@@ -1,0 +1,1353 @@
+[
+  {
+    "catalog_id": "M 1",
+    "ra_hours": 5.575547,
+    "dec_deg": 22.014472,
+    "object_type": "SNR",
+    "target_type": "supernova_remnant",
+    "common_names": [
+      "Crab Nebula"
+    ],
+    "magnitude": 8.4,
+    "aliases": [
+      "NGC 1952"
+    ]
+  },
+  {
+    "catalog_id": "M 2",
+    "ra_hours": 21.557503,
+    "dec_deg": -0.823306,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.25,
+    "aliases": [
+      "NGC 7089"
+    ]
+  },
+  {
+    "catalog_id": "M 3",
+    "ra_hours": 13.703119,
+    "dec_deg": 28.375444,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.39,
+    "aliases": [
+      "NGC 5272"
+    ]
+  },
+  {
+    "catalog_id": "M 4",
+    "ra_hours": 16.393167,
+    "dec_deg": -26.525528,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.4,
+    "aliases": [
+      "NGC 6121"
+    ]
+  },
+  {
+    "catalog_id": "M 5",
+    "ra_hours": 15.309375,
+    "dec_deg": 2.082694,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.95,
+    "aliases": [
+      "NGC 5904"
+    ]
+  },
+  {
+    "catalog_id": "M 6",
+    "ra_hours": 17.672431,
+    "dec_deg": -32.254167,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Butterfly Cluster"
+    ],
+    "magnitude": 4.2,
+    "aliases": [
+      "NGC 6405"
+    ]
+  },
+  {
+    "catalog_id": "M 7",
+    "ra_hours": 17.89755,
+    "dec_deg": -34.792833,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Ptolemy's Cluster"
+    ],
+    "magnitude": 3.3,
+    "aliases": [
+      "NGC 6475"
+    ]
+  },
+  {
+    "catalog_id": "M 8",
+    "ra_hours": 18.061464,
+    "dec_deg": -24.380167,
+    "object_type": "Neb",
+    "target_type": "emission",
+    "common_names": [
+      "Lagoon Nebula"
+    ],
+    "magnitude": 5.8,
+    "aliases": [
+      "NGC 6523"
+    ]
+  },
+  {
+    "catalog_id": "M 9",
+    "ra_hours": 17.319939,
+    "dec_deg": -18.51625,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 8.42,
+    "aliases": [
+      "NGC 6333"
+    ]
+  },
+  {
+    "catalog_id": "M 10",
+    "ra_hours": 16.952497,
+    "dec_deg": -4.099333,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 4.98,
+    "aliases": [
+      "NGC 6254"
+    ]
+  },
+  {
+    "catalog_id": "M 11",
+    "ra_hours": 18.851664,
+    "dec_deg": -6.270028,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Amas de l'Ecu de Sobieski",
+      "Wild Duck Cluster"
+    ],
+    "magnitude": 5.8,
+    "aliases": [
+      "NGC 6705"
+    ]
+  },
+  {
+    "catalog_id": "M 12",
+    "ra_hours": 16.787367,
+    "dec_deg": -1.947833,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.07,
+    "aliases": [
+      "NGC 6218"
+    ]
+  },
+  {
+    "catalog_id": "M 13",
+    "ra_hours": 16.694897,
+    "dec_deg": 36.461306,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Hercules Globular Cluster"
+    ],
+    "magnitude": 5.8,
+    "aliases": [
+      "NGC 6205"
+    ]
+  },
+  {
+    "catalog_id": "M 14",
+    "ra_hours": 17.626711,
+    "dec_deg": -3.245917,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.73,
+    "aliases": [
+      "NGC 6402"
+    ]
+  },
+  {
+    "catalog_id": "M 15",
+    "ra_hours": 21.49955,
+    "dec_deg": 12.166833,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.3,
+    "aliases": [
+      "NGC 7078"
+    ]
+  },
+  {
+    "catalog_id": "M 16",
+    "ra_hours": 18.313381,
+    "dec_deg": -13.807222,
+    "object_type": "Neb",
+    "target_type": "emission",
+    "common_names": [
+      "Eagle Nebula"
+    ],
+    "magnitude": 6.0,
+    "aliases": [
+      "NGC 6611"
+    ]
+  },
+  {
+    "catalog_id": "M 17",
+    "ra_hours": 18.346419,
+    "dec_deg": -16.171528,
+    "object_type": "Neb",
+    "target_type": "emission",
+    "common_names": [
+      "Checkmark Nebula",
+      "Lobster Nebula",
+      "Swan Nebula",
+      "omega Nebula"
+    ],
+    "magnitude": 7.0,
+    "aliases": [
+      "NGC 6618"
+    ]
+  },
+  {
+    "catalog_id": "M 18",
+    "ra_hours": 18.332914,
+    "dec_deg": -17.101972,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.9,
+    "aliases": [
+      "NGC 6613"
+    ]
+  },
+  {
+    "catalog_id": "M 19",
+    "ra_hours": 17.0438,
+    "dec_deg": -26.267944,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.57,
+    "aliases": [
+      "NGC 6273"
+    ]
+  },
+  {
+    "catalog_id": "M 20",
+    "ra_hours": 18.045031,
+    "dec_deg": -22.971889,
+    "object_type": "Neb",
+    "target_type": "emission",
+    "common_names": [
+      "Trifid Nebula"
+    ],
+    "magnitude": 8.5,
+    "aliases": [
+      "NGC 6514"
+    ]
+  },
+  {
+    "catalog_id": "M 21",
+    "ra_hours": 18.070403,
+    "dec_deg": -22.490056,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.9,
+    "aliases": [
+      "NGC 6531"
+    ]
+  },
+  {
+    "catalog_id": "M 22",
+    "ra_hours": 18.606722,
+    "dec_deg": -23.903417,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.17,
+    "aliases": [
+      "NGC 6656"
+    ]
+  },
+  {
+    "catalog_id": "M 23",
+    "ra_hours": 17.951325,
+    "dec_deg": -18.985333,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.5,
+    "aliases": [
+      "NGC 6494"
+    ]
+  },
+  {
+    "catalog_id": "M 24",
+    "ra_hours": 18.282256,
+    "dec_deg": -18.514556,
+    "object_type": "*Ass",
+    "target_type": "other",
+    "common_names": [
+      "Small Sgr Star Cloud"
+    ],
+    "magnitude": 4.5,
+    "aliases": [
+      "IC 4715"
+    ]
+  },
+  {
+    "catalog_id": "M 25",
+    "ra_hours": 18.529658,
+    "dec_deg": -19.114944,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 4.6,
+    "aliases": [
+      "IC 4725"
+    ]
+  },
+  {
+    "catalog_id": "M 26",
+    "ra_hours": 18.755183,
+    "dec_deg": -9.383611,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 8.87,
+    "aliases": [
+      "NGC 6694"
+    ]
+  },
+  {
+    "catalog_id": "M 27",
+    "ra_hours": 19.993439,
+    "dec_deg": 22.721028,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Dumbbell Nebula"
+    ],
+    "magnitude": 7.4,
+    "aliases": [
+      "NGC 6853"
+    ]
+  },
+  {
+    "catalog_id": "M 28",
+    "ra_hours": 18.409136,
+    "dec_deg": -24.869833,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.9,
+    "aliases": [
+      "NGC 6626"
+    ]
+  },
+  {
+    "catalog_id": "M 29",
+    "ra_hours": 20.399381,
+    "dec_deg": 38.507667,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.6,
+    "aliases": [
+      "NGC 6913"
+    ]
+  },
+  {
+    "catalog_id": "M 30",
+    "ra_hours": 21.672783,
+    "dec_deg": -23.179083,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 7.1,
+    "aliases": [
+      "NGC 7099"
+    ]
+  },
+  {
+    "catalog_id": "M 31",
+    "ra_hours": 0.712319,
+    "dec_deg": 41.269056,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Andromeda Galaxy"
+    ],
+    "magnitude": 3.44,
+    "aliases": [
+      "NGC 224"
+    ]
+  },
+  {
+    "catalog_id": "M 32",
+    "ra_hours": 0.711619,
+    "dec_deg": 40.865278,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 8.13,
+    "aliases": [
+      "NGC 221"
+    ]
+  },
+  {
+    "catalog_id": "M 33",
+    "ra_hours": 1.564136,
+    "dec_deg": 30.660222,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Triangulum Galaxy",
+      "Triangulum Pinwheel"
+    ],
+    "magnitude": 5.79,
+    "aliases": [
+      "NGC 598"
+    ]
+  },
+  {
+    "catalog_id": "M 34",
+    "ra_hours": 2.702056,
+    "dec_deg": 42.746139,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.2,
+    "aliases": [
+      "NGC 1039"
+    ]
+  },
+  {
+    "catalog_id": "M 35",
+    "ra_hours": 6.151406,
+    "dec_deg": 24.338639,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.1,
+    "aliases": [
+      "NGC 2168"
+    ]
+  },
+  {
+    "catalog_id": "M 36",
+    "ra_hours": 5.604928,
+    "dec_deg": 34.14075,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.0,
+    "aliases": [
+      "NGC 1960"
+    ]
+  },
+  {
+    "catalog_id": "M 37",
+    "ra_hours": 5.871764,
+    "dec_deg": 32.553,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.6,
+    "aliases": [
+      "NGC 2099"
+    ]
+  },
+  {
+    "catalog_id": "M 38",
+    "ra_hours": 5.478469,
+    "dec_deg": 35.854917,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.4,
+    "aliases": [
+      "NGC 1912"
+    ]
+  },
+  {
+    "catalog_id": "M 39",
+    "ra_hours": 21.530089,
+    "dec_deg": 48.438167,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 4.6,
+    "aliases": [
+      "NGC 7092"
+    ]
+  },
+  {
+    "catalog_id": "M 41",
+    "ra_hours": 6.76665,
+    "dec_deg": -20.754222,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 4.5,
+    "aliases": [
+      "NGC 2287"
+    ]
+  },
+  {
+    "catalog_id": "M 42",
+    "ra_hours": 5.587911,
+    "dec_deg": -5.389667,
+    "object_type": "Cl+N",
+    "target_type": "emission",
+    "common_names": [
+      "Great Orion Nebula",
+      "Orion Nebula"
+    ],
+    "magnitude": 4.0,
+    "aliases": [
+      "NGC 1976"
+    ]
+  },
+  {
+    "catalog_id": "M 43",
+    "ra_hours": 5.59205,
+    "dec_deg": -5.267472,
+    "object_type": "HII",
+    "target_type": "emission",
+    "common_names": [
+      "Mairan's Nebula"
+    ],
+    "magnitude": 9.0,
+    "aliases": [
+      "NGC 1982"
+    ]
+  },
+  {
+    "catalog_id": "M 44",
+    "ra_hours": 8.672833,
+    "dec_deg": 19.672056,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Beehive",
+      "Praesepe Cluster"
+    ],
+    "magnitude": 3.1,
+    "aliases": [
+      "NGC 2632"
+    ]
+  },
+  {
+    "catalog_id": "M 46",
+    "ra_hours": 7.696339,
+    "dec_deg": -14.81,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.1,
+    "aliases": [
+      "NGC 2437"
+    ]
+  },
+  {
+    "catalog_id": "M 47",
+    "ra_hours": 7.609728,
+    "dec_deg": -14.482611,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 4.4,
+    "aliases": [
+      "NGC 2422"
+    ]
+  },
+  {
+    "catalog_id": "M 48",
+    "ra_hours": 8.228661,
+    "dec_deg": -5.750444,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.8,
+    "aliases": [
+      "NGC 2548"
+    ]
+  },
+  {
+    "catalog_id": "M 49",
+    "ra_hours": 12.496322,
+    "dec_deg": 8.000472,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 8.28,
+    "aliases": [
+      "NGC 4472"
+    ]
+  },
+  {
+    "catalog_id": "M 50",
+    "ra_hours": 7.044575,
+    "dec_deg": -8.364028,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 5.9,
+    "aliases": [
+      "NGC 2323"
+    ]
+  },
+  {
+    "catalog_id": "M 51",
+    "ra_hours": 13.497975,
+    "dec_deg": 47.195167,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Whirlpool Galaxy"
+    ],
+    "magnitude": 8.36,
+    "aliases": [
+      "NGC 5194"
+    ]
+  },
+  {
+    "catalog_id": "M 52",
+    "ra_hours": 23.413444,
+    "dec_deg": 61.593167,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.9,
+    "aliases": [
+      "NGC 7654"
+    ]
+  },
+  {
+    "catalog_id": "M 53",
+    "ra_hours": 13.215342,
+    "dec_deg": 18.169111,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 7.79,
+    "aliases": [
+      "NGC 5024"
+    ]
+  },
+  {
+    "catalog_id": "M 54",
+    "ra_hours": 18.917575,
+    "dec_deg": -30.4785,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 7.7,
+    "aliases": [
+      "NGC 6715"
+    ]
+  },
+  {
+    "catalog_id": "M 55",
+    "ra_hours": 19.6665,
+    "dec_deg": -30.962083,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.49,
+    "aliases": [
+      "NGC 6809"
+    ]
+  },
+  {
+    "catalog_id": "M 56",
+    "ra_hours": 19.276531,
+    "dec_deg": 30.1845,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 8.4,
+    "aliases": [
+      "NGC 6779"
+    ]
+  },
+  {
+    "catalog_id": "M 57",
+    "ra_hours": 18.893058,
+    "dec_deg": 33.028583,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Ring Nebula"
+    ],
+    "magnitude": 8.8,
+    "aliases": [
+      "NGC 6720"
+    ]
+  },
+  {
+    "catalog_id": "M 58",
+    "ra_hours": 12.628756,
+    "dec_deg": 11.818194,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 10.3,
+    "aliases": [
+      "NGC 4579"
+    ]
+  },
+  {
+    "catalog_id": "M 59",
+    "ra_hours": 12.700622,
+    "dec_deg": 11.647028,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.56,
+    "aliases": [
+      "NGC 4621"
+    ]
+  },
+  {
+    "catalog_id": "M 60",
+    "ra_hours": 12.727772,
+    "dec_deg": 11.552694,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 8.79,
+    "aliases": [
+      "NGC 4649"
+    ]
+  },
+  {
+    "catalog_id": "M 61",
+    "ra_hours": 12.36525,
+    "dec_deg": 4.473639,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 10.25,
+    "aliases": [
+      "NGC 4303"
+    ]
+  },
+  {
+    "catalog_id": "M 62",
+    "ra_hours": 17.020167,
+    "dec_deg": -30.112361,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 7.39,
+    "aliases": [
+      "NGC 6266"
+    ]
+  },
+  {
+    "catalog_id": "M 63",
+    "ra_hours": 13.263703,
+    "dec_deg": 42.029278,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Sunflower Galaxy"
+    ],
+    "magnitude": 8.61,
+    "aliases": [
+      "NGC 5055"
+    ]
+  },
+  {
+    "catalog_id": "M 64",
+    "ra_hours": 12.945456,
+    "dec_deg": 21.682972,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Black Eye Galaxy",
+      "Evil Eye Galaxy"
+    ],
+    "magnitude": 8.52,
+    "aliases": [
+      "NGC 4826"
+    ]
+  },
+  {
+    "catalog_id": "M 65",
+    "ra_hours": 11.315533,
+    "dec_deg": 13.092361,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.32,
+    "aliases": [
+      "NGC 3623"
+    ]
+  },
+  {
+    "catalog_id": "M 66",
+    "ra_hours": 11.337489,
+    "dec_deg": 12.991528,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 8.92,
+    "aliases": [
+      "NGC 3627"
+    ]
+  },
+  {
+    "catalog_id": "M 67",
+    "ra_hours": 8.855592,
+    "dec_deg": 11.811944,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.9,
+    "aliases": [
+      "NGC 2682"
+    ]
+  },
+  {
+    "catalog_id": "M 68",
+    "ra_hours": 12.657781,
+    "dec_deg": -26.743028,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 7.96,
+    "aliases": [
+      "NGC 4590"
+    ]
+  },
+  {
+    "catalog_id": "M 69",
+    "ra_hours": 18.523119,
+    "dec_deg": -32.347972,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 8.31,
+    "aliases": [
+      "NGC 6637"
+    ]
+  },
+  {
+    "catalog_id": "M 70",
+    "ra_hours": 18.720178,
+    "dec_deg": -32.291889,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 9.06,
+    "aliases": [
+      "NGC 6681"
+    ]
+  },
+  {
+    "catalog_id": "M 71",
+    "ra_hours": 19.896142,
+    "dec_deg": 18.778389,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.1,
+    "aliases": [
+      "NGC 6838"
+    ]
+  },
+  {
+    "catalog_id": "M 72",
+    "ra_hours": 20.891086,
+    "dec_deg": -12.537056,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 8.96,
+    "aliases": [
+      "NGC 6981"
+    ]
+  },
+  {
+    "catalog_id": "M 73",
+    "ra_hours": 20.982214,
+    "dec_deg": -12.6355,
+    "object_type": "Other",
+    "target_type": "other",
+    "common_names": [],
+    "magnitude": 8.9,
+    "aliases": [
+      "NGC 6994"
+    ]
+  },
+  {
+    "catalog_id": "M 74",
+    "ra_hours": 1.611597,
+    "dec_deg": 15.783667,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.31,
+    "aliases": [
+      "NGC 628"
+    ]
+  },
+  {
+    "catalog_id": "M 75",
+    "ra_hours": 20.101344,
+    "dec_deg": -21.922222,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 8.26,
+    "aliases": [
+      "NGC 6864"
+    ]
+  },
+  {
+    "catalog_id": "M 76",
+    "ra_hours": 1.705469,
+    "dec_deg": 51.575472,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Barbell Nebula",
+      "Cork Nebula",
+      "Little Dumbbell Nebula"
+    ],
+    "magnitude": 10.1,
+    "aliases": [
+      "NGC 650"
+    ]
+  },
+  {
+    "catalog_id": "M 77",
+    "ra_hours": 2.711308,
+    "dec_deg": -0.013278,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.29,
+    "aliases": [
+      "NGC 1068"
+    ]
+  },
+  {
+    "catalog_id": "M 78",
+    "ra_hours": 5.779394,
+    "dec_deg": 0.079306,
+    "object_type": "RfN",
+    "target_type": "reflection",
+    "common_names": [],
+    "magnitude": 8.0,
+    "aliases": [
+      "NGC 2068"
+    ]
+  },
+  {
+    "catalog_id": "M 79",
+    "ra_hours": 5.402942,
+    "dec_deg": -24.524222,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 8.16,
+    "aliases": [
+      "NGC 1904"
+    ]
+  },
+  {
+    "catalog_id": "M 80",
+    "ra_hours": 16.284031,
+    "dec_deg": -22.975111,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 7.3,
+    "aliases": [
+      "NGC 6093"
+    ]
+  },
+  {
+    "catalog_id": "M 81",
+    "ra_hours": 9.925881,
+    "dec_deg": 69.065306,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Bode's Galaxy"
+    ],
+    "magnitude": 6.92,
+    "aliases": [
+      "NGC 3031"
+    ]
+  },
+  {
+    "catalog_id": "M 82",
+    "ra_hours": 9.931314,
+    "dec_deg": 69.679389,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Cigar Galaxy"
+    ],
+    "magnitude": 8.3,
+    "aliases": [
+      "NGC 3034"
+    ]
+  },
+  {
+    "catalog_id": "M 83",
+    "ra_hours": 13.616931,
+    "dec_deg": -29.865417,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Southern Pinwheel Galaxy"
+    ],
+    "magnitude": 7.21,
+    "aliases": [
+      "NGC 5236"
+    ]
+  },
+  {
+    "catalog_id": "M 84",
+    "ra_hours": 12.417706,
+    "dec_deg": 12.886972,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.79,
+    "aliases": [
+      "NGC 4374"
+    ]
+  },
+  {
+    "catalog_id": "M 85",
+    "ra_hours": 12.423364,
+    "dec_deg": 18.1915,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.05,
+    "aliases": [
+      "NGC 4382"
+    ]
+  },
+  {
+    "catalog_id": "M 86",
+    "ra_hours": 12.436594,
+    "dec_deg": 12.946222,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 8.86,
+    "aliases": [
+      "NGC 4406"
+    ]
+  },
+  {
+    "catalog_id": "M 87",
+    "ra_hours": 12.513728,
+    "dec_deg": 12.391111,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Virgo Galaxy"
+    ],
+    "magnitude": 9.0,
+    "aliases": [
+      "NGC 4486"
+    ]
+  },
+  {
+    "catalog_id": "M 88",
+    "ra_hours": 12.5331,
+    "dec_deg": 14.420389,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 10.33,
+    "aliases": [
+      "NGC 4501"
+    ]
+  },
+  {
+    "catalog_id": "M 89",
+    "ra_hours": 12.594392,
+    "dec_deg": 12.556333,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 10.08,
+    "aliases": [
+      "NGC 4552"
+    ]
+  },
+  {
+    "catalog_id": "M 90",
+    "ra_hours": 12.613831,
+    "dec_deg": 13.162944,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.54,
+    "aliases": [
+      "NGC 4569"
+    ]
+  },
+  {
+    "catalog_id": "M 91",
+    "ra_hours": 12.590681,
+    "dec_deg": 14.496333,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 10.96,
+    "aliases": [
+      "NGC 4548"
+    ]
+  },
+  {
+    "catalog_id": "M 92",
+    "ra_hours": 17.285353,
+    "dec_deg": 43.136528,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.52,
+    "aliases": [
+      "NGC 6341"
+    ]
+  },
+  {
+    "catalog_id": "M 93",
+    "ra_hours": 7.741453,
+    "dec_deg": -23.853083,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 6.2,
+    "aliases": [
+      "NGC 2447"
+    ]
+  },
+  {
+    "catalog_id": "M 94",
+    "ra_hours": 12.848072,
+    "dec_deg": 41.120444,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 8.24,
+    "aliases": [
+      "NGC 4736"
+    ]
+  },
+  {
+    "catalog_id": "M 95",
+    "ra_hours": 10.732694,
+    "dec_deg": 11.703806,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.77,
+    "aliases": [
+      "NGC 3351"
+    ]
+  },
+  {
+    "catalog_id": "M 96",
+    "ra_hours": 10.779372,
+    "dec_deg": 11.819944,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.21,
+    "aliases": [
+      "NGC 3368"
+    ]
+  },
+  {
+    "catalog_id": "M 97",
+    "ra_hours": 11.246586,
+    "dec_deg": 55.019028,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Owl Nebula"
+    ],
+    "magnitude": 9.9,
+    "aliases": [
+      "NGC 3587"
+    ]
+  },
+  {
+    "catalog_id": "M 98",
+    "ra_hours": 12.230081,
+    "dec_deg": 14.900333,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 10.84,
+    "aliases": [
+      "NGC 4192"
+    ]
+  },
+  {
+    "catalog_id": "M 99",
+    "ra_hours": 12.313778,
+    "dec_deg": 14.4165,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Coma Pinwheel",
+      "Virgo Cluster Pinwheel"
+    ],
+    "magnitude": 9.84,
+    "aliases": [
+      "NGC 4254"
+    ]
+  },
+  {
+    "catalog_id": "M 100",
+    "ra_hours": 12.381897,
+    "dec_deg": 15.821806,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.47,
+    "aliases": [
+      "NGC 4321"
+    ]
+  },
+  {
+    "catalog_id": "M 101",
+    "ra_hours": 14.053483,
+    "dec_deg": 54.348944,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 7.9,
+    "aliases": [
+      "NGC 5457"
+    ]
+  },
+  {
+    "catalog_id": "M 103",
+    "ra_hours": 1.556058,
+    "dec_deg": 60.658,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 7.4,
+    "aliases": [
+      "NGC 581"
+    ]
+  },
+  {
+    "catalog_id": "M 104",
+    "ra_hours": 12.666508,
+    "dec_deg": -11.623056,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Sombrero Galaxy"
+    ],
+    "magnitude": 8.59,
+    "aliases": [
+      "NGC 4594"
+    ]
+  },
+  {
+    "catalog_id": "M 105",
+    "ra_hours": 10.797108,
+    "dec_deg": 12.581611,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.27,
+    "aliases": [
+      "NGC 3379"
+    ]
+  },
+  {
+    "catalog_id": "M 106",
+    "ra_hours": 12.315972,
+    "dec_deg": 47.303972,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.29,
+    "aliases": [
+      "NGC 4258"
+    ]
+  },
+  {
+    "catalog_id": "M 107",
+    "ra_hours": 16.5422,
+    "dec_deg": -13.053639,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [],
+    "magnitude": 8.85,
+    "aliases": [
+      "NGC 6171"
+    ]
+  },
+  {
+    "catalog_id": "M 108",
+    "ra_hours": 11.191936,
+    "dec_deg": 55.674111,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 10.05,
+    "aliases": [
+      "NGC 3556"
+    ]
+  },
+  {
+    "catalog_id": "M 109",
+    "ra_hours": 11.959994,
+    "dec_deg": 53.374528,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 9.88,
+    "aliases": [
+      "NGC 3992"
+    ]
+  },
+  {
+    "catalog_id": "M 110",
+    "ra_hours": 0.6728,
+    "dec_deg": 41.685306,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [],
+    "magnitude": 8.15,
+    "aliases": [
+      "NGC 205"
+    ]
+  }
+]

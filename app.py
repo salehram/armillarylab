@@ -53,7 +53,7 @@ from config.flask_process import (
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.4.0"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -154,8 +154,22 @@ def apply_additive_schema_migrations(log=print):
         ("default_calibration_bias", "ALTER TABLE global_config ADD COLUMN default_calibration_bias INTEGER DEFAULT 0"),
         ("default_calibration_two_point", f"ALTER TABLE global_config ADD COLUMN default_calibration_two_point BOOLEAN {bool_true}"),
         ("max_cloud_cover_pct", "ALTER TABLE global_config ADD COLUMN max_cloud_cover_pct INTEGER DEFAULT 25"),
+        # Resolver settings (Phase 8)
+        ("resolver_enable_simbad", f"ALTER TABLE global_config ADD COLUMN resolver_enable_simbad BOOLEAN {bool_true}"),
+        ("resolver_enable_ned",    f"ALTER TABLE global_config ADD COLUMN resolver_enable_ned BOOLEAN {bool_true}"),
+        ("resolver_enable_vizier", f"ALTER TABLE global_config ADD COLUMN resolver_enable_vizier BOOLEAN {bool_true}"),
+        ("resolver_enable_sesame", f"ALTER TABLE global_config ADD COLUMN resolver_enable_sesame BOOLEAN {bool_true}"),
+        ("resolver_offline_mode",  f"ALTER TABLE global_config ADD COLUMN resolver_offline_mode BOOLEAN {bool_false}"),
+        ("resolver_cache_ttl_days","ALTER TABLE global_config ADD COLUMN resolver_cache_ttl_days INTEGER DEFAULT 90"),
     ):
         add_column_if_missing("global_config", col, ddl)
+
+    # ResolverCache: additive column for cross-catalog aliases.
+    add_column_if_missing(
+        "resolver_cache",
+        "catalog_aliases_json",
+        "ALTER TABLE resolver_cache ADD COLUMN catalog_aliases_json TEXT",
+    )
 
     for col, ddl in (
         ("calibration_tracking_enabled", f"ALTER TABLE targets ADD COLUMN calibration_tracking_enabled BOOLEAN {bool_false}"),
@@ -174,6 +188,42 @@ def apply_additive_schema_migrations(log=print):
     )
 
     db.create_all()
+
+    # Ensure the 8 canonical TargetType rows exist (idempotent upsert).
+    # This is the single source of truth used by detect_target_type(), the
+    # palette recommender, and the resolver's SIMBAD type-mapper. Legacy
+    # broad-type rows (e.g. "Galaxy", "Nebula") from old `cli.py db init`
+    # installs are left untouched to preserve any ObjectMapping FK references.
+    if "target_types" in inspector.get_table_names():
+        canonical_types = [
+            ("emission",           "SHO",  "Emission nebulae work excellently with narrowband SHO filters"),
+            ("diffuse",            "HOO",  "Diffuse nebulae often benefit from HOO for enhanced contrast"),
+            ("reflection",         "LRGB", "Reflection nebulae show great detail with broadband LRGB"),
+            ("galaxy",             "LRGB", "Galaxies typically use broadband LRGB for star colors and detail"),
+            ("cluster",            "LRGB", "Star clusters showcase natural colors best with LRGB"),
+            ("planetary",          "SHO",  "Planetary nebulae reveal structure well with narrowband SHO"),
+            ("supernova_remnant",  "SHO",  "Supernova remnants often have strong emission lines, perfect for SHO"),
+            ("other",              "SHO",  "SHO is a versatile starting point for most deep sky targets"),
+        ]
+        try:
+            inserted = 0
+            for name, palette, description in canonical_types:
+                existing = TargetType.query.filter_by(name=name).first()
+                if existing is None:
+                    db.session.add(TargetType(
+                        name=name,
+                        recommended_palette=palette,
+                        description=description,
+                    ))
+                    inserted += 1
+            if inserted:
+                db.session.commit()
+                applied.append(f"target_types(+{inserted} canonical)")
+                log(f"Seeded {inserted} canonical TargetType rows.")
+        except Exception as exc:
+            db.session.rollback()
+            log(f"WARNING: canonical TargetType seed skipped: {exc}")
+
     if applied:
         log(f"Schema sync applied: {', '.join(applied)}")
     return applied
@@ -386,7 +436,15 @@ class GlobalConfig(db.Model):
     
     # Timezone
     timezone_name = db.Column(db.String(64), default="Asia/Riyadh")
-    
+
+    # Resolver settings (Phase 8)
+    resolver_enable_simbad = db.Column(db.Boolean, default=True)
+    resolver_enable_ned = db.Column(db.Boolean, default=True)
+    resolver_enable_vizier = db.Column(db.Boolean, default=True)
+    resolver_enable_sesame = db.Column(db.Boolean, default=True)
+    resolver_offline_mode = db.Column(db.Boolean, default=False)
+    resolver_cache_ttl_days = db.Column(db.Integer, default=90)
+
     # Tracking
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -423,6 +481,48 @@ class ObjectMapping(db.Model):
     
     def __repr__(self):
         return f"<ObjectMapping {self.object_name} -> {self.target_type.name if self.target_type else 'None'}>"
+
+
+class ResolverCache(db.Model):
+    """Persistent cache for astronomical name resolutions.
+
+    Schema uses only generic SQLAlchemy types so that SQLite (dev) and
+    PostgreSQL (prod) produce *identical* DDL — no dialect-specific
+    drift allowed.
+
+    Negative-hit caching: when every source in the chain misses, a row
+    is written with ``negative=True`` so that repeated bad queries
+    don't keep hitting the network. Negative entries expire faster than
+    positive ones (see ``ttl_days``).
+    """
+
+    __tablename__ = "resolver_cache"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Casefolded + whitespace-collapsed input. Unique so each user-typed
+    # name has at most one row.
+    input_key = db.Column(db.String(256), unique=True, nullable=False, index=True)
+    canonical_name = db.Column(db.String(128), nullable=True)
+    ra_hours = db.Column(db.Float, nullable=True)
+    dec_deg = db.Column(db.Float, nullable=True)
+    object_type = db.Column(db.String(64), nullable=True)
+    target_type = db.Column(db.String(32), nullable=True)
+    # JSON-encoded list[str] of human-readable aliases. Stored as TEXT for
+    # SQLite/PG portability.
+    common_names_json = db.Column(db.Text, nullable=True)
+    # JSON-encoded list[str] of cross-catalog designations (e.g.
+    # ["NGC 6992", "Caldwell 33"]). Kept separate from common_names so
+    # the UI can distinguish nicknames from alternate catalog IDs.
+    catalog_aliases_json = db.Column(db.Text, nullable=True)
+    magnitude = db.Column(db.Float, nullable=True)
+    source = db.Column(db.String(32), nullable=True)
+    negative = db.Column(db.Boolean, nullable=False, default=False)
+    resolved_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    ttl_days = db.Column(db.Integer, nullable=False, default=90)
+
+    def __repr__(self):
+        kind = "NEG" if self.negative else "POS"
+        return f"<ResolverCache {kind} {self.input_key!r} -> {self.canonical_name!r}>"
 
 
 class Palette(db.Model):
@@ -2360,29 +2460,87 @@ def uploaded_file(filename):
 
 @app.route("/api/resolve", methods=["GET"])
 def api_resolve():
-    """Resolve an object name to RA/Dec via astro_utils.resolve_target_name."""
+    """Resolve an object name to RA/Dec + enriched metadata.
+
+    Uses the resolver chain (local catalogs → SIMBAD/NED/VizieR → Sesame).
+    Response includes legacy fields (``name``, ``ra_hours``, ``dec_deg``,
+    ``suggested_type``) plus enriched fields (``canonical_name``,
+    ``common_names``, ``object_type``, ``magnitude``, ``source``,
+    ``confidence``, ``matched_variant``, ``cached``, ``differs_from_input``).
+    """
     name = (request.args.get("name") or "").strip()
     if not name:
         return jsonify({"error": "Missing 'name' query parameter."}), 400
 
-    from astro_utils import resolve_target_name
+    from astro_utils import resolve_target_full
 
     try:
-        ra_hours, dec_deg = resolve_target_name(name)
+        obj = resolve_target_full(name)
     except RuntimeError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e), "name": name}), 400
     except Exception as e:
-        # Unexpected errors
-        return jsonify({"error": f"Resolution failed: {e}"}), 500
+        return jsonify({"error": f"Resolution failed: {e}", "name": name}), 500
 
-    # Attempt to determine target type from catalog designation
-    detected_type = detect_target_type(name)
+    payload = obj.to_api_dict()
+    # If the resolver could not determine a target_type (e.g. Sesame
+    # fallback), enrich via the existing catalog-prefix detector so the
+    # frontend still gets a sensible default.
+    if payload.get("suggested_type") in (None, "", "other"):
+        detected = detect_target_type(obj.canonical_name or name)
+        if detected:
+            payload["suggested_type"] = detected
+    return jsonify(payload)
+
+
+@app.route("/api/resolve/health", methods=["GET"])
+def api_resolve_health():
+    """Diagnostic endpoint for the resolver subsystem.
+
+    Reports each chain source's availability and cache statistics.
+    Useful when the user wants to verify offline mode, missing
+    astroquery installs, or stale cache contents.
+    """
+    from resolver import get_default_chain
+    chain = get_default_chain()
+    sources_info = []
+    for src in chain.resolvers:
+        try:
+            available = bool(src.is_available())
+        except Exception as exc:
+            available = False
+            src_error = str(exc)
+        else:
+            src_error = None
+        sources_info.append({
+            "name": src.name,
+            "requires_network": src.requires_network,
+            "default_confidence": src.default_confidence,
+            "available": available,
+            "error": src_error,
+        })
+
+    cache_stats = {"total": 0, "positive": 0, "negative": 0}
+    try:
+        cache_stats["total"] = ResolverCache.query.count()
+        cache_stats["negative"] = ResolverCache.query.filter_by(negative=True).count()
+        cache_stats["positive"] = cache_stats["total"] - cache_stats["negative"]
+    except Exception:
+        pass
+
+    cfg = GlobalConfig.query.first()
+    settings = {
+        "offline_mode": bool(getattr(cfg, "resolver_offline_mode", False)) if cfg else False,
+        "enable_simbad": bool(getattr(cfg, "resolver_enable_simbad", True)) if cfg else True,
+        "enable_ned":    bool(getattr(cfg, "resolver_enable_ned", True)) if cfg else True,
+        "enable_vizier": bool(getattr(cfg, "resolver_enable_vizier", True)) if cfg else True,
+        "enable_sesame": bool(getattr(cfg, "resolver_enable_sesame", True)) if cfg else True,
+        "cache_ttl_days": int(getattr(cfg, "resolver_cache_ttl_days", 90)) if cfg else 90,
+    }
 
     return jsonify({
-        "name": name,
-        "ra_hours": ra_hours,
-        "dec_deg": dec_deg,
-        "suggested_type": detected_type
+        "sources": sources_info,
+        "cache": cache_stats,
+        "settings": settings,
     })
 
 
@@ -2542,6 +2700,24 @@ def global_settings():
         )
         config.default_calibration_bias = int(request.form.get("default_calibration_bias", 0) or 0)
         config.default_calibration_two_point = request.form.get("default_calibration_two_point") == "1"
+
+        # Resolver settings (Phase 8)
+        config.resolver_offline_mode  = bool(request.form.get("resolver_offline_mode"))
+        config.resolver_enable_simbad = bool(request.form.get("resolver_enable_simbad"))
+        config.resolver_enable_ned    = bool(request.form.get("resolver_enable_ned"))
+        config.resolver_enable_vizier = bool(request.form.get("resolver_enable_vizier"))
+        config.resolver_enable_sesame = bool(request.form.get("resolver_enable_sesame"))
+        try:
+            ttl_days = int(request.form.get("resolver_cache_ttl_days", 90) or 90)
+            config.resolver_cache_ttl_days = max(1, min(3650, ttl_days))
+        except (TypeError, ValueError):
+            pass
+        # Rebuild the chain so toggle changes take effect immediately.
+        try:
+            from resolver import reset_default_chain
+            reset_default_chain()
+        except Exception:
+            pass
 
         config.updated_at = datetime.utcnow()
         
@@ -3649,6 +3825,44 @@ def init_db(mode, filter_preset, force):
     print(f"\nDatabase initialized successfully!")
     print(f"  Mode: {mode}")
     print(f"  Filter preset: {filter_preset}")
+
+
+@app.cli.command("resolver-cache-purge")
+def resolver_cache_purge():
+    """Purge expired ResolverCache rows."""
+    from resolver.cache import purge_expired
+    removed = purge_expired()
+    print(f"Removed {removed} expired ResolverCache row(s).")
+
+
+@app.cli.command("resolver-cache-clear")
+def resolver_cache_clear():
+    """Delete ALL ResolverCache rows (positive + negative)."""
+    from resolver.cache import clear_all
+    removed = clear_all()
+    print(f"Cleared {removed} ResolverCache row(s).")
+
+
+@app.cli.command("resolver-test")
+@click.argument("name")
+def resolver_test(name):
+    """Resolve an object name from the command line."""
+    from astro_utils import resolve_target_full
+    try:
+        obj = resolve_target_full(name)
+    except Exception as exc:
+        print(f"FAILED: {exc}")
+        return
+    print(f"Canonical:    {obj.canonical_name}")
+    print(f"RA / Dec:     {obj.ra_hours:.4f} h  /  {obj.dec_deg:+.4f}°")
+    print(f"Object type:  {obj.object_type}")
+    print(f"Target type:  {obj.target_type}")
+    print(f"Source:       {obj.source}  (confidence={obj.confidence})")
+    print(f"Cached:       {obj.cached}")
+    if obj.catalog_aliases:
+        print(f"Also catalogued as: {', '.join(obj.catalog_aliases[:6])}")
+    if obj.common_names:
+        print(f"Aliases:      {', '.join(obj.common_names[:5])}")
 
 
 @app.cli.command("list-presets")

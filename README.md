@@ -2,15 +2,19 @@
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
-![Version](https://img.shields.io/badge/version-2.2.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.4.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 
-## 🎉 Current release: v2.2.0 — Calibration Frames Management
+## 🎉 Current release: v2.4.0 — Comprehensive Object Resolver
 
-**ArmillaryLab v2.2.0** adds optional **calibration frame tracking**: global defaults, per-target opt-in, manual dark/bias logging, and two-point flat/dark-flat suggestions at channel midpoint and end—with skip/defer and AstroBin export prefill. See [CHANGELOG.md](CHANGELOG.md) and [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§17).
+**ArmillaryLab v2.4.0** ships a new end-to-end **object resolver**: a first-hit-wins chain (local NGC/IC/Messier/Caldwell + SIMBAD/NED/VizieR/Sesame) with a 90-day DB-backed cache, a confirmation modal that suggests the canonical name, and bidirectional cross-catalog aliases (`C 33` ↔ `NGC 6992`, `M 31` ↔ `NGC 224`, …) surfaced both in the target form and the resolver badge. New `/api/resolve`, `/api/resolve/health`, and `flask resolver-test` CLI. See [CHANGELOG.md](CHANGELOG.md) and [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§18).
+
+**v2.3.0** adds the **Seeing Guide** and **5-Day Forecast** tabs to the Night Conditions popup for richer at-a-glance planning.
+
+**v2.2.0** adds optional **calibration frame tracking**: global defaults, per-target opt-in, manual dark/bias logging, and two-point flat/dark-flat suggestions at channel midpoint and end—with skip/defer and AstroBin export prefill. See [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§17).
 
 **v2.1.0** adds the **Night Conditions** navbar popup: live moon phase (offline via astroplan), Open-Meteo weather, 7Timer seeing/transparency, weighted filter-channel suggestions, imaging-window aggregates when a target has a valid window, and a three-tier offline fallback with local caching.
 
@@ -537,7 +541,21 @@ docker-compose up --build
 
 ## 📊 Current Status
 
-**Shipping version:** **2.2.0** (`APP_VERSION` in `app.py`; tag `v2.2.0` on GitHub). Install from `main` or check out that tag for a frozen snapshot.
+**Shipping version:** **2.4.0** (`APP_VERSION` in `app.py`; tag `v2.4.0` on GitHub). Install from `main` or check out that tag for a frozen snapshot.
+
+### ✅ New in v2.4.0 (Comprehensive Object Resolver)
+
+- 🔭 **Resolver chain**: local catalogs (NGC/IC/Messier/Caldwell + nicknames) → SIMBAD → NED → VizieR → Sesame, first-hit-wins with per-source confidence
+- 💾 **DB-backed cache**: `resolver_cache` table, 90-day positive / 1-day negative TTL, additive migration on startup
+- 🪐 **Bidirectional cross-catalog aliases**: `C 33` ↔ `NGC 6992`, `M 31` ↔ `NGC 224`, `NGC 7000` ↔ `Caldwell 20`, etc., shown in the modal and badge
+- 🖱️ **Confirmation modal**: one-click "use canonical name", plus alternate catalog IDs and common nicknames listed separately
+- 🧪 **Diagnostics**: `/api/resolve`, `/api/resolve/health`, `flask resolver-test "<name>"`, Settings panel for toggling network sources and TTLs
+- 🧱 **Unified TargetType taxonomy**: 8 canonical object types used consistently across the resolver, form, and DB
+
+### ✅ New in v2.3.0 (Night Conditions enrichment)
+
+- 🌌 **Seeing Guide** tab in the Night Conditions popup
+- 📅 **5-Day Forecast** tab for at-a-glance multi-night planning
 
 ### ✅ New in v2.2.0 (Calibration Frames)
 

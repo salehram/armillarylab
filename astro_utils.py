@@ -423,27 +423,60 @@ def build_default_plan_json(target_type: str, palette: str, bortle: int = 9) -> 
 
 def resolve_target_name(name: str):
     """
-    Resolve an object name like 'NGC 6992', 'M31', 'IC 1805' using
-    CDS name resolver via astropy.
+    Resolve an object name like 'NGC 6992', 'M31', 'IC 1805', 'C 33',
+    'Eastern Veil Nebula', etc. through the layered resolver chain
+    (local catalogs first, network fallback last). Results go through
+    the DB-backed cache when a Flask app context is active.
 
     Returns:
       (ra_hours, dec_deg) as floats.
 
-    Raises RuntimeError with a friendly message on failure.
+    Raises RuntimeError with a friendly message on failure (preserves the
+    legacy contract so callers don't need to change).
     """
-    if not ASTRO_DEPS_AVAILABLE:
-        raise RuntimeError("Astropy/astroplan not installed; resolver unavailable.")
-
     name = (name or "").strip()
     if not name:
         raise RuntimeError("Empty name provided.")
 
     try:
-        # Uses remote CDS service under the hood
-        coord = SkyCoord.from_name(name)
-    except Exception as exc:
-        raise RuntimeError(f"Could not resolve '{name}': {exc}") from exc
+        obj = resolve_target_full(name)
+    except RuntimeError:
+        # Already a friendly RuntimeError — re-raise.
+        raise
+    except Exception as exc:  # defensive — never let an internal bug 500 the API
+        # Last-ditch fallback to the bare Sesame call so the app keeps
+        # working if the resolver package is broken.
+        if not ASTRO_DEPS_AVAILABLE:
+            raise RuntimeError(f"Could not resolve '{name}': {exc}") from exc
+        try:
+            coord = SkyCoord.from_name(name)
+        except Exception as inner:
+            raise RuntimeError(f"Could not resolve '{name}': {inner}") from inner
+        return float(coord.ra.hour), float(coord.dec.degree)
 
-    ra_hours = float(coord.ra.hour)
-    dec_deg = float(coord.dec.degree)
-    return ra_hours, dec_deg
+    return obj.ra_hours, obj.dec_deg
+
+
+def resolve_target_full(name: str):
+    """
+    Same as :func:`resolve_target_name` but returns the rich
+    :class:`resolver.types.ResolvedObject` (canonical name, target_type,
+    common_names, magnitude, source, confidence, etc.).
+
+    Goes through the DB-backed cache when a Flask app context is active;
+    falls back to a direct chain call otherwise (e.g. CLI / unit tests).
+
+    Raises RuntimeError on failure (consistent with the legacy contract).
+    """
+    name = (name or "").strip()
+    if not name:
+        raise RuntimeError("Empty name provided.")
+    try:
+        from resolver import get_default_chain, ResolverError
+        from resolver.cache import resolve_with_cache
+    except Exception as exc:
+        raise RuntimeError(f"Resolver package unavailable: {exc}") from exc
+    try:
+        return resolve_with_cache(name, get_default_chain())
+    except ResolverError as exc:
+        raise RuntimeError(str(exc)) from exc

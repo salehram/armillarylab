@@ -1,13 +1,15 @@
 # ArmillaryLab – Feature Roadmap  
-*Status: Updated to 2026-05-21 | Version 2.2.0 (Calibration Frames Management)*
+*Status: Updated to 2026-05-25 | Version 2.4.0 (Comprehensive Object Resolver)*
 
 This document tracks the major features of the ArmillaryLab project, what has been completed, and what remains.  
 It is intended to be version-controlled in Git for transparency, planning, and future development.
 
 **🎉 Version 1.0.0 — complete feature set**  
 **🚀 Version 2.0.0 — PostgreSQL, filters, presets, AstroBin**  
-**🆕 Version 2.1.0 — Night Conditions & intelligent channel suggestion**
-**🆕 Version 2.2.0 — Calibration frames management & two-point flat workflow**
+**🆕 Version 2.1.0 — Night Conditions & intelligent channel suggestion**  
+**🆕 Version 2.2.0 — Calibration frames management & two-point flat workflow**  
+**🆕 Version 2.3.0 — Seeing Guide & 5-Day Forecast tabs**  
+**🆕 Version 2.4.0 — Comprehensive object resolver & bidirectional catalog aliases**
 
 ---
 
@@ -878,6 +880,44 @@ Optional per-target tracking for darks, flats, dark flats, and bias with a two-p
 
 ### Status
 **✅ Fully implemented in v2.2.0.**
+
+---
+
+## ✅ 18. Comprehensive Object Resolver
+
+### Summary
+A unified, layered resolver that turns any astronomical designation (NGC, IC, Messier, Caldwell, common name, SIMBAD ID, etc.) into a canonical name, J2000 coordinates, object type, magnitude, and cross-catalog aliases — fully offline for the common cases, with network fallbacks for the long tail.
+
+### 18.1 Architecture
+- **Resolver chain (first-hit-wins)**: `local_catalog` (1.0) → `simbad` (0.95) → `ned` (0.9) → `vizier` (0.8) → `sesame` (0.7)
+- **Normalizer** unifies casing/spacing/prefix variants (`m31`, `M 31`, `Messier 31`)
+- **`ResolvedObject`** dataclass exposes `canonical_name`, `ra_deg`, `dec_deg`, `object_type`, `magnitude`, `common_names` (nicknames), and `catalog_aliases` (cross-catalog IDs)
+- **Unified `TargetType` taxonomy**: 8 canonical types (emission, diffuse, reflection, galaxy, cluster, planetary, supernova_remnant, other) used across resolver, form, and DB
+
+### 18.2 Local catalogs
+- Bundled JSON catalogs in `resolver/data/`: NGC/IC, Messier, Caldwell, nicknames
+- Built via `scripts/build_resolver_catalogs.py --offline`
+- **Bidirectional cross-catalog aliases**: Caldwell N → NGC X also writes "Caldwell N" / "C N" onto the NGC entry, and Messier entries propagate "M N" back onto their NGC counterpart
+
+### 18.3 Cache & migration
+- **`resolver_cache`** table — 90-day positive / 1-day negative TTL
+- Additive migration (`apply_additive_schema_migrations`) runs at startup; cache survives schema upgrades
+- `clear_all()` / TTL purge helpers; `flask resolver-cache-clear` CLI
+
+### 18.4 API & UI
+- `GET /api/resolve?name=<query>` — canonical name, RA/Dec, type, magnitude, common names, catalog aliases
+- `GET /api/resolve/health` — per-source status, cache stats, TTLs
+- Target form **confirmation modal** with one-click "use canonical name" and "Also known as" / "Also catalogued as" lines
+- Resolver **badge** under the name field that surfaces aliases and nicknames separately
+- ObjectMapping integration: manual user mappings layer cleanly on top of the chain
+
+### 18.5 Settings, observability, CLI
+- **Settings panel** to toggle individual network sources and tune TTLs
+- `flask resolver-test "<name>"` for offline debugging — prints chain hit, canonical name, and aliases
+- Health endpoint surfaces last error per source
+
+### Status
+**✅ Fully implemented in v2.4.0.**
 
 ---
 

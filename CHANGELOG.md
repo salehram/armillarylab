@@ -9,11 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [2.4.0] - 2026-05-25
+
+### Version 2.4.0 - Comprehensive Object Resolver
+
+**ArmillaryLab v2.4.0** introduces a unified object-resolution stack that turns any astronomical designation (NGC, IC, Messier, Caldwell, nickname, SIMBAD ID, …) into a canonical name, J2000 coordinates, object type, magnitude, and cross-catalog aliases — offline-first, with network fallbacks for the long tail.
+
+### Added
+
+- **Resolver chain (first-hit-wins)**: New `resolver/` package wiring `local_catalog` → `simbad` → `ned` → `vizier` → `sesame`, each with a confidence score. Bundled NGC/IC, Messier, Caldwell, and nickname catalogs make the common cases instant and fully offline; network sources fill the long tail.
+- **DB-backed resolver cache**: New `resolver_cache` table with 90-day positive / 1-day negative TTL. Migration is additive and runs automatically on startup.
+- **Bidirectional cross-catalog aliases**: `C 33` ↔ `NGC 6992`, `M 31` ↔ `NGC 224`, `NGC 7000` ↔ `Caldwell 20`, etc. Both the confirmation modal and the resolver badge display cross-catalog IDs as "Also catalogued as …" alongside common-name nicknames.
+- **ObjectMapping integration**: Manual user mappings now layer cleanly on top of the resolver chain.
+- **Resolver API + UI**: `/api/resolve` returns canonical name, RA/Dec, object type, magnitude, common names, and cross-catalog designations. Target form shows a confirmation modal with a one-click "use canonical name" option and a resolver badge under the name field.
+- **Resolver settings, health, CLI**: New Settings panel for toggling individual network sources and tuning TTLs, `GET /api/resolve/health` endpoint with per-source status and cache stats, and `flask resolver-test "<name>"` CLI for offline debugging.
+- **Unified `TargetType` taxonomy**: Eight canonical object types (emission, diffuse, reflection, galaxy, cluster, planetary, supernova_remnant, other) used consistently across the resolver, form, and database.
+
 ### Changed
 
 - **SQLite sample data**: The repository commits **`armillarylab.db`** (project root) as a **demonstration dataset** (bundled presets, demo targets/sessions/calibration). `.gitignore` now ignores every `*.db` **except** that file so local clones get the showcase catalog by default.
 - **Documentation**: Describes **Option A** (keep bundled DB + `migrate-db`) versus **Option B** (delete + `init-db` for blank). README, Database Guide, and Docker Guide updated accordingly.
 - **`uploads/`**: Personal final astro images removed from revision control (folder ignored except **`uploads/.gitkeep`**). Bundled **`armillarylab.db`** no longer points sample targets at removed filenames.
+
+---
+
+## [2.3.0] - 2026-05-22
+
+### Version 2.3.0 - Night Conditions: Seeing Guide & 5-Day Forecast
+
+### Added
+
+- **Seeing Guide** tab in the Night Conditions popup with educational context for seeing/transparency values.
+- **5-Day Forecast** tab in the Night Conditions popup for at-a-glance multi-night planning.
 
 ---
 

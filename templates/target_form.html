@@ -223,36 +223,46 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (!resp.ok) {
         alert(data.error || "Name resolution failed.");
-      } else {
+        return;
+      }
+
+      // Apply coords + suggested type regardless of name choice
+      const applyResolution = (useCanonicalName) => {
         if (typeof data.ra_hours === "number") {
           raInput.value = data.ra_hours.toFixed(4);
         }
         if (typeof data.dec_deg === "number") {
           decInput.value = data.dec_deg.toFixed(4);
         }
-        
-        // Auto-select target type if detected
+        if (useCanonicalName && data.canonical_name) {
+          catalogInput.value = data.canonical_name;
+        }
         if (data.suggested_type && targetTypeSelect) {
           targetTypeSelect.value = data.suggested_type;
-          // Trigger palette recommendation update
           updatePaletteRecommendation();
-          
-          // Show feedback about auto-detection
-          const typeRecommendation = document.createElement("div");
-          typeRecommendation.className = "alert alert-info alert-dismissible fade show mt-2";
-          typeRecommendation.innerHTML = `
-            <strong>Auto-detected target type:</strong> ${data.suggested_type.replace('_', ' ').replace(/\\b\\w/g, l => l.toUpperCase())}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-          `;
-          targetTypeSelect.parentNode.appendChild(typeRecommendation);
-          
-          // Remove the notification after 5 seconds
-          setTimeout(() => {
-            if (typeRecommendation.parentNode) {
-              typeRecommendation.remove();
-            }
-          }, 5000);
         }
+        showResolverBadge(data, useCanonicalName);
+      };
+
+      // If canonical name differs from input → ask the user
+      if (data.differs_from_input && data.canonical_name) {
+        const friendly = (data.common_names && data.common_names.length)
+          ? ` (${data.common_names[0]})` : "";
+        const ttypeLabel = (data.suggested_type || "other")
+          .replace("_", " ");
+        const aliasLine = (data.catalog_aliases && data.catalog_aliases.length)
+          ? `Also known as: ${data.catalog_aliases.slice(0, 4).join(", ")}\n` : "";
+        const msg = `You typed "${name}".\n\n`
+          + `Resolved to: ${data.canonical_name}${friendly}\n`
+          + aliasLine
+          + `Type: ${ttypeLabel}\n`
+          + `Source: ${data.source || "unknown"}\n\n`
+          + `Replace catalog ID with the canonical name?\n`
+          + `(OK = use "${data.canonical_name}"; Cancel = keep "${name}")`;
+        const useCanonical = window.confirm(msg);
+        applyResolution(useCanonical);
+      } else {
+        applyResolution(false);
       }
     } catch (err) {
       console.error(err);
@@ -262,6 +272,52 @@ document.addEventListener("DOMContentLoaded", function () {
       btn.innerHTML = '<i class="bi bi-search me-1"></i>Resolve RA/Dec';
     }
   });
+
+  function showResolverBadge(data, usedCanonical) {
+    // Remove any prior resolver badges so consecutive resolves don't pile up.
+    document.querySelectorAll(".resolver-badge-banner").forEach(el => el.remove());
+
+    const parts = [];
+    if (data.canonical_name && data.differs_from_input) {
+      if (usedCanonical) {
+        parts.push(`Renamed to <strong>${escapeHtml(data.canonical_name)}</strong>.`);
+      } else {
+        parts.push(`Resolved as <strong>${escapeHtml(data.canonical_name)}</strong> `
+                 + `(kept your typed name).`);
+      }
+    } else if (data.canonical_name) {
+      parts.push(`Resolved <strong>${escapeHtml(data.canonical_name)}</strong>.`);
+    }
+    if (data.suggested_type) {
+      parts.push(`Type: <strong>${escapeHtml(data.suggested_type.replace("_", " "))}</strong>.`);
+    }
+    if (data.source) {
+      const cachedTag = data.cached ? ' <span class="badge bg-secondary">cached</span>' : '';
+      parts.push(`Source: <em>${escapeHtml(data.source)}</em>${cachedTag}`);
+    }
+    if (data.catalog_aliases && data.catalog_aliases.length) {
+      const aliases = data.catalog_aliases.slice(0, 6).map(escapeHtml).join(", ");
+      parts.push(`Also catalogued as: <strong>${aliases}</strong>.`);
+    }
+    if (data.common_names && data.common_names.length) {
+      const nicks = data.common_names.slice(0, 3).map(escapeHtml).join(", ");
+      parts.push(`Also known as: ${nicks}.`);
+    }
+
+    const banner = document.createElement("div");
+    banner.className = "alert alert-info alert-dismissible fade show mt-2 resolver-badge-banner";
+    banner.innerHTML = parts.join(" ")
+      + ' <button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+    targetTypeSelect.parentNode.appendChild(banner);
+
+    setTimeout(() => { if (banner.parentNode) banner.remove(); }, 10000);
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
 
 });
 </script>

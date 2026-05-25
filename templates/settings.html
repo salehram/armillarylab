@@ -131,6 +131,71 @@
         </div>
       </div>
 
+      <!-- Resolver Settings -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-search me-2"></i>Object Name Resolver</h5>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">
+            Controls how object names (NGC, M, Sh2-, etc.) are resolved to coordinates.
+            Local catalogs always run first; the toggles below affect online sources.
+          </p>
+
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="resolver_offline_mode"
+                   name="resolver_offline_mode"
+                   {{ 'checked' if config.resolver_offline_mode else '' }}>
+            <label class="form-check-label" for="resolver_offline_mode">
+              <strong>Offline mode</strong> — use only the bundled catalogs (no SIMBAD / NED / VizieR / Sesame).
+            </label>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 col-lg-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="resolver_enable_simbad"
+                       name="resolver_enable_simbad"
+                       {{ 'checked' if config.resolver_enable_simbad else '' }}>
+                <label class="form-check-label" for="resolver_enable_simbad">SIMBAD</label>
+              </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="resolver_enable_ned"
+                       name="resolver_enable_ned"
+                       {{ 'checked' if config.resolver_enable_ned else '' }}>
+                <label class="form-check-label" for="resolver_enable_ned">NED</label>
+              </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="resolver_enable_vizier"
+                       name="resolver_enable_vizier"
+                       {{ 'checked' if config.resolver_enable_vizier else '' }}>
+                <label class="form-check-label" for="resolver_enable_vizier">VizieR</label>
+              </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="resolver_enable_sesame"
+                       name="resolver_enable_sesame"
+                       {{ 'checked' if config.resolver_enable_sesame else '' }}>
+                <label class="form-check-label" for="resolver_enable_sesame">Sesame (fallback)</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3" style="max-width: 240px;">
+            <label for="resolver_cache_ttl_days" class="form-label">Positive cache TTL (days)</label>
+            <input type="number" class="form-control" id="resolver_cache_ttl_days"
+                   name="resolver_cache_ttl_days" min="1" max="3650"
+                   value="{{ config.resolver_cache_ttl_days | default(90, true) }}">
+            <div class="form-text">Negative-result entries always expire after 1 day.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">
           <i class="bi bi-floppy me-1"></i>Save Settings

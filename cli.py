@@ -80,16 +80,21 @@ def init():
             )
             db.session.add(global_config)
         
-        # Create default target types if they don't exist
+        # Create default target types if they don't exist.
+        # These 8 canonical, lowercase keys are the single source of truth used
+        # by `detect_target_type()`, the palette recommender, and the resolver's
+        # SIMBAD type-mapper. Mirrors config/presets/base.json.
         default_types = [
-            {"name": "Galaxy", "recommended_palette": "LRGB", "description": "Galaxies and galaxy clusters"},
-            {"name": "Nebula", "recommended_palette": "SHO", "description": "Emission, reflection, and planetary nebulae"},
-            {"name": "Star Cluster", "recommended_palette": "LRGB", "description": "Open and globular star clusters"},
-            {"name": "Star", "recommended_palette": "LRGB", "description": "Individual stars and binary systems"},
-            {"name": "Solar System", "recommended_palette": "LRGB", "description": "Planets, moons, and other solar system objects"},
-            {"name": "Other", "recommended_palette": "LRGB", "description": "Other astronomical objects"}
+            {"name": "emission", "recommended_palette": "SHO", "description": "Emission nebulae work excellently with narrowband SHO filters"},
+            {"name": "diffuse", "recommended_palette": "HOO", "description": "Diffuse nebulae often benefit from HOO for enhanced contrast"},
+            {"name": "reflection", "recommended_palette": "LRGB", "description": "Reflection nebulae show great detail with broadband LRGB"},
+            {"name": "galaxy", "recommended_palette": "LRGB", "description": "Galaxies typically use broadband LRGB for star colors and detail"},
+            {"name": "cluster", "recommended_palette": "LRGB", "description": "Star clusters showcase natural colors best with LRGB"},
+            {"name": "planetary", "recommended_palette": "SHO", "description": "Planetary nebulae reveal structure well with narrowband SHO"},
+            {"name": "supernova_remnant", "recommended_palette": "SHO", "description": "Supernova remnants often have strong emission lines, perfect for SHO"},
+            {"name": "other", "recommended_palette": "SHO", "description": "SHO is a versatile starting point for most deep sky targets"},
         ]
-        
+
         for type_data in default_types:
             if not TargetType.query.filter_by(name=type_data["name"]).first():
                 target_type = TargetType(

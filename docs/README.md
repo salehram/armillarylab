@@ -13,7 +13,7 @@ Welcome to the ArmillaryLab documentation. This folder contains detailed guides 
 | [README.md](../README.md) | Project overview, installation, and quick start |
 | [CHANGELOG.md](../CHANGELOG.md) | Version history and release notes |
 
-**Current release:** **v2.2.0** — Calibration frames tracking, two-point flat suggestions, manual dark/bias logging. Details in §17 of [Features Roadmap](FEATURES_ROADMAP.md) and the top of [CHANGELOG.md](../CHANGELOG.md).
+**Current release:** **v2.4.0** — Comprehensive object resolver (local NGC/IC/Messier/Caldwell + SIMBAD/NED/VizieR/Sesame chain), DB-backed cache, confirmation modal, and bidirectional cross-catalog aliases. Details in §18 of [Features Roadmap](FEATURES_ROADMAP.md) and the top of [CHANGELOG.md](../CHANGELOG.md).
 
 ### User Guides
 

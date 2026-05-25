@@ -1,0 +1,1691 @@
+[
+  {
+    "catalog_id": "Caldwell 1",
+    "ra_hours": 0.790981,
+    "dec_deg": 85.269639,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 1"
+    ],
+    "magnitude": 8.1,
+    "aliases": [
+      "NGC 188",
+      "C 1",
+      "C1"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 2",
+    "ra_hours": 0.216953,
+    "dec_deg": 72.521944,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Bow-Tie Nebula",
+      "Bow-Tie nebula"
+    ],
+    "magnitude": 11.89,
+    "aliases": [
+      "NGC 40",
+      "C 2",
+      "C2"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 3",
+    "ra_hours": 12.278367,
+    "dec_deg": 69.462583,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 3"
+    ],
+    "magnitude": 9.77,
+    "aliases": [
+      "NGC 4236",
+      "C 3",
+      "C3"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 4",
+    "ra_hours": 21.026561,
+    "dec_deg": 68.169556,
+    "object_type": "Neb",
+    "target_type": "emission",
+    "common_names": [
+      "Iris Nebula"
+    ],
+    "magnitude": 7.2,
+    "aliases": [
+      "NGC 7023",
+      "C 4",
+      "C4"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 5",
+    "ra_hours": 3.780139,
+    "dec_deg": 68.096361,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Hidden Galaxy"
+    ],
+    "magnitude": 9.68,
+    "aliases": [
+      "IC 342",
+      "C 5",
+      "C5"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 6",
+    "ra_hours": 17.975942,
+    "dec_deg": 66.633194,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Cat's Eye Nebula"
+    ],
+    "magnitude": 9.01,
+    "aliases": [
+      "NGC 6543",
+      "C 6",
+      "C6"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 7",
+    "ra_hours": 7.614278,
+    "dec_deg": 65.602556,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 7"
+    ],
+    "magnitude": 8.43,
+    "aliases": [
+      "NGC 2403",
+      "C 7",
+      "C7"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 8",
+    "ra_hours": 1.492547,
+    "dec_deg": 63.301444,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 8"
+    ],
+    "magnitude": 9.5,
+    "aliases": [
+      "NGC 559",
+      "C 8",
+      "C8"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 10",
+    "ra_hours": 1.771125,
+    "dec_deg": 61.218194,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 10"
+    ],
+    "magnitude": 7.1,
+    "aliases": [
+      "NGC 663",
+      "C 10",
+      "C10"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 11",
+    "ra_hours": 23.346,
+    "dec_deg": 61.212361,
+    "object_type": "HII",
+    "target_type": "emission",
+    "common_names": [
+      "Bubble Nebula"
+    ],
+    "magnitude": 11.0,
+    "aliases": [
+      "NGC 7635",
+      "C 11",
+      "C11"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 12",
+    "ra_hours": 20.5812,
+    "dec_deg": 60.153917,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Fireworks Galaxy"
+    ],
+    "magnitude": 9.05,
+    "aliases": [
+      "NGC 6946",
+      "C 12",
+      "C12"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 13",
+    "ra_hours": 1.325736,
+    "dec_deg": 58.290694,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Owl Cluster"
+    ],
+    "magnitude": 6.4,
+    "aliases": [
+      "NGC 457",
+      "C 13",
+      "C13"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 14",
+    "ra_hours": 2.316267,
+    "dec_deg": 57.11725,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Double Cluster (h Persei)",
+      "h Persei Cluster"
+    ],
+    "magnitude": 3.7,
+    "aliases": [
+      "NGC 869",
+      "C 14",
+      "C14"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 15",
+    "ra_hours": 19.746697,
+    "dec_deg": 50.525028,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Blinking Planetary"
+    ],
+    "magnitude": 9.44,
+    "aliases": [
+      "NGC 6826",
+      "C 15",
+      "C15"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 16",
+    "ra_hours": 22.252383,
+    "dec_deg": 49.8975,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 16"
+    ],
+    "magnitude": 6.4,
+    "aliases": [
+      "NGC 7243",
+      "C 16",
+      "C16"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 17",
+    "ra_hours": 0.553367,
+    "dec_deg": 48.50875,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 17"
+    ],
+    "magnitude": 9.72,
+    "aliases": [
+      "NGC 147",
+      "C 17",
+      "C17"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 18",
+    "ra_hours": 0.649436,
+    "dec_deg": 48.337389,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 18"
+    ],
+    "magnitude": 9.2,
+    "aliases": [
+      "NGC 185",
+      "C 18",
+      "C18"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 19",
+    "ra_hours": 21.891322,
+    "dec_deg": 47.266917,
+    "object_type": "Cl+N",
+    "target_type": "emission",
+    "common_names": [
+      "Cocoon Nebula"
+    ],
+    "magnitude": 7.2,
+    "aliases": [
+      "IC 5146",
+      "C 19",
+      "C19"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 20",
+    "ra_hours": 20.988094,
+    "dec_deg": 44.528778,
+    "object_type": "HII",
+    "target_type": "emission",
+    "common_names": [
+      "North America Nebula"
+    ],
+    "magnitude": 4.0,
+    "aliases": [
+      "NGC 7000",
+      "C 20",
+      "C20"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 21",
+    "ra_hours": 12.46975,
+    "dec_deg": 44.093639,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 21"
+    ],
+    "magnitude": 9.64,
+    "aliases": [
+      "NGC 4449",
+      "C 21",
+      "C21"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 22",
+    "ra_hours": 23.431639,
+    "dec_deg": 42.534944,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Blue Snowball",
+      "Copeland's Blue Snowball"
+    ],
+    "magnitude": 8.3,
+    "aliases": [
+      "NGC 7662",
+      "C 22",
+      "C22"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 23",
+    "ra_hours": 2.375947,
+    "dec_deg": 42.349139,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 23"
+    ],
+    "magnitude": 10.01,
+    "aliases": [
+      "NGC 891",
+      "C 23",
+      "C23"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 24",
+    "ra_hours": 3.330044,
+    "dec_deg": 41.511694,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Perseus A"
+    ],
+    "magnitude": 12.24,
+    "aliases": [
+      "NGC 1275",
+      "C 24",
+      "C24"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 25",
+    "ra_hours": 7.635542,
+    "dec_deg": 38.879972,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Intergalactic Wanderer"
+    ],
+    "magnitude": 10.05,
+    "aliases": [
+      "NGC 2419",
+      "C 25",
+      "C25"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 26",
+    "ra_hours": 12.291572,
+    "dec_deg": 37.807111,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Silver Needle Galaxy"
+    ],
+    "magnitude": 10.18,
+    "aliases": [
+      "NGC 4244",
+      "C 26",
+      "C26"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 27",
+    "ra_hours": 20.201819,
+    "dec_deg": 38.354944,
+    "object_type": "HII",
+    "target_type": "emission",
+    "common_names": [
+      "Crescent Nebula"
+    ],
+    "magnitude": 7.44,
+    "aliases": [
+      "NGC 6888",
+      "C 27",
+      "C27"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 28",
+    "ra_hours": 1.959672,
+    "dec_deg": 37.833389,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 28"
+    ],
+    "magnitude": 5.7,
+    "aliases": [
+      "NGC 752",
+      "C 28",
+      "C28"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 29",
+    "ra_hours": 13.182286,
+    "dec_deg": 37.059194,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 29"
+    ],
+    "magnitude": 10.71,
+    "aliases": [
+      "NGC 5005",
+      "C 29",
+      "C29"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 30",
+    "ra_hours": 22.617781,
+    "dec_deg": 34.415528,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 30"
+    ],
+    "magnitude": 9.41,
+    "aliases": [
+      "NGC 7331",
+      "C 30",
+      "C30"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 31",
+    "ra_hours": 5.274856,
+    "dec_deg": 34.356167,
+    "object_type": "Neb",
+    "target_type": "emission",
+    "common_names": [
+      "Flaming Star Nebula"
+    ],
+    "magnitude": 10.0,
+    "aliases": [
+      "IC 405",
+      "C 31",
+      "C31"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 32",
+    "ra_hours": 12.702225,
+    "dec_deg": 32.5415,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Whale Galaxy"
+    ],
+    "magnitude": 9.24,
+    "aliases": [
+      "NGC 4631",
+      "C 32",
+      "C32"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 33",
+    "ra_hours": 20.938631,
+    "dec_deg": 31.74275,
+    "object_type": "SNR",
+    "target_type": "supernova_remnant",
+    "common_names": [
+      "Eastern Veil Nebula",
+      "Eastern Veil",
+      "Network Nebula"
+    ],
+    "magnitude": 7.0,
+    "aliases": [
+      "NGC 6992",
+      "C 33",
+      "C33"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 34",
+    "ra_hours": 20.766161,
+    "dec_deg": 30.595139,
+    "object_type": "SNR",
+    "target_type": "supernova_remnant",
+    "common_names": [
+      "Western Veil Nebula",
+      "Veil Nebula",
+      "Filamentary Nebula",
+      "Western Veil"
+    ],
+    "magnitude": 7.0,
+    "aliases": [
+      "NGC 6960",
+      "C 34",
+      "C34"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 35",
+    "ra_hours": 13.002258,
+    "dec_deg": 27.977,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 35"
+    ],
+    "magnitude": 11.45,
+    "aliases": [
+      "NGC 4889",
+      "C 35",
+      "C35"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 36",
+    "ra_hours": 12.599347,
+    "dec_deg": 27.96,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 36"
+    ],
+    "magnitude": 9.92,
+    "aliases": [
+      "NGC 4559",
+      "C 36",
+      "C36"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 38",
+    "ra_hours": 12.605772,
+    "dec_deg": 25.987667,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Needle Galaxy"
+    ],
+    "magnitude": 10.86,
+    "aliases": [
+      "NGC 4565",
+      "C 38",
+      "C38"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 39",
+    "ra_hours": 7.486322,
+    "dec_deg": 20.911833,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Lion Nebula (Eskimo)",
+      "Eskimo Nebula"
+    ],
+    "magnitude": 9.61,
+    "aliases": [
+      "NGC 2392",
+      "C 39",
+      "C39"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 40",
+    "ra_hours": 11.334392,
+    "dec_deg": 18.356833,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 40"
+    ],
+    "magnitude": 10.98,
+    "aliases": [
+      "NGC 3626",
+      "C 40",
+      "C40"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 42",
+    "ra_hours": 21.024792,
+    "dec_deg": 16.187528,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 42"
+    ],
+    "magnitude": 10.46,
+    "aliases": [
+      "NGC 7006",
+      "C 42",
+      "C42"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 43",
+    "ra_hours": 0.054136,
+    "dec_deg": 16.145417,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Little Sombrero"
+    ],
+    "magnitude": 10.6,
+    "aliases": [
+      "NGC 7814",
+      "C 43",
+      "C43"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 44",
+    "ra_hours": 23.082403,
+    "dec_deg": 12.322889,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Superman Galaxy"
+    ],
+    "magnitude": 11.09,
+    "aliases": [
+      "NGC 7479",
+      "C 44",
+      "C44"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 45",
+    "ra_hours": 13.625561,
+    "dec_deg": 8.885167,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 45"
+    ],
+    "magnitude": 9.97,
+    "aliases": [
+      "NGC 5248",
+      "C 45",
+      "C45"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 46",
+    "ra_hours": 6.652642,
+    "dec_deg": 8.744333,
+    "object_type": "RfN",
+    "target_type": "reflection",
+    "common_names": [
+      "Hubble's Variable Nebula",
+      "Hubble's Nebula"
+    ],
+    "magnitude": 11.85,
+    "aliases": [
+      "NGC 2261",
+      "C 46",
+      "C46"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 47",
+    "ra_hours": 20.569858,
+    "dec_deg": 7.404111,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 47"
+    ],
+    "magnitude": 9.75,
+    "aliases": [
+      "NGC 6934",
+      "C 47",
+      "C47"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 48",
+    "ra_hours": 9.172256,
+    "dec_deg": 7.037944,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 48"
+    ],
+    "magnitude": 10.24,
+    "aliases": [
+      "NGC 2775",
+      "C 48",
+      "C48"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 49",
+    "ra_hours": 6.515169,
+    "dec_deg": 5.049167,
+    "object_type": "Neb",
+    "target_type": "emission",
+    "common_names": [
+      "Rosette Nebula",
+      "Rosette A"
+    ],
+    "magnitude": null,
+    "aliases": [
+      "NGC 2237",
+      "C 49",
+      "C49"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 51",
+    "ra_hours": 1.079942,
+    "dec_deg": 2.117778,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 51"
+    ],
+    "magnitude": 9.54,
+    "aliases": [
+      "IC 1613",
+      "C 51",
+      "C51"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 52",
+    "ra_hours": 12.809967,
+    "dec_deg": -5.80075,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 52"
+    ],
+    "magnitude": 9.37,
+    "aliases": [
+      "NGC 4697",
+      "C 52",
+      "C52"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 53",
+    "ra_hours": 10.087217,
+    "dec_deg": -7.718583,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Spindle Galaxy"
+    ],
+    "magnitude": 9.09,
+    "aliases": [
+      "NGC 3115",
+      "C 53",
+      "C53"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 54",
+    "ra_hours": 8.000494,
+    "dec_deg": -10.769639,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 54"
+    ],
+    "magnitude": 7.6,
+    "aliases": [
+      "NGC 2506",
+      "C 54",
+      "C54"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 55",
+    "ra_hours": 21.069664,
+    "dec_deg": -11.36325,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Saturn Nebula"
+    ],
+    "magnitude": 8.0,
+    "aliases": [
+      "NGC 7009",
+      "C 55",
+      "C55"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 56",
+    "ra_hours": 0.784267,
+    "dec_deg": -11.871944,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Skull Nebula"
+    ],
+    "magnitude": 10.9,
+    "aliases": [
+      "NGC 246",
+      "C 56",
+      "C56"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 57",
+    "ra_hours": 19.749372,
+    "dec_deg": -14.803444,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Barnard's Galaxy"
+    ],
+    "magnitude": 10.05,
+    "aliases": [
+      "NGC 6822",
+      "C 57",
+      "C57"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 58",
+    "ra_hours": 7.295311,
+    "dec_deg": -15.641306,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caroline's Cluster"
+    ],
+    "magnitude": 7.2,
+    "aliases": [
+      "NGC 2360",
+      "C 58",
+      "C58"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 59",
+    "ra_hours": 10.4128,
+    "dec_deg": -18.642222,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Ghost of Jupiter",
+      "Jupiter's Ghost Nebula"
+    ],
+    "magnitude": 7.7,
+    "aliases": [
+      "NGC 3242",
+      "C 59",
+      "C59"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 60",
+    "ra_hours": 12.031392,
+    "dec_deg": -18.867611,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Antennae Galaxies"
+    ],
+    "magnitude": 10.2,
+    "aliases": [
+      "NGC 4038",
+      "C 60",
+      "C60"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 61",
+    "ra_hours": 12.031531,
+    "dec_deg": -18.886194,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Antennae Galaxies"
+    ],
+    "magnitude": 11.04,
+    "aliases": [
+      "NGC 4039",
+      "C 61",
+      "C61"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 62",
+    "ra_hours": 0.785708,
+    "dec_deg": -20.760389,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 62"
+    ],
+    "magnitude": 9.21,
+    "aliases": [
+      "NGC 247",
+      "C 62",
+      "C62"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 63",
+    "ra_hours": 22.494047,
+    "dec_deg": -20.837333,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Helix Nebula"
+    ],
+    "magnitude": 7.3,
+    "aliases": [
+      "NGC 7293",
+      "C 63",
+      "C63"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 64",
+    "ra_hours": 7.311519,
+    "dec_deg": -24.954194,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Tau Canis Majoris Cluster"
+    ],
+    "magnitude": 4.1,
+    "aliases": [
+      "NGC 2362",
+      "C 64",
+      "C64"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 65",
+    "ra_hours": 0.792533,
+    "dec_deg": -25.288222,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Sculptor Galaxy",
+      "Sculptor Filament",
+      "Silver Coin"
+    ],
+    "magnitude": 11.11,
+    "aliases": [
+      "NGC 253",
+      "C 65",
+      "C65"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 66",
+    "ra_hours": 14.660142,
+    "dec_deg": -26.538333,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 66"
+    ],
+    "magnitude": 10.89,
+    "aliases": [
+      "NGC 5694",
+      "C 66",
+      "C66"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 67",
+    "ra_hours": 2.771958,
+    "dec_deg": -30.274889,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 67"
+    ],
+    "magnitude": 9.76,
+    "aliases": [
+      "NGC 1097",
+      "C 67",
+      "C67"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 68",
+    "ra_hours": 19.032056,
+    "dec_deg": -36.957639,
+    "object_type": "Neb",
+    "target_type": "emission",
+    "common_names": [
+      "Caldwell 68"
+    ],
+    "magnitude": null,
+    "aliases": [
+      "NGC 6729",
+      "C 68",
+      "C68"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 69",
+    "ra_hours": 17.229064,
+    "dec_deg": -37.103139,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Bug Nebula",
+      "Butterfly Nebula"
+    ],
+    "magnitude": 9.6,
+    "aliases": [
+      "NGC 6302",
+      "C 69",
+      "C69"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 70",
+    "ra_hours": 0.914856,
+    "dec_deg": -37.684389,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 70"
+    ],
+    "magnitude": 8.66,
+    "aliases": [
+      "NGC 300",
+      "C 70",
+      "C70"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 71",
+    "ra_hours": 7.869383,
+    "dec_deg": -38.53325,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 71"
+    ],
+    "magnitude": 5.8,
+    "aliases": [
+      "NGC 2477",
+      "C 71",
+      "C71"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 72",
+    "ra_hours": 0.248222,
+    "dec_deg": -39.196639,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 72"
+    ],
+    "magnitude": 8.54,
+    "aliases": [
+      "NGC 55",
+      "C 72",
+      "C72"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 73",
+    "ra_hours": 5.235203,
+    "dec_deg": -40.046611,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 73"
+    ],
+    "magnitude": 7.23,
+    "aliases": [
+      "NGC 1851",
+      "C 73",
+      "C73"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 74",
+    "ra_hours": 10.117147,
+    "dec_deg": -40.436583,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Eight-Burst Nebula"
+    ],
+    "magnitude": 9.2,
+    "aliases": [
+      "NGC 3132",
+      "C 74",
+      "C74"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 75",
+    "ra_hours": 16.422239,
+    "dec_deg": -40.653694,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 75"
+    ],
+    "magnitude": 5.8,
+    "aliases": [
+      "NGC 6124",
+      "C 75",
+      "C75"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 76",
+    "ra_hours": 16.903033,
+    "dec_deg": -41.82425,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 76"
+    ],
+    "magnitude": 2.6,
+    "aliases": [
+      "NGC 6231",
+      "C 76",
+      "C76"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 77",
+    "ra_hours": 13.424339,
+    "dec_deg": -43.019111,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Centaurus A"
+    ],
+    "magnitude": 7.22,
+    "aliases": [
+      "NGC 5128",
+      "C 77",
+      "C77"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 78",
+    "ra_hours": 18.133981,
+    "dec_deg": -43.715889,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 78"
+    ],
+    "magnitude": 7.32,
+    "aliases": [
+      "NGC 6541",
+      "C 78",
+      "C78"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 79",
+    "ra_hours": 10.293544,
+    "dec_deg": -46.411222,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 79"
+    ],
+    "magnitude": 8.24,
+    "aliases": [
+      "NGC 3201",
+      "C 79",
+      "C79"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 80",
+    "ra_hours": 13.446081,
+    "dec_deg": -47.476861,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Omega Centauri"
+    ],
+    "magnitude": 5.33,
+    "aliases": [
+      "NGC 5139",
+      "C 80",
+      "C80"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 81",
+    "ra_hours": 17.424767,
+    "dec_deg": -48.422694,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 81"
+    ],
+    "magnitude": 8.87,
+    "aliases": [
+      "NGC 6352",
+      "C 81",
+      "C81"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 82",
+    "ra_hours": 16.688953,
+    "dec_deg": -48.762528,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 82"
+    ],
+    "magnitude": null,
+    "aliases": [
+      "NGC 6193",
+      "C 82",
+      "C82"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 83",
+    "ra_hours": 13.090967,
+    "dec_deg": -49.468222,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 83"
+    ],
+    "magnitude": 11.86,
+    "aliases": [
+      "NGC 4945",
+      "C 83",
+      "C83"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 84",
+    "ra_hours": 13.77405,
+    "dec_deg": -51.373472,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 84"
+    ],
+    "magnitude": 8.31,
+    "aliases": [
+      "NGC 5286",
+      "C 84",
+      "C84"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 85",
+    "ra_hours": 8.675522,
+    "dec_deg": -53.035472,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Omicron Velorum Cluster",
+      "omi Vel Cluster"
+    ],
+    "magnitude": 2.5,
+    "aliases": [
+      "IC 2391",
+      "C 85",
+      "C85"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 86",
+    "ra_hours": 17.678156,
+    "dec_deg": -53.673694,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 86"
+    ],
+    "magnitude": 5.17,
+    "aliases": [
+      "NGC 6397",
+      "C 86",
+      "C86"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 87",
+    "ra_hours": 3.204261,
+    "dec_deg": -55.216806,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 87"
+    ],
+    "magnitude": 8.63,
+    "aliases": [
+      "NGC 1261",
+      "C 87",
+      "C87"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 88",
+    "ra_hours": 15.091842,
+    "dec_deg": -55.60375,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 88"
+    ],
+    "magnitude": 7.9,
+    "aliases": [
+      "NGC 5823",
+      "C 88",
+      "C88"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 89",
+    "ra_hours": 16.31405,
+    "dec_deg": -57.934583,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "S Normae Cluster",
+      "S Nor Cluster"
+    ],
+    "magnitude": 5.4,
+    "aliases": [
+      "NGC 6087",
+      "C 89",
+      "C89"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 90",
+    "ra_hours": 9.356936,
+    "dec_deg": -58.311667,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Caldwell 90"
+    ],
+    "magnitude": 9.7,
+    "aliases": [
+      "NGC 2867",
+      "C 90",
+      "C90"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 91",
+    "ra_hours": 11.096617,
+    "dec_deg": -58.7705,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Wishing Well Cluster"
+    ],
+    "magnitude": 3.0,
+    "aliases": [
+      "NGC 3532",
+      "C 91",
+      "C91"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 92",
+    "ra_hours": 10.752369,
+    "dec_deg": -59.866694,
+    "object_type": "HII",
+    "target_type": "emission",
+    "common_names": [
+      "Carina Nebula",
+      "eta Car Nebula"
+    ],
+    "magnitude": 3.0,
+    "aliases": [
+      "NGC 3372",
+      "C 92",
+      "C92"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 93",
+    "ra_hours": 19.18105,
+    "dec_deg": -59.981861,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 93"
+    ],
+    "magnitude": 6.28,
+    "aliases": [
+      "NGC 6752",
+      "C 93",
+      "C93"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 94",
+    "ra_hours": 12.893633,
+    "dec_deg": -60.356306,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Jewel Box",
+      "Herschel's Jewel Box",
+      "kappa Crucis Cluster"
+    ],
+    "magnitude": null,
+    "aliases": [
+      "NGC 4755",
+      "C 94",
+      "C94"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 95",
+    "ra_hours": 16.054942,
+    "dec_deg": -60.431361,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 95"
+    ],
+    "magnitude": 5.1,
+    "aliases": [
+      "NGC 6025",
+      "C 95",
+      "C95"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 96",
+    "ra_hours": 7.968628,
+    "dec_deg": -60.753472,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 96"
+    ],
+    "magnitude": 3.8,
+    "aliases": [
+      "NGC 2516",
+      "C 96",
+      "C96"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 97",
+    "ra_hours": 11.603997,
+    "dec_deg": -61.605167,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Pearl Cluster"
+    ],
+    "magnitude": 5.3,
+    "aliases": [
+      "NGC 3766",
+      "C 97",
+      "C97"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 98",
+    "ra_hours": 12.704675,
+    "dec_deg": -62.99575,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 98",
+      "Coalsack Cluster"
+    ],
+    "magnitude": 6.9,
+    "aliases": [
+      "NGC 4609",
+      "C 98",
+      "C98"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 100",
+    "ra_hours": 11.596369,
+    "dec_deg": -63.019833,
+    "object_type": "Cl+N",
+    "target_type": "emission",
+    "common_names": [
+      "Lambda Centauri Cluster",
+      "lam Cen Nebula"
+    ],
+    "magnitude": 4.5,
+    "aliases": [
+      "IC 2944",
+      "C 100",
+      "C100"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 101",
+    "ra_hours": 19.162806,
+    "dec_deg": -63.857528,
+    "object_type": "G",
+    "target_type": "galaxy",
+    "common_names": [
+      "Caldwell 101"
+    ],
+    "magnitude": 9.25,
+    "aliases": [
+      "NGC 6744",
+      "C 101",
+      "C101"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 102",
+    "ra_hours": 10.715964,
+    "dec_deg": -64.394194,
+    "object_type": "OCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Southern Pleiades",
+      "tet Car Cluster"
+    ],
+    "magnitude": null,
+    "aliases": [
+      "IC 2602",
+      "C 102",
+      "C102"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 103",
+    "ra_hours": 5.6451,
+    "dec_deg": -69.100889,
+    "object_type": "HII",
+    "target_type": "emission",
+    "common_names": [
+      "Tarantula Nebula",
+      "30 Dor Cluster"
+    ],
+    "magnitude": 7.25,
+    "aliases": [
+      "NGC 2070",
+      "C 103",
+      "C103"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 104",
+    "ra_hours": 1.053953,
+    "dec_deg": -70.848222,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 104"
+    ],
+    "magnitude": 6.58,
+    "aliases": [
+      "NGC 362",
+      "C 104",
+      "C104"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 105",
+    "ra_hours": 12.993039,
+    "dec_deg": -70.874583,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 105"
+    ],
+    "magnitude": 7.79,
+    "aliases": [
+      "NGC 4833",
+      "C 105",
+      "C105"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 106",
+    "ra_hours": 0.401489,
+    "dec_deg": -72.081444,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "47 Tucanae",
+      "47 Tuc Cluster"
+    ],
+    "magnitude": 4.09,
+    "aliases": [
+      "NGC 104",
+      "C 106",
+      "C106"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 107",
+    "ra_hours": 16.430158,
+    "dec_deg": -72.201556,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 107"
+    ],
+    "magnitude": 10.08,
+    "aliases": [
+      "NGC 6101",
+      "C 107",
+      "C107"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 108",
+    "ra_hours": 12.429272,
+    "dec_deg": -72.659083,
+    "object_type": "GCl",
+    "target_type": "cluster",
+    "common_names": [
+      "Caldwell 108"
+    ],
+    "magnitude": 9.85,
+    "aliases": [
+      "NGC 4372",
+      "C 108",
+      "C108"
+    ]
+  },
+  {
+    "catalog_id": "Caldwell 109",
+    "ra_hours": 10.155828,
+    "dec_deg": -80.858583,
+    "object_type": "PN",
+    "target_type": "planetary",
+    "common_names": [
+      "Caldwell 109"
+    ],
+    "magnitude": 11.6,
+    "aliases": [
+      "NGC 3195",
+      "C 109",
+      "C109"
+    ]
+  }
+]

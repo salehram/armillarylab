@@ -710,8 +710,26 @@ def _aggregate_window_astro(
         if ws <= tp_dt <= we:
             window_points.append(point)
 
+    # Fallback: 7Timer is a 3-hour grid. Short imaging windows (e.g. heavy
+    # packup-time clipping) can land entirely between two grid points and
+    # produce zero hits. In that case use the single 7Timer point closest to
+    # the window midpoint so the UI still shows a seeing estimate instead of
+    # silently dropping the whole block.
+    nearest_used = False
     if not window_points:
-        return None
+        mid = ws + (we - ws) / 2
+        best = None
+        best_diff = float("inf")
+        for point in series:
+            tp_dt = init_dt + datetime.timedelta(hours=point["timepoint"])
+            diff = abs((tp_dt - mid).total_seconds())
+            if diff < best_diff:
+                best_diff = diff
+                best = point
+        if best is None:
+            return None
+        window_points = [best]
+        nearest_used = True
 
     seeing_vals = [p.get("seeing", 5) for p in window_points]
     transp_vals = [p.get("transparency", 3) for p in window_points]
@@ -731,6 +749,7 @@ def _aggregate_window_astro(
         "seeing_raw_worst": worst_seeing,
         "transparency_avg_label": _TRANSPARENCY_MAP.get(avg_transp, "Unknown"),
         "points": len(window_points),
+        "nearest_fallback": nearest_used,
     }
 
 

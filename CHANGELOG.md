@@ -13,6 +13,14 @@ _Nothing yet._
 
 ---
 
+## [2.4.2] - 2026-05-25
+
+### Fixed
+
+- **Night Conditions: Imaging-Window Seeing block no longer disappears for short windows.** 7Timer publishes seeing and transparency on a fixed 3-hour UTC grid. When a target's effective imaging window (after packup-time clipping) was shorter than ~3 hours and landed entirely between two grid points, `_aggregate_window_astro()` returned `None` and the template silently dropped the whole Seeing section in the right column of the Night Conditions panel — even though the "Right Now" Seeing block continued to render. The aggregator now falls back to the single 7Timer point closest to the window midpoint when no points fall strictly inside the window, and exposes a `nearest_fallback` flag on the payload. Added regression tests in `tests/test_conditions_window_astro.py`.
+
+---
+
 ## [2.4.1] - 2026-05-25
 
 ### Fixed

@@ -425,8 +425,15 @@ def build_astrobin_export_rows(
                 "flats": 0,
                 "flat_darks": 0,
                 "bias": 0,
+                "gain": None,
+                "sensor_cooling": None,
             }
         rows[key]["number"] += session.sub_count
+        # Capture per-session values; first non-null value for this key wins
+        if rows[key]["gain"] is None and getattr(session, "gain", None) is not None:
+            rows[key]["gain"] = session.gain
+        if rows[key]["sensor_cooling"] is None and getattr(session, "sensor_cooling", None) is not None:
+            rows[key]["sensor_cooling"] = session.sensor_cooling
 
     if not captures:
         return sorted(rows.values(), key=lambda r: (r["date"], r["filter_name"], r["duration"]))
@@ -528,6 +535,8 @@ def _light_log_entry(session) -> dict:
         "sub_exposure_seconds": session.sub_exposure_seconds,
         "notes": session.notes,
         "minutes": (session.sub_count * session.sub_exposure_seconds) / 60,
+        "gain": getattr(session, "gain", None),
+        "sensor_cooling": getattr(session, "sensor_cooling", None),
     }
 
 

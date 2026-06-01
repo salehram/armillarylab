@@ -1563,10 +1563,11 @@ def export_nina_v2(target_id):
             packup_time_local=packup_time,
             min_altitude_deg=effective_min_alt,
         )
-        if w.get("deps_available") and w.get("end_time_local"):
-            window_end_local = w["end_time_local"]
+        if w.get("deps_available") and w.get("end_time_local") and w["end_time_local"] != "N/A":
+            import datetime as _dt
+            window_end_local = _dt.datetime.strptime(w["end_time_local"], "%Y-%m-%d %H:%M:%S")
     except Exception as e:
-        logger.warning(f"Could not compute window end time for NINA export: {e}")
+        app.logger.warning(f"Could not compute window end time for NINA export: {e}")
 
     # ── Build sequence(s) ─────────────────────────────────────────────────────
     try:
@@ -1586,7 +1587,7 @@ def export_nina_v2(target_id):
             export_mode=export_mode,
         )
     except Exception as e:
-        logger.exception("NINA V2 sequence build failed")
+        app.logger.exception("NINA V2 sequence build failed")
         flash(f"Failed to build NINA sequence: {e}", "danger")
         return redirect(url_for("target_detail", target_id=target.id))
 

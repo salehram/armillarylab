@@ -13,6 +13,40 @@ _Nothing yet._
 
 ---
 
+## [2.6.0] - 2026-06-01
+
+### Added
+
+- **NINA V2 Advanced Sequence export** — replaces the old single-click V1 export with a full modal dialog and a new JSON builder targeting NINA's Advanced Sequencer format.
+  - New `nina_template_v2.json` base template: `DeepSkyObjectContainer` with complete session setup — `CoolCamera` (−10 °C), `StartGuider`, `CenterAndRotate`, `AutofocusAfterSetTime`, `TimeCondition` stop guard, and per-channel `SequentialContainer` capture blocks with `SwitchFilter`, `TakeExposure`, and `Dither` trigger wired up.
+  - New backend route `POST /target/<id>/export_nina_v2` accepting: sequence name, DSO container name, position angle, cooldown duration, force-guider-calibration flag, dither-after-N, export mode (`all` / `single` / `zip`), per-channel gains (JSON), and an experimental `use_exposure_offset` flag.
+  - Three export modes: **All channels** (single `.json`), **Single channel** (one `.json`), **Separate files** (`.zip` with one file per channel).
+  - `$id`/`$ref` renumbering engine (`_resequence_subtree`) correctly handles multi-channel exports — internal references within each cloned channel block are remapped; external parent refs are left intact.
+  - `build_nina_sequences_v2` / `build_nina_sequence_v2` builder functions in `nina_integration.py`.
+
+- **Export NINA Sequence dialog** (`#ninaExportModal` in `target_detail.html`): sequence info, framing/setup controls, export-mode radio with channel picker, per-channel gain table (JS-populated from plan data with global-gain propagation), window end-time display, and experimental ExposureCount-offset checkbox.
+
+- **Gain and sensor cooling on imaging sessions** — `ImagingSession` model gains two new optional columns:
+  - `gain` (INTEGER) — sensor gain used during the session.
+  - `sensor_cooling` (FLOAT) — actual achieved camera temperature in °C.
+  - Both columns are added via `apply_additive_schema_migrations()` on startup (safe for existing databases).
+  - **Add Imaging Progress** form and **Edit Session** form now expose these fields.
+  - Session log rows show small `G<n>` and `<n>°C` badges when values are present.
+
+- **Per-session gain/cooling in AstroBin CSV export** — `build_astrobin_export_rows` now stores per-session `gain` and `sensor_cooling` on each row. The CSV writer uses the per-session value when available, falling back to the modal's uniform form value. The non-tracked sessions path also captures these values while grouping.
+
+- **AstroBin modal pre-population** — gain and cooling inputs default to values from the most-recent session that has them logged, with a "from last session" hint label.
+
+### Removed
+
+- `GlobalConfig.default_calibration_two_point` and `Target.override_calibration_two_point` read/write paths (columns retained for safe downgrade as noted in v2.5.0 deprecation notice).
+
+### Migration
+
+- `apply_additive_schema_migrations()` adds `imaging_sessions.gain` (INTEGER) and `imaging_sessions.sensor_cooling` (REAL/FLOAT) if not present. No data loss; existing rows get NULL for both columns.
+
+---
+
 ## [2.5.0] - 2026-05-25
 
 ### Changed

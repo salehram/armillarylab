@@ -2,23 +2,19 @@
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
-![Version](https://img.shields.io/badge/version-2.5.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.6.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 
-## 🎉 Current release: v2.4.0 — Comprehensive Object Resolver
+## 🎉 Current release: v2.6.0 — NINA V2 Advanced Sequence Export & Session Gain/Cooling Tracking
 
-**ArmillaryLab v2.4.0** ships a new end-to-end **object resolver**: a first-hit-wins chain (local NGC/IC/Messier/Caldwell + SIMBAD/NED/VizieR/Sesame) with a 90-day DB-backed cache, a confirmation modal that suggests the canonical name, and bidirectional cross-catalog aliases (`C 33` ↔ `NGC 6992`, `M 31` ↔ `NGC 224`, …) surfaced both in the target form and the resolver badge. New `/api/resolve`, `/api/resolve/health`, and `flask resolver-test` CLI. See [CHANGELOG.md](CHANGELOG.md) and [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§18).
+**ArmillaryLab v2.6.0** ships a fully rewritten **NINA Advanced Sequencer export** built on a new V2 template. Clicking **Export NINA Sequence…** now opens a customization dialog where you set the sequence name, position angle, cooldown duration, guider calibration flag, dither cadence, export mode (all channels / single channel / separate ZIP), and a per-channel gain table — then downloads a ready-to-import `.json` (or `.zip`) directly into NINA's Advanced Sequencer. The new template includes `CoolCamera`, `StartGuider`, `CenterAndRotate`, `AutofocusAfterSetTime`, a `TimeCondition` stop guard keyed to tonight's imaging window end, and one `SequentialContainer` per filter channel. See [NINA Integration Guide](docs/NINA_INTEGRATION.md).
 
-**v2.3.0** adds the **Seeing Guide** and **5-Day Forecast** tabs to the Night Conditions popup for richer at-a-glance planning.
+v2.6.0 also adds optional **gain and sensor-cooling fields** to every imaging session log. Values are shown as small badges on session rows, used to pre-populate the AstroBin export modal, and written per-row into the AstroBin CSV when available (with a uniform fallback). The `imaging_sessions` table gains two new nullable columns added automatically on startup — no manual migration needed.
 
-**v2.2.0** added optional **calibration frame tracking**: global defaults, per-target opt-in, manual dark/bias logging, and per-channel flat/dark-flat suggestions — with skip/defer and AstroBin export prefill. As of v2.5.0 a single end-of-channel reminder fires instead of the original two-point nudge (ArmillaryLab tracks captures but never applies flats, so capture rhythm is the user's call). See [docs/FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) (§17, §19).
-
-**v2.1.0** adds the **Night Conditions** navbar popup: live moon phase (offline via astroplan), Open-Meteo weather, 7Timer seeing/transparency, weighted filter-channel suggestions, imaging-window aggregates when a target has a valid window, and a three-tier offline fallback with local caching.
-
-**v2.0.0** remains the foundation: PostgreSQL-ready deployment, filter and filter-wheel management, presets, AstroBin export, archiving, and dark-theme UX.
+**v2.5.0** rewrote calibration suggestions to fire once per channel at end-of-lights only (one reminder, your workflow). **v2.4.0** ships the end-to-end object resolver (NGC/IC/Messier/Caldwell + SIMBAD/NED/VizieR/Sesame, 90-day cache, confirmation modal). **v2.3.0** adds Seeing Guide & 5-Day Forecast tabs. **v2.2.0** adds optional calibration frame tracking with AstroBin prefill. **v2.1.0** adds the Night Conditions navbar popup. See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ## 🌟 Features
 
@@ -36,7 +32,8 @@ A comprehensive web-based tool for planning astrophotography sessions and managi
   - Sunset and astronomical darkness times
   - Target altitude constraints with visual chart indicators
   - Observer location and timezone with global configuration
-- **Progress Tracking**: Comprehensive tracking with edit/delete functionality for session records
+- **Progress Tracking**: Comprehensive tracking with edit/delete functionality for session records; optional **gain** and **sensor cooling °C** fields per session
+- **Session Badges**: Gain (`G100`) and temperature (`-10°C`) badges on log rows when values are present
 - **Time Management**: Flexible time input with H:M:S formatting and bidirectional conversions
 - **Imaging Logs**: Complete session history with statistics, analytics, and backdating support
 
@@ -54,16 +51,18 @@ A comprehensive web-based tool for planning astrophotography sessions and managi
 - **Custom Filter Addition**: On-the-fly custom filter addition with auto-save and NINA compatibility
 
 ### 🔧 NINA Integration & Export
-- **Export Compatibility**: Direct export to N.I.N.A. (Nighttime Imaging 'N' Astronomy) Advanced Sequencer
-- **Template System**: Customizable sequence templates with dynamic block generation
-- **Filter Wheel Integration**: Custom filter mapping ensures proper telescope hardware operation
-- **Remaining Frames Export**: Intelligent export of only remaining frames for efficient session continuation
+- **V2 Advanced Sequencer Export**: Full-session sequence with `CoolCamera` (−10 °C), `StartGuider`, `CenterAndRotate`, `AutofocusAfterSetTime`, `TimeCondition` stop guard, and one `SequentialContainer` per filter channel
+- **Export Dialog**: Customise sequence name, container name, position angle, cooldown duration, force-guider-calibration, dither cadence, and per-channel gain before downloading
+- **Three Export Modes**: All channels (single `.json`), single channel, or separate files (`.zip`)
+- **Remaining Frames Only**: Only channels with frames still to capture are included
+- **Filter Wheel Integration**: Custom filter mapping ensures correct NINA filter wheel positions and names
 - **📚 Documentation**: See [NINA Integration Guide](docs/NINA_INTEGRATION.md) for detailed setup instructions
 
 ### 📤 AstroBin Integration
 - **Per-Target CSV Export**: Export acquisition data in AstroBin-compatible CSV format
+- **Per-Session Gain & Cooling**: Gain and sensor temperature logged per session are written per-row in the CSV; a uniform fallback is used when not available
 - **Filter ID Mapping**: Store AstroBin equipment database IDs for accurate data import
-- **Configurable Export Settings**: Binning, gain, sensor cooling, and Bortle scale options
+- **Configurable Export Settings**: Binning, gain, sensor cooling (pre-populated from the last session), and Bortle scale
 - **Smart Filter Mapping**: Automatic mapping from channel names to base filter IDs
 - **📚 Documentation**: See [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) for complete workflow
 
@@ -110,11 +109,11 @@ Detailed documentation is available in the [docs/](docs/) folder:
 |-------|-------------|
 | [Palette & Filter Guide](docs/PALETTE_FILTER_GUIDE.md) | **Start here!** Understand palettes, filters, and target plans |
 | [Equipment Presets Guide](docs/PRESETS_GUIDE.md) | Configure and share filter setups using JSON presets |
-| [NINA Integration Guide](docs/NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. |
-| [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV |
+| [NINA Integration Guide](docs/NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. (V2 Advanced Sequencer) |
+| [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV with per-session gain/cooling |
 | [Database Guide](docs/DATABASE_GUIDE.md) | SQLite/PostgreSQL setup and migration |
 | [Calibration Guide](docs/CALIBRATION_GUIDE.md) | Track darks, flats, dark flats, and bias with end-of-channel reminders |
-| [Features Roadmap](docs/FEATURES_ROADMAP.md) | Completed features, Calibration (§17), Night Conditions (§16), and future plans |
+| [Features Roadmap](docs/FEATURES_ROADMAP.md) | Completed features and future plans |
 
 ## 🚀 Quick Start
 

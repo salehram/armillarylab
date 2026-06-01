@@ -1,5 +1,5 @@
 # ArmillaryLab – Feature Roadmap  
-*Status: Updated to 2026-05-25 | Version 2.4.0 (Comprehensive Object Resolver)*
+*Status: Updated to 2026-06-01 | Version 2.6.0 (NINA V2 Advanced Sequence Export)*
 
 This document tracks the major features of the ArmillaryLab project, what has been completed, and what remains.  
 It is intended to be version-controlled in Git for transparency, planning, and future development.
@@ -9,7 +9,9 @@ It is intended to be version-controlled in Git for transparency, planning, and f
 **🆕 Version 2.1.0 — Night Conditions & intelligent channel suggestion**  
 **🆕 Version 2.2.0 — Calibration frames management & two-point flat workflow**  
 **🆕 Version 2.3.0 — Seeing Guide & 5-Day Forecast tabs**  
-**🆕 Version 2.4.0 — Comprehensive object resolver & bidirectional catalog aliases**
+**🆕 Version 2.4.0 — Comprehensive object resolver & bidirectional catalog aliases**  
+**🆕 Version 2.5.0 — Calibration suggestions simplified to end-of-channel only**  
+**🆕 Version 2.6.0 — NINA V2 Advanced Sequence export with full session setup; session gain/cooling tracking**
 
 ---
 
@@ -943,24 +945,54 @@ v2.5.0 removed the two-point flat-capture workflow nudge and replaced it with si
 - Remove any `default_calibration_two_point` references from `config/presets/base.json` or other settings export paths once the columns are dropped
 
 ### Status
-**🆕 Planned for v2.6.**
+**✅ 19.1 and 19.2 completed in v2.6.0** (columns dropped; `two_point` shim removed).  
+**🆕 19.3 and 19.4 remain planned for a future release.**
+
+---
+
+## ✅ 20. NINA V2 Advanced Sequence Export & Session Gain/Cooling Tracking
+
+### 20.1 V2 export modal and builder
+
+Replaced the old single-click export button with a **modal dialog** (`#ninaExportModal`) and a new JSON builder targeting NINA's Advanced Sequencer format.
+
+#### Completed
+- `nina_template_v2.json`: base template with `CoolCamera` (−10 °C), `StartGuider`, `CenterAndRotate`, `AutofocusAfterSetTime`, `TimeCondition` stop guard, and per-channel `SequentialContainer` blocks
+- `build_nina_sequence_v2()` in `nina_integration.py`: patches sequence name, CoolCamera duration, DSO container name, target coords/PA, TimeCondition, CenterAndRotate, ForceCalibration; replicates channel block per channel with correct filter/gain/loop values
+- `_resequence_subtree()` helper: deep-clones and renumbers `$id`/`$ref` references for multi-channel exports; external parent refs left intact
+- Three export modes: **all channels** (single `.json`), **single channel**, **separate files** (`.zip`)
+- Route `POST /target/<id>/export_nina_v2` accepts sequence name, container name, position angle, cooldown, force-cal, dither-after, export mode, per-channel gains JSON, and `use_exposure_offset` flag
+- Export dialog: sequence info, setup controls (PA, cooldown, dither, force-cal), mode radio + channel picker, JS-populated per-channel gain table with global-gain propagation, window end-time display, experimental ExposureCount-offset checkbox
+
+### 20.2 Session gain and sensor cooling
+
+#### Completed
+- `ImagingSession.gain` (INTEGER, nullable) and `ImagingSession.sensor_cooling` (FLOAT, nullable) added via additive migration (safe for existing databases)
+- **Add Imaging Progress** form and **Edit Session** form expose both fields
+- Session log rows show `G<n>` and `<n>°C` badges when values are present
+- `build_astrobin_export_rows()` and the non-tracked sessions path store per-session gain/cooling; AstroBin CSV writer uses per-session values with form-value fallback
+- AstroBin export modal pre-populates gain/cooling from the most-recent session that has them logged
+
+### Status
+**✅ Fully implemented in v2.6.0.**
 
 ---
 
 # Next Recommended Focus
 **11. Session Recommendation Engine** - AI-driven session optimization  
-Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, enhanced custom filter system, Night Conditions, and calibration frame tracking), the next major enhancement is implementing an intelligent session recommendation engine. Note that weather integration and moon phase awareness are now partially delivered through the Night Conditions popup (feature 16), which provides real-time weather data, seeing conditions, and moon-aware channel suggestions. Calibration tracking (feature 17) covers flat/dark-flat workflow suggestions per channel. The remaining scope for this feature includes:
+Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, enhanced custom filter system, Night Conditions, calibration frame tracking, and NINA V2 export), the next major enhancement is implementing an intelligent session recommendation engine. Note that weather integration and moon phase awareness are now partially delivered through the Night Conditions popup (feature 16), which provides real-time weather data, seeing conditions, and moon-aware channel suggestions. Calibration tracking (feature 17) covers flat/dark-flat workflow suggestions per channel. The remaining scope for this feature includes:
 - Advanced weather forecasting and multi-night planning
 - AI-driven target priority scoring based on multiple factors
 - Automatic session planning and filter switching recommendations
 - Machine learning to adapt to user behavior and local conditions
 
 Alternative focus areas:
-- **14. Filter & Channel Management System** - Hardware configuration for multi-wheel setups (in progress)
-- **13. Comprehensive User Guide & Documentation** - Getting started guides, tutorials, and feature documentation to improve user onboarding
-- **12. Automatic Recomputation** - Dynamic updates when settings change
-- **Additional Export Formats** - More observatory software integrations
-- **Mobile Responsiveness** - Enhanced mobile interface optimizations
+- **19.3 Per-session flat pairing** — richer calibration model with date-keyed flat library
+- **14. Filter & Channel Management System** — hardware configuration for multi-wheel setups
+- **13. Comprehensive User Guide & Documentation** — getting started guides and tutorials
+- **12. Automatic Recomputation** — dynamic updates when settings change
+- **Additional Export Formats** — more observatory software integrations
+- **Mobile Responsiveness** — enhanced mobile interface optimizations
 
 ---
 

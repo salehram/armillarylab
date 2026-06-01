@@ -1,118 +1,78 @@
 # NINA Integration Guide
 
-This guide explains how ArmillaryLab integrates with [N.I.N.A. (Nighttime Imaging 'N' Astronomy)](https://nighttime-imaging.eu/), the popular open-source astrophotography software, to export imaging sequences directly to NINA's Advanced Sequencer.
+This guide explains how ArmillaryLab integrates with [N.I.N.A. (Nighttime Imaging 'N' Astronomy)](https://nighttime-imaging.eu/) to export fully configured Advanced Sequencer sequences.
 
 ---
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [How It Works](#how-it-works)
+2. [What the V2 Export Produces](#what-the-v2-export-produces)
 3. [Setting Up Filter Wheel Configuration](#setting-up-filter-wheel-configuration)
-4. [Exporting Sequences](#exporting-sequences)
-5. [Template Customization](#template-customization)
-6. [Troubleshooting](#troubleshooting)
+4. [Exporting a Sequence](#exporting-a-sequence)
+5. [Export Dialog Reference](#export-dialog-reference)
+6. [Importing into NINA](#importing-into-nina)
+7. [Template Reference](#template-reference)
+8. [Custom Filters and NINA Export](#custom-filters-and-nina-export)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Overview
 
-ArmillaryLab can export your remaining imaging exposures directly to NINA's Advanced Sequencer format. This allows you to:
+ArmillaryLab exports remaining imaging exposures directly to NINA's **Advanced Sequencer** JSON format. The workflow is:
 
-- **Seamless Workflow**: Plan in ArmillaryLab → Export → Import in NINA → Image
-- **Accurate Progress Tracking**: Only export remaining subs, not the full plan
-- **Proper Filter Mapping**: ArmillaryLab filter names map to your actual NINA filter wheel positions
-- **Time Savings**: No manual sequence creation needed
+```
+Plan in ArmillaryLab  →  Export NINA Sequence…  →  Configure dialog  →  Download .json / .zip
+                                                                              ↓
+                                                             Import in NINA Advanced Sequencer
+```
 
-### What Gets Exported?
-
-| Component | Description |
-|-----------|-------------|
-| **Target Name** | Sequence named "ArmillaryLab – [Target Name]" |
-| **Camera Cooling** | Set to -10°C (default, template-configurable) |
-| **Filter Changes** | Proper filter wheel position switching |
-| **Exposures** | Remaining frames at specified exposure times |
-| **Waits** | 3-second delays between filter changes |
+Only channels with remaining frames are included. All `$id`/`$ref` references are correctly renumbered so the sequence is immediately importable.
 
 ---
 
-## How It Works
+## What the V2 Export Produces
 
-### Export Flow
+The exported sequence (`nina_template_v2.json` base) contains a complete session setup:
 
-```
-┌─────────────────────┐
-│   ArmillaryLab      │
-│   Target Plan       │
-│   (channels +       │
-│   progress data)    │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  Calculate          │
-│  Remaining Subs     │
-│  per Channel        │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  Map to Active      │
-│  Filter Wheel       │
-│  (positions + names)│
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  Generate NINA      │
-│  Sequence JSON      │
-│  from Template      │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  Download           │
-│  ArmillaryLab_      │
-│  [Target].json      │
-└─────────────────────┘
-```
+| Section | Content |
+|---------|---------|
+| **Start area** | `CoolCamera` (−10 °C, configurable duration), `StartGuider` |
+| **Target area** | `SetTracking` → `CenterAndRotate` (with RA/Dec + position angle) → `AutofocusAfterSetTime` → one **`SequentialContainer`** per channel |
+| **Per-channel block** | `SwitchFilter`, `TakeExposure` (loop × remaining frames, with your gain), `Dither` trigger after N exposures |
+| **Global triggers** | `TimeCondition` stop guard keyed to tonight's imaging window end time |
+| **End area** | Park telescope, warm camera |
 
-### Remaining Subs Calculation
-
-For each channel in your target plan:
-
-```
-Planned Time = planned_minutes × 60 (seconds)
-Completed Time = sum of all session sub_exposure_seconds × sub_count
-Remaining Time = max(Planned - Completed, 0)
-Remaining Frames = round(Remaining Time / sub_exposure_seconds)
-```
-
-Only channels with `Remaining Frames > 0` are included in the export.
+The sequence name, DSO container name, and all numeric parameters are set before download — no manual editing required in NINA.
 
 ---
 
 ## Setting Up Filter Wheel Configuration
 
-For NINA export to work correctly, your ArmillaryLab filter wheel must match your physical equipment configuration in NINA.
+---
 
-### Step 1: Configure Your Filter Wheel
+## Setting Up Filter Wheel Configuration
 
-1. Navigate to **Settings** → **Filter Wheels**
+For positions and NINA filter names to export correctly your ArmillaryLab filter wheel must mirror your physical NINA configuration.
+
+### Step 1: Configure your filter wheel
+
+1. Go to **Settings → Filter Wheels**
 2. Click **New Filter Wheel**
-3. Enter your wheel specifications:
-   - **Name**: e.g., "ZWO 8-Slot EFW"
-   - **Slot Count**: Number of positions (typically 5, 7, or 8)
-   - **Filter Size**: 1.25", 2", 36mm, etc.
+3. Set:
+   - **Name** — e.g. "ZWO 8-Slot EFW"
+   - **Slot Count** — number of positions (typically 5, 7, or 8)
+   - **Filter Size** — 1.25", 2", 36 mm, etc.
 
-### Step 2: Assign Filters to Slots
+### Step 2: Assign filters to slots
 
-Each slot must have:
-- **Position**: Wheel position (0-based, matching NINA)
-- **Filter**: The ArmillaryLab filter to assign
-- **NINA Name**: The exact filter name as it appears in NINA
+Each slot needs:
+- **Position** — 0-based wheel position matching NINA's numbering
+- **Filter** — the ArmillaryLab filter assigned to that slot
+- **NINA Name** — the exact filter name as it appears in your NINA profile
 
-Example 8-Slot Configuration:
+Example 8-slot configuration:
 
 | Position | ArmillaryLab Filter | NINA Name |
 |----------|---------------------|-----------|
@@ -125,18 +85,14 @@ Example 8-Slot Configuration:
 | 6 | S | SII |
 | 7 | O | OIII |
 
-### Step 3: Activate the Filter Wheel
+### Step 3: Activate the filter wheel
 
-1. Go to **Settings** → **Filter Wheels**
-2. Find your configured wheel
-3. Click **Set as Active**
-4. Confirm the activation
+1. Go to **Settings → Filter Wheels**
+2. Find your wheel and click **Set as Active**
 
-> ⚠️ **Important**: Only one filter wheel can be active at a time. The active wheel is used for all NINA exports.
+> ⚠️ Only one filter wheel can be active at a time. The active wheel is used for all NINA exports.
 
-### NINA Name Mapping
-
-The **NINA Name** field is crucial—it must match exactly what NINA expects:
+### NINA Name mapping reference
 
 | ArmillaryLab Code | Common NINA Names |
 |-------------------|-------------------|
@@ -149,150 +105,138 @@ The **NINA Name** field is crucial—it must match exactly what NINA expects:
 | B | B, Blue |
 | LP | LP, L-Pro, Light Pollution |
 
-Check your NINA profile settings to verify the exact filter names.
+Check **NINA → Equipment → Filter Wheel** for the exact names used in your profile (case-sensitive).
 
 ---
 
-## Exporting Sequences
+## Exporting a Sequence
 
-### From Target Detail Page
+1. Open the target detail page
+2. In the **Plan** section, click **Export NINA Sequence…**
+3. The export dialog opens — fill in the options (see [Export Dialog Reference](#export-dialog-reference))
+4. Click **Export Sequence** to download the file
 
-1. Navigate to your target's detail page
-2. Scroll to the **Export** section
-3. Click **Export to NINA**
-4. The JSON file downloads automatically
+> The button is only shown when a plan with at least one channel having remaining frames exists.
 
-### Export Contents
+---
 
-The exported file contains a complete NINA Advanced Sequencer sequence:
+## Export Dialog Reference
 
-```json
-{
-  "Name": "ArmillaryLab – M31",
-  "Items": {
-    "$values": [
-      // Start: Camera cooling to -10°C
-      // Target: Set tracking, then for each channel:
-      //   - Wait 3s
-      //   - Switch to filter
-      //   - Wait 3s  
-      //   - Take N exposures at X seconds
-      // End: Park telescope
-    ]
-  }
-}
-```
+### Sequence Info
 
-### Importing into NINA
+| Field | Default | Description |
+|-------|---------|-------------|
+| **Sequence Name** | Target name | Top-level name shown in NINA |
+| **DSO Container Name** | `"<target> Capture"` | Name of the `DeepSkyObjectContainer` |
+
+### Sequence Setup
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| **Position Angle (°)** | `0` | Rotation for `CenterAndRotate`. Verify in the NINA Framing Assistant first. |
+| **Cooldown (min)** | `10` | `CoolCamera` duration in minutes |
+| **Dither After N** | `3` | Fire the `Dither` trigger every N exposures |
+| **Force Guider Cal** | off | If checked, forces a new guide-star calibration at sequence start |
+
+### Export Mode
+
+| Mode | Output |
+|------|--------|
+| **All channels** | Single `.json` containing all channels with remaining frames |
+| **Single channel** | Single `.json` for one selected channel |
+| **Separate files (ZIP)** | `.zip` archive with one `.json` per channel |
+
+### Channels & Gain
+
+The table is auto-populated from your plan. Each row shows:
+
+- **Channel** — display name (e.g. "Ha")
+- **Filter** — NINA filter name
+- **Remaining** — frames still to capture
+- **Exp (s)** — sub-exposure seconds
+- **Gain** — per-channel gain (editable)
+
+Use **Global Gain** + **Apply** to set the same value across all channels, then override individual rows as needed.
+
+### Stop Time
+
+Displays tonight's imaging window end time. The `TimeCondition` in the exported sequence is pre-set to this time so NINA stops gracefully when the window closes.
+
+### Experimental: ExposureCount offset
+
+When checked, `TakeExposure.ExposureCount` is set to the number of already-captured frames for each channel. This tests whether NINA uses `ExposureCount` as a completed-frames offset. Leave unchecked unless experimenting.
+
+---
+
+## Importing into NINA
 
 1. Open NINA
-2. Go to **Sequencer** (Advanced Sequencer)
-3. Click **Load Sequence** or **Import**
-4. Select the downloaded JSON file
-5. Review the sequence
-6. Modify camera temperature, target coordinates as needed
-7. Run the sequence
+2. Go to **Sequencer → Advanced Sequencer**
+3. Click **Load Sequence** (folder icon)
+4. Select the downloaded `.json` file
+5. Review — target coordinates, position angle, filter slots, and gain are pre-filled
+6. Connect your equipment and run
+
+> If you exported a ZIP, extract it first and import each channel's file separately.
 
 ---
 
-## Template Customization
+## Template Reference
 
-ArmillaryLab uses a template file (`nina_template.json`) to generate exports. You can customize this template for your specific setup.
-
-### Template Location
+The V2 export is based on `nina_template_v2.json` in the project root.
 
 ```
 armillarylab/
-├── nina_template.json    ← Main template file
-├── nina_integration.py   ← Export logic
-└── ...
+├── nina_template_v2.json   ← V2 template (Advanced Sequencer, full session)
+├── nina_template.json      ← Legacy V1 template (kept for reference)
+└── nina_integration.py     ← Export builder
 ```
 
-### Template Structure
+### Key template structure
 
-The template defines the sequence structure with placeholder values:
-
-```json
-{
-  "Name": "Template",
-  "Items": {
-    "$values": [
-      // StartAreaContainer - Camera cooling, etc.
-      {
-        "Items": {
-          "$values": [
-            {
-              "$type": "NINA.Sequencer.SequenceItem.Camera.CoolCamera...",
-              "Temperature": -10.0  // ← Modified during export
-            }
-          ]
-        }
-      },
-      // TargetAreaContainer - Tracking, filters, exposures
-      {
-        "Items": {
-          "$values": [
-            // SetTracking
-            // Wait 3s
-            // SwitchFilter (cloned per channel)
-            // Wait 3s
-            // TakeManyExposures (cloned per channel)
-          ]
-        }
-      },
-      // EndAreaContainer - Park telescope, warm camera
-      { ... }
-    ]
-  }
-}
+```
+Root sequence
+├── StartAreaContainer
+│   ├── CoolCamera            ← Temperature: -10 °C  Duration: patched from dialog
+│   └── StartGuider
+├── TargetAreaContainer
+│   ├── INIT block (SetTracking, WaitForAltitude …)
+│   └── DeepSkyObjectContainer  ← Name + Target (RA/Dec/PA) patched
+│       ├── CenterAndRotate     ← Coords + PA patched
+│       ├── AutofocusAfterSetTime
+│       ├── TimeCondition       ← Stop time patched from window end
+│       └── [SequentialContainer × N channels]   ← Replicated + renumbered
+│           ├── SwitchFilter    ← Name + position patched
+│           ├── TakeExposure    ← ExposureTime + Gain + LoopCondition patched
+│           └── Trigger: Dither ← AfterExposures patched
+└── EndAreaContainer
+    └── Park, WarmCamera …
 ```
 
-### Creating a Custom Template
+### Camera cooling temperature
 
-1. **Export from NINA**: Create your ideal sequence in NINA, then save it
-2. **Copy to ArmillaryLab**: Replace `nina_template.json` with your exported file
-3. **Preserve Structure**: Ensure these elements exist:
-   - StartAreaContainer (first item)
-   - TargetAreaContainer (second item) with:
-     - SetTracking at position 0
-     - Wait template at position 1
-     - SwitchFilter template at position 2
-     - Wait template at position 3
-     - TakeManyExposures template at position 4
-   - EndAreaContainer (third item)
-
-### Customizable Elements
-
-| Element | How to Customize |
-|---------|------------------|
-| Camera cooling temp | Edit `Temperature` in CoolCamera item |
-| Wait duration | Edit `Time` in Wait items |
-| End sequence actions | Modify EndAreaContainer items |
-| Dithering | Add dither instructions to template |
+The template hardcodes −10 °C as the `CoolCamera` target temperature. Adjust in NINA at runtime if your conditions require a different setpoint.
 
 ---
 
 ## Custom Filters and NINA Export
 
-When you create custom filters in ArmillaryLab (like separate HDR channels), you can map them to standard NINA filters.
+When you create custom filters (e.g. separate channels for different exposure lengths), map them to the same physical NINA filter.
 
-### Example: HDR Channels
+### Example: dual-exposure Ha channels
 
-If you have:
-- `H_1` - H-Alpha standard (120s)
-- `H_2` - H-Alpha long (300s)
-- `H_3` - H-Alpha extra-long (600s)
+| ArmillaryLab channel | NINA Filter | Notes |
+|----------------------|-------------|-------|
+| `H_short` | Ha | 120 s sub-exposures |
+| `H_long` | Ha | 300 s sub-exposures |
 
-All three should map to the same NINA filter (`Ha`) since they use the same physical filter.
+Both generate a `SwitchFilter → Ha` step with different `TakeExposure` durations.
 
-### Setting the Mapping
+### Setting the mapping
 
-When creating or editing a filter:
-1. Go to **Settings** → **Filters**
+1. Go to **Settings → Filters**
 2. Edit the custom filter
-3. Set the **NINA Filter** field to the standard filter name
-
-This ensures the export uses the correct filter wheel position.
+3. Set the **NINA Filter** field to the exact physical filter name
 
 ---
 
@@ -300,82 +244,37 @@ This ensures the export uses the correct filter wheel position.
 
 ### "No remaining subs to export"
 
-**Cause**: All planned exposures are complete, or no plan exists.
+All planned exposures are complete, or no plan exists.
+- Check your plan has planned minutes > 0 for at least one channel
+- Confirm progress hasn't already reached 100 %
 
-**Solution**: 
-- Check your target plan has planned minutes > 0
-- Verify progress hasn't already reached 100%
-- Ensure a plan exists for the target's preferred palette
+### Export dialog channel table is empty
 
-### "Unknown channel 'X' - skipping in NINA export"
-
-**Cause**: A filter in your plan isn't configured in the active filter wheel.
-
-**Solution**:
-1. Go to **Settings** → **Filter Wheels**
-2. Edit the active wheel
-3. Add the missing filter to a slot
-4. Set the correct NINA name
+The plan has no channels with remaining frames, or no plan exists.
+- Verify the preferred palette and plan are saved
+- Add more planned time to channels still in progress
 
 ### Filter positions wrong in NINA
 
-**Cause**: Filter wheel position numbers don't match NINA configuration.
+NINA uses 0-based indexing (first slot = position 0).
+- Verify ArmillaryLab slot positions match NINA's Equipment → Filter Wheel panel exactly
 
-**Solution**:
-- Verify positions are 0-based (first slot = position 0)
-- Check NINA's filter wheel settings match ArmillaryLab positions
-- Use the same position numbering scheme in both applications
+### Wrong filter names in sequence
 
-### Export file won't import in NINA
+The NINA Name in the wheel slot doesn't match your NINA profile.
+- Open NINA → Equipment → Filter Wheel and note exact names (case-sensitive)
+- Edit the active wheel's slot NINA Names to match
 
-**Cause**: Template structure mismatch or NINA version incompatibility.
+### Sequence won't import in NINA
 
-**Solution**:
-1. Export a fresh template from your current NINA version
-2. Replace `nina_template.json` with the new template
-3. Restart ArmillaryLab
-4. Try exporting again
-
-### Wrong filter names in exported sequence
-
-**Cause**: NINA Name in filter wheel slot doesn't match NINA profile.
-
-**Solution**:
-1. Open NINA → Equipment → Filter Wheel
-2. Note the exact filter names shown
-3. In ArmillaryLab, edit filter wheel slots
-4. Set NINA Name to match exactly (case-sensitive)
-
----
-
-## Best Practices
-
-### Keep Configurations Synchronized
-
-- When you change filters in NINA, update ArmillaryLab
-- When adding new filters, configure both systems
-
-### Use Descriptive NINA Names
-
-- Consistent naming prevents confusion
-- Document your naming convention
-
-### Test Before Imaging Nights
-
-- Export a test sequence
-- Import into NINA and verify structure
-- Run a short test to confirm filter switching
-
-### Backup Your Template
-
-```powershell
-copy nina_template.json nina_template_backup.json
-```
+The V2 template was built and tested against NINA 3.x.
+- Try re-exporting; if the problem persists open an issue and attach the exported `.json`
 
 ---
 
 ## Related Documentation
 
-- [Equipment Presets Guide](PRESETS_GUIDE.md) - Filter and wheel configuration
-- [AstroBin Export Guide](ASTROBIN_EXPORT.md) - CSV export for AstroBin uploads
-- [Database Guide](DATABASE_GUIDE.md) - Database setup and migration
+- [Equipment Presets Guide](PRESETS_GUIDE.md) — Filter and wheel configuration
+- [AstroBin Export Guide](ASTROBIN_EXPORT.md) — CSV export for AstroBin uploads
+- [Database Guide](DATABASE_GUIDE.md) — Database setup and migration
+- [Calibration Guide](CALIBRATION_GUIDE.md) — Tracking darks, flats, and bias

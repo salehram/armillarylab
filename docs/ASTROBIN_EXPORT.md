@@ -145,8 +145,8 @@ If using common equipment:
    | Setting | Default | Description |
    |---------|---------|-------------|
    | Binning | 1 | Your sensor binning level |
-   | Gain | 100 | Camera gain setting used |
-   | Sensor Cooling | -10 | Sensor temperature in °C |
+   | Gain | from last session (or 100) | Camera gain — pre-populated from the most-recent session with a recorded gain |
+   | Sensor Cooling | from last session (or −10) | Sensor temperature °C — pre-populated from the most-recent session with a recorded temperature |
    | Bortle | (empty) | Sky quality (1-9, optional) |
    | Darks | (empty) | Dark frame count (optional) |
    | Flats | (empty) | Flat frame count (optional) |
@@ -156,6 +156,16 @@ If using common equipment:
    When **calibration tracking** is enabled on the target, these fields are **prefilled** from logged capture totals (flats and dark flats summed across channels). You can still override before download.
 
 5. Click **Download CSV**
+
+### Gain and Sensor Cooling — Per-Session vs. Uniform
+
+As of v2.6.0, gain and sensor cooling temperature can be logged **per imaging session** (optional fields in the Add Progress form and Edit Session page). When available:
+
+- Each CSV row uses the value from the session(s) that make up that row
+- If multiple sessions contribute to the same (date, filter, duration) key, the first non-null value for that key is used
+- If no session has a value logged, the modal's uniform **Gain** / **Cooling** form inputs are used as a fallback
+
+The modal's **Gain** and **Cooling** fields are pre-populated from the most-recent session that has those values recorded (with a "from last session" hint). You can always override before downloading.
 
 ### Calibration Data from Tracking (v2.2.0)
 

@@ -35,7 +35,7 @@
             {
               "$id": "7",
               "$type": "NINA.Sequencer.SequenceItem.Camera.CoolCamera, NINA.Sequencer",
-              "Temperature": 10.0,
+              "Temperature": -10.0,
               "Duration": 10.0,
               "Parent": {
                 "$ref": "4"

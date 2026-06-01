@@ -97,6 +97,22 @@
                             placeholder="Optional notes about this session">{{ session.notes or '' }}</textarea>
                 </div>
 
+                <!-- Gain and sensor cooling -->
+                <div class="row mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label">Gain <span class="text-muted small">(optional)</span></label>
+                    <input class="form-control" type="number" name="gain" min="0" max="65535"
+                           placeholder="e.g. 100"
+                           value="{{ session.gain if session.gain is not none else '' }}">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Camera Temp °C <span class="text-muted small">(actual achieved)</span></label>
+                    <input class="form-control" type="number" name="sensor_cooling" step="0.5"
+                           min="-274" max="60" placeholder="e.g. -10"
+                           value="{{ session.sensor_cooling if session.sensor_cooling is not none else '' }}">
+                  </div>
+                </div>
+
                 <!-- Action buttons -->
                 <div class="d-flex justify-content-between">
                   <a href="{{ url_for('target_detail', target_id=target.id) }}" 

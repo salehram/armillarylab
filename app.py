@@ -22,7 +22,12 @@ from astro_utils import (
     build_default_plan_json,
 )
 
-from nina_integration import load_nina_template, build_nina_sequence_from_blocks
+from nina_integration import (
+    load_nina_template,
+    build_nina_sequence_from_blocks,
+    build_nina_sequences_v2,
+    ra_dec_to_nina_coords,
+)
 from time_utils import register_time_filters, format_hms, parse_hms, hms_to_minutes
 from calibration_utils import (
     get_calibration_payload,
@@ -185,6 +190,18 @@ def apply_additive_schema_migrations(log=print):
         "calibration_captures",
         "sub_exposure_seconds",
         f"ALTER TABLE calibration_captures ADD COLUMN sub_exposure_seconds {float_type}",
+    )
+
+    # ImagingSession: per-session gain and actual camera temperature (v2.6.0)
+    add_column_if_missing(
+        "imaging_sessions",
+        "gain",
+        "ALTER TABLE imaging_sessions ADD COLUMN gain INTEGER",
+    )
+    add_column_if_missing(
+        "imaging_sessions",
+        "sensor_cooling",
+        f"ALTER TABLE imaging_sessions ADD COLUMN sensor_cooling {float_type}",
     )
 
     db.create_all()
@@ -777,6 +794,10 @@ class ImagingSession(db.Model):
     sub_count = db.Column(db.Integer, nullable=False)
 
     notes = db.Column(db.Text)
+
+    # Per-session capture settings — stored when logging, used in AstroBin export
+    gain = db.Column(db.Integer, nullable=True)
+    sensor_cooling = db.Column(db.Float, nullable=True)  # actual achieved °C
 
     target = relationship("Target", back_populates="sessions")
 
@@ -1388,6 +1409,19 @@ def target_detail(target_id):
             target.sessions, target.calibration_captures
         )
 
+    # Most-recent session values for pre-populating export modals
+    latest_session_gain = None
+    latest_session_cooling = None
+    if target.sessions:
+        sorted_sessions = sorted(target.sessions, key=lambda s: s.date, reverse=True)
+        for s in sorted_sessions:
+            if latest_session_gain is None and s.gain is not None:
+                latest_session_gain = s.gain
+            if latest_session_cooling is None and s.sensor_cooling is not None:
+                latest_session_cooling = s.sensor_cooling
+            if latest_session_gain is not None and latest_session_cooling is not None:
+                break
+
     return render_template(
         "target_detail.html",
         target=target,
@@ -1410,88 +1444,173 @@ def target_detail(target_id):
         calibration_export_totals=calibration_export_totals,
         astrobin_export_preview=astrobin_export_preview,
         imaging_log_days=imaging_log_days,
+        latest_session_gain=latest_session_gain,
+        latest_session_cooling=latest_session_cooling,
     )
 
-@app.post("/target/<int:target_id>/export_nina")
-def export_nina_sequence(target_id):
+@app.post("/target/<int:target_id>/export_nina_v2")
+def export_nina_v2(target_id):
+    """Export a NINA Advanced Sequence using the V2 template with full session setup."""
+    import zipfile
     target = Target.query.get_or_404(target_id)
 
-    # --- REUSE SAME PLAN LOGIC AS target_detail ---
+    # ── Plan ─────────────────────────────────────────────────────────────────
     plan = (
         TargetPlan.query
         .filter_by(target_id=target.id, palette_name=target.preferred_palette)
         .order_by(TargetPlan.created_at.desc())
         .first()
     )
-
     if not plan:
         flash("No plan defined for this target.", "warning")
         return redirect(url_for("target_detail", target_id=target.id))
 
-    plan_data = json.loads(plan.plan_json) if plan else None
+    plan_data = json.loads(plan.plan_json)
     if not plan_data or "channels" not in plan_data:
         flash("Plan JSON is missing channels.", "warning")
         return redirect(url_for("target_detail", target_id=target.id))
 
-    # --- REUSE SAME PROGRESS LOGIC AS target_detail ---
+    # ── Form parameters ───────────────────────────────────────────────────────
+    sequence_name   = request.form.get("sequence_name", target.name).strip() or target.name
+    container_name  = request.form.get("container_name", f"{target.name} Capture").strip()
+    position_angle  = float(request.form.get("position_angle", 0) or 0)
+    cool_duration   = float(request.form.get("cool_duration", 10) or 10)
+    force_cal       = request.form.get("force_calibration") == "1"
+    dither_after    = int(request.form.get("dither_after", 3) or 3)
+    export_mode     = request.form.get("export_mode", "all")  # all / single / zip
+    channel_filter  = request.form.get("channel_filter", "").strip()  # for single mode
+    global_gain     = int(request.form.get("global_gain", 100) or 100)
+    use_exp_offset  = request.form.get("use_exposure_offset") == "1"
+
+    # Per-channel gain overrides: JSON object {"H": 120, "O": 100, ...}
+    try:
+        per_channel_gains = json.loads(request.form.get("per_channel_gains", "{}") or "{}")
+    except (ValueError, TypeError):
+        per_channel_gains = {}
+
+    # ── Progress tracking ─────────────────────────────────────────────────────
     from collections import defaultdict
-    progress_minutes = defaultdict(float)
     progress_seconds = defaultdict(float)
+    captured_frames  = defaultdict(int)
 
     for s in target.sessions:
-        total_seconds = s.sub_exposure_seconds * s.sub_count
-        progress_seconds[s.channel] += total_seconds
-        progress_minutes[s.channel] += total_seconds / 60.0
+        total_sec = s.sub_exposure_seconds * s.sub_count
+        progress_seconds[s.channel] += total_sec
+        sub_exp_s = s.sub_exposure_seconds or 1
+        captured_frames[s.channel] += s.sub_count
 
-    # --- BUILD BLOCKS FROM REMAINING SUBS ---
-    blocks = []
+    # ── Filter wheel config ───────────────────────────────────────────────────
+    from nina_integration import get_filter_config
+    filter_cfg = get_filter_config()
 
+    # ── Build channel list ────────────────────────────────────────────────────
+    channels = []
     for ch in plan_data["channels"]:
-        # ch is a dict: {"name": "H", "label": "...", "planned_minutes": 180, "sub_exposure_seconds": 300, ...}
-        ch_name = ch.get("name")
-        if not ch_name:
+        ch_code = ch.get("name")
+        if not ch_code:
             continue
 
-        # For NINA export, use nina_filter if available (for custom filters), otherwise use the channel name
-        nina_channel = ch.get("nina_filter", ch_name)
-
-        planned_minutes = ch.get("planned_minutes", 0) or 0
-        sub_exp = ch.get("sub_exposure_seconds", 300) or 300
-
-        done_sec = progress_seconds[ch_name]  # Still use original channel name for progress tracking
-        planned_sec = planned_minutes * 60
-        remaining_sec = max(planned_sec - done_sec, 0)
-
-        if remaining_sec <= 0:
+        # Skip if single-channel mode and this isn't the selected channel
+        if export_mode == "single" and channel_filter and ch_code != channel_filter:
             continue
 
-        frames = int(round(remaining_sec / sub_exp))
-        if frames <= 0:
+        nina_channel = ch.get("nina_filter", ch_code)
+        sub_exp = float(ch.get("sub_exposure_seconds", 300) or 300)
+        planned_sec = float(ch.get("planned_minutes", 0) or 0) * 60.0
+        done_sec = progress_seconds[ch_code]
+        remaining_sec = max(planned_sec - done_sec, 0.0)
+        remaining = int(round(remaining_sec / sub_exp)) if sub_exp > 0 else 0
+        if remaining <= 0:
             continue
 
-        blocks.append({
-            "channel": nina_channel,      # Use mapped filter for NINA (e.g., "O" instead of "O_HDR_1")
-            "exposure_s": sub_exp,        # e.g. 300
-            "frames": frames,             # remaining frames
+        # Resolve filter wheel info
+        cfg = filter_cfg.get(nina_channel) or filter_cfg.get(ch_code)
+        if cfg:
+            nina_name = cfg["nina_name"]
+            position  = cfg["position"]
+        else:
+            nina_name = nina_channel
+            position  = 0
+
+        gain = per_channel_gains.get(ch_code, global_gain)
+
+        channels.append({
+            "name":       ch.get("label", ch_code),
+            "nina_name":  nina_name,
+            "position":   position,
+            "exposure_s": sub_exp,
+            "remaining":  remaining,
+            "captured":   captured_frames[ch_code],
+            "gain":       gain,
         })
 
-    if not blocks:
+    if not channels:
         flash("No remaining subs to export for this target.", "info")
         return redirect(url_for("target_detail", target_id=target.id))
 
-    # --- LOAD TEMPLATE & BUILD NINA SEQUENCE JSON ---
-    template = load_nina_template("nina_template.json")
-    seq_json = build_nina_sequence_from_blocks(
-        template=template,
-        target_name=target.name,
-        camera_cool_temp=-10.0,
-        blocks=blocks,
-    )
+    # ── Window end time ───────────────────────────────────────────────────────
+    window_end_local = None
+    try:
+        lat, lon, elev = get_observer_location()
+        packup_time = parse_time_str(get_effective_packup_time(target))
+        effective_min_alt = get_effective_min_altitude(target)
+        w = compute_target_window(
+            ra_hours=target.ra_hours,
+            dec_deg=target.dec_deg,
+            latitude_deg=lat,
+            longitude_deg=lon,
+            elevation_m=elev,
+            packup_time_local=packup_time,
+            min_altitude_deg=effective_min_alt,
+        )
+        if w.get("deps_available") and w.get("end_time_local") and w["end_time_local"] != "N/A":
+            import datetime as _dt
+            window_end_local = _dt.datetime.strptime(w["end_time_local"], "%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        app.logger.warning(f"Could not compute window end time for NINA export: {e}")
 
-    # --- RETURN AS DOWNLOAD ---
-    filename = f"ArmillaryLab_{target.name.replace(' ', '_')}.json"
-    buf = io.BytesIO(json.dumps(seq_json, indent=2).encode("utf-8"))
+    # ── Build sequence(s) ─────────────────────────────────────────────────────
+    try:
+        result = build_nina_sequences_v2(
+            target_name=target.name,
+            ra_hours=target.ra_hours,
+            dec_deg=target.dec_deg,
+            position_angle=position_angle,
+            channels=channels,
+            cool_duration_min=cool_duration,
+            force_calibration=force_cal,
+            dither_after=dither_after,
+            window_end_local=window_end_local,
+            container_name=container_name,
+            sequence_name=sequence_name,
+            use_exposure_offset=use_exp_offset,
+            export_mode=export_mode,
+        )
+    except Exception as e:
+        app.logger.exception("NINA V2 sequence build failed")
+        flash(f"Failed to build NINA sequence: {e}", "danger")
+        return redirect(url_for("target_detail", target_id=target.id))
 
+    safe_name = target.name.replace(" ", "_")
+
+    # ── ZIP mode ──────────────────────────────────────────────────────────────
+    if export_mode == "zip":
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for filename, seq_dict in result:
+                zf.writestr(filename, json.dumps(seq_dict, indent=2))
+        zip_buf.seek(0)
+        return send_file(
+            zip_buf,
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name=f"ArmillaryLab_{safe_name}_NINA.zip",
+        )
+
+    # ── Single JSON ───────────────────────────────────────────────────────────
+    ch_suffix = f"_{channel_filter}" if export_mode == "single" and channel_filter else ""
+    filename = f"ArmillaryLab_{safe_name}{ch_suffix}.json"
+    buf = io.BytesIO(json.dumps(result, indent=2).encode("utf-8"))
     return send_file(
         buf,
         mimetype="application/json",
@@ -1579,12 +1698,16 @@ def export_astrobin_csv(target_id):
         include_flat_darks = bool(cal_cols["flat_darks"])
         include_bias = bool(cal_cols["bias"])
         from collections import defaultdict
-        sessions_grouped = defaultdict(lambda: {"number": 0, "duration": None})
+        sessions_grouped = defaultdict(lambda: {"number": 0, "duration": None, "gain": None, "sensor_cooling": None})
         for session in target.sessions:
             base_filter = filter_name_map.get(session.channel, session.channel)
             key = (session.date.strftime("%Y-%m-%d"), base_filter, session.sub_exposure_seconds)
             sessions_grouped[key]["number"] += session.sub_count
             sessions_grouped[key]["duration"] = session.sub_exposure_seconds
+            if sessions_grouped[key]["gain"] is None and session.gain is not None:
+                sessions_grouped[key]["gain"] = session.gain
+            if sessions_grouped[key]["sensor_cooling"] is None and session.sensor_cooling is not None:
+                sessions_grouped[key]["sensor_cooling"] = session.sensor_cooling
         export_rows = []
         for (date, filter_name, duration), data in sorted(sessions_grouped.items()):
             export_rows.append({
@@ -1596,6 +1719,8 @@ def export_astrobin_csv(target_id):
                 "flats": int(uniform_cal["flats"]) if uniform_cal["flats"] else 0,
                 "flat_darks": int(uniform_cal["flat_darks"]) if uniform_cal["flat_darks"] else 0,
                 "bias": int(uniform_cal["bias"]) if uniform_cal["bias"] else 0,
+                "gain": data["gain"],
+                "sensor_cooling": data["sensor_cooling"],
             })
     
     # Build CSV in memory
@@ -1632,8 +1757,8 @@ def export_astrobin_csv(target_id):
             row_data["number"],
             row_data["duration"],
             binning,
-            gain,
-            sensor_cooling,
+            row_data["gain"] if row_data.get("gain") is not None else gain,
+            row_data["sensor_cooling"] if row_data.get("sensor_cooling") is not None else sensor_cooling,
         ]
         if include_darks:
             row.append(row_data["darks"] or "")
@@ -2043,7 +2168,13 @@ def add_progress(target_id):
     sub_exposure_seconds = float(request.form.get("sub_exposure_seconds"))
     sub_count = int(request.form.get("sub_count"))
     notes = request.form.get("notes")
-    
+
+    # Optional per-session camera settings
+    gain_raw = request.form.get("gain", "").strip()
+    cooling_raw = request.form.get("sensor_cooling", "").strip()
+    gain = int(gain_raw) if gain_raw else None
+    sensor_cooling = float(cooling_raw) if cooling_raw else None
+
     # Parse the imaging date
     imaging_date_str = request.form.get("imaging_date")
     if imaging_date_str:
@@ -2059,6 +2190,8 @@ def add_progress(target_id):
         sub_count=sub_count,
         notes=notes,
         date=imaging_date,
+        gain=gain,
+        sensor_cooling=sensor_cooling,
     )
     db.session.add(session)
     db.session.commit()
@@ -2106,7 +2239,13 @@ def edit_session(session_id):
         session.sub_exposure_seconds = float(request.form.get("sub_exposure_seconds"))
         session.sub_count = int(request.form.get("sub_count"))
         session.notes = request.form.get("notes")
-        
+
+        # Optional per-session camera settings
+        gain_raw = request.form.get("gain", "").strip()
+        cooling_raw = request.form.get("sensor_cooling", "").strip()
+        session.gain = int(gain_raw) if gain_raw else None
+        session.sensor_cooling = float(cooling_raw) if cooling_raw else None
+
         # Parse the imaging date
         imaging_date_str = request.form.get("imaging_date")
         if imaging_date_str:

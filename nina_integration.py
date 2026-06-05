@@ -453,7 +453,16 @@ def build_nina_sequence_v2(
         # Dither trigger
         block["Triggers"]["$values"][0]["AfterExposures"] = int(dither_after)
 
-        new_channel_blocks.append(block)
+        # Move SwitchFilter and Wait outside the channel container so they run
+        # once before the looping block (not on every loop iteration).
+        switch_item = items[0]
+        wait_item = items[1]
+        switch_item["Parent"] = {"$ref": dso_id}
+        wait_item["Parent"] = {"$ref": dso_id}
+        block["Items"]["$values"] = [items[2]]
+
+        # Place switch → wait → channel container in the DSO items list
+        new_channel_blocks.extend([switch_item, wait_item, block])
 
     if not new_channel_blocks:
         raise ValueError("No channels with remaining frames to export.")

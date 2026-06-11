@@ -1,0 +1,13 @@
+fix: v2.7.1 - mosaic dashboard improvements and bugfixes
+
+- Fix mosaic quick-log channel dropdown not populating (data-channels
+  HTML attribute encoding broke JSON.parse; replaced with server-side
+  PANEL_CHANNELS JS object map)
+- Fix mosaic quick-log form submission and channel name field routing
+- Fix text contrast in Channel Progress and Panels tables (text-muted
+  invisible on table-dark; use explicit rgba / text-light throughout)
+- Add HMS display alongside minutes in Channel Progress totals
+- Fix archived panel row text visibility on table-success rows
+- Add RA/Dec HMS and DMS input support with live preview conversion
+- Add mosaic quick-log card to log sessions to panels from overview
+- Bump version to 2.7.1

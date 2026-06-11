@@ -49,20 +49,24 @@
 
       <!-- RA -->
       <div class="mb-3">
-        <label class="form-label">RA (decimal hours)</label>
+        <label class="form-label">RA</label>
         <input class="form-control" id="ra_hours" name="ra_hours"
-               type="number" step="0.0001"
-               value="{{ (target and target.ra_hours) or '' }}" required>
-        <div class="form-text">Example: 20.733 for 20h 44m.</div>
+               type="text" inputmode="decimal"
+               value="{{ (target and target.ra_hours) or '' }}" required
+               placeholder="e.g. 20.7333  or  20h 44m 00s  or  20:44:00">
+        <div class="form-text">Accepts decimal hours <em>or</em> HMS (20h 44m 00s, 20:44:00).</div>
+        <div id="ra_preview" class="form-text text-info mt-1" style="min-height:1.2em"></div>
       </div>
 
       <!-- DEC -->
       <div class="mb-3">
-        <label class="form-label">Dec (decimal degrees)</label>
+        <label class="form-label">Dec</label>
         <input class="form-control" id="dec_deg" name="dec_deg"
-               type="number" step="0.0001"
-               value="{{ (target and target.dec_deg) or '' }}" required>
-        <div class="form-text">Example: +41.2687 for +41° 16' 7".</div>
+               type="text" inputmode="decimal"
+               value="{{ (target and target.dec_deg) or '' }}" required
+               placeholder="e.g. +41.2687  or  +41° 16' 07&quot;  or  +41:16:07">
+        <div class="form-text">Accepts decimal degrees <em>or</em> DMS (+41° 16' 07", +41:16:07).</div>
+        <div id="dec_preview" class="form-text text-info mt-1" style="min-height:1.2em"></div>
       </div>
 
       <!-- TARGET TYPE -->
@@ -359,6 +363,153 @@ document.addEventListener("DOMContentLoaded", function () {
       panelNumberGroup.style.display = this.value ? "" : "none";
     });
   }
+
+  // ── Coordinate format helpers ────────────────────────────────────────────
+
+  /** Parse RA: decimal hours OR HMS (20h 44m 00s / 20:44:00 / 20 44 00). */
+  function parseRA(raw) {
+    const val = raw.trim();
+    if (!val) return null;
+    // Plain decimal
+    if (/^[+]?\d+(\.\d+)?$/.test(val)) {
+      const h = parseFloat(val);
+      return (h >= 0 && h < 24) ? h : null;
+    }
+    // HMS with letters: 20h 44m 00.0s  (seconds optional)
+    let m = val.match(/^(\d{1,2})\s*h\s*(\d{1,2})\s*m(?:\s*(\d+(?:\.\d+)?)\s*s?)?/i);
+    if (m) {
+      const H = parseInt(m[1]), M = parseInt(m[2]), S = m[3] ? parseFloat(m[3]) : 0;
+      if (M < 60 && S < 60) return H + M / 60 + S / 3600;
+    }
+    // Colon-separated: 20:44:00.0 or 20:44  (2 or 3 fields)
+    m = val.match(/^(\d{1,2}):(\d{2})(?::(\d{2}(?:\.\d+)?))?$/);
+    if (m) {
+      const H = parseInt(m[1]), M = parseInt(m[2]), S = m[3] ? parseFloat(m[3]) : 0;
+      if (M < 60 && S < 60) return H + M / 60 + S / 3600;
+    }
+    return null;
+  }
+
+  /** Parse Dec: decimal degrees OR DMS (+41° 16' 07" / +41:16:07 / +41d 16m 07s). */
+  function parseDec(raw) {
+    const val = raw.trim();
+    if (!val) return null;
+    // Plain decimal (allow leading + or -)
+    if (/^[+-]?\d+(\.\d+)?$/.test(val)) {
+      const d = parseFloat(val);
+      return (d >= -90 && d <= 90) ? d : null;
+    }
+    // DMS with degree/arcmin/arcsec symbols: +41° 16' 07.2"
+    let m = val.match(/^([+-]?)(\d{1,3})\s*[d°]\s*(\d{1,2})\s*[m']\s*(\d+(?:\.\d+)?)\s*["s]?/i);
+    if (m) {
+      const sign = m[1] === '-' ? -1 : 1;
+      const D = parseInt(m[2]), M = parseInt(m[3]), S = parseFloat(m[4]);
+      if (M < 60 && S < 60) {
+        const result = sign * (D + M / 60 + S / 3600);
+        return (result >= -90 && result <= 90) ? result : null;
+      }
+    }
+    // Colon-separated: +41:16:07.2 or -41:16  (2 or 3 fields)
+    m = val.match(/^([+-]?)(\d{1,3}):(\d{2})(?::(\d{2}(?:\.\d+)?))?$/);
+    if (m) {
+      const sign = m[1] === '-' ? -1 : 1;
+      const D = parseInt(m[2]), M = parseInt(m[3]), S = m[4] ? parseFloat(m[4]) : 0;
+      if (M < 60 && S < 60) {
+        const result = sign * (D + M / 60 + S / 3600);
+        return (result >= -90 && result <= 90) ? result : null;
+      }
+    }
+    return null;
+  }
+
+  function toHMS(h) {
+    const H = Math.floor(h);
+    const rm = (h - H) * 60;
+    const M = Math.floor(rm);
+    const S = ((rm - M) * 60).toFixed(2).padStart(5, '0');
+    return `${String(H).padStart(2,'0')}h ${String(M).padStart(2,'0')}m ${S}s`;
+  }
+
+  function toDMS(deg) {
+    const sign = deg < 0 ? '−' : '+';
+    const abs = Math.abs(deg);
+    const D = Math.floor(abs);
+    const rm = (abs - D) * 60;
+    const M = Math.floor(rm);
+    const S = ((rm - M) * 60).toFixed(1).padStart(4, '0');
+    return `${sign}${String(D).padStart(2,'0')}° ${String(M).padStart(2,'0')}' ${S}"`;
+  }
+
+  function isDecimalOnly(val) {
+    return /^[+-]?\d+(\.\d+)?$/.test(val.trim());
+  }
+
+  const raPreview  = document.getElementById("ra_preview");
+  const decPreview = document.getElementById("dec_preview");
+
+  function updateRAPreview() {
+    const raw = raInput.value;
+    if (!raw.trim()) { raPreview.textContent = ''; raInput.setCustomValidity(''); return; }
+    const dec = parseRA(raw);
+    if (dec === null) {
+      raPreview.textContent = '⚠ Unrecognised format';
+      raPreview.className = 'form-text text-warning mt-1';
+      raInput.setCustomValidity('Enter RA as decimal hours or HMS (e.g. 20h 44m 00s)');
+    } else {
+      raInput.setCustomValidity('');
+      if (isDecimalOnly(raw)) {
+        raPreview.textContent = `HMS: ${toHMS(dec)}`;
+      } else {
+        raPreview.textContent = `= ${dec.toFixed(4)} decimal hours`;
+      }
+      raPreview.className = 'form-text text-info mt-1';
+    }
+  }
+
+  function updateDecPreview() {
+    const raw = decInput.value;
+    if (!raw.trim()) { decPreview.textContent = ''; decInput.setCustomValidity(''); return; }
+    const dec = parseDec(raw);
+    if (dec === null) {
+      decPreview.textContent = '⚠ Unrecognised format';
+      decPreview.className = 'form-text text-warning mt-1';
+      decInput.setCustomValidity('Enter Dec as decimal degrees or DMS (e.g. +41° 16\' 07")');
+    } else {
+      decInput.setCustomValidity('');
+      if (isDecimalOnly(raw)) {
+        decPreview.textContent = `DMS: ${toDMS(dec)}`;
+      } else {
+        decPreview.textContent = `= ${dec.toFixed(4)} decimal degrees`;
+      }
+      decPreview.className = 'form-text text-info mt-1';
+    }
+  }
+
+  raInput.addEventListener("input", updateRAPreview);
+  decInput.addEventListener("input", updateDecPreview);
+  // Show preview for pre-filled values (edit mode)
+  updateRAPreview();
+  updateDecPreview();
+
+  // On submit, normalise any HMS/DMS to decimal so the server always gets a number.
+  raInput.closest("form").addEventListener("submit", function (e) {
+    const raVal  = parseRA(raInput.value);
+    const decVal = parseDec(decInput.value);
+    if (raVal === null) {
+      e.preventDefault();
+      raInput.focus();
+      alert("RA value could not be parsed. Use decimal hours or HMS (e.g. 20h 44m 00s).");
+      return;
+    }
+    if (decVal === null) {
+      e.preventDefault();
+      decInput.focus();
+      alert("Dec value could not be parsed. Use decimal degrees or DMS (e.g. +41° 16' 07\").");
+      return;
+    }
+    raInput.value  = raVal.toFixed(6);
+    decInput.value = decVal.toFixed(6);
+  });
 
 });
 </script>

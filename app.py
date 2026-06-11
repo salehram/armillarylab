@@ -2319,6 +2319,9 @@ def add_progress(target_id):
             )
 
     flash("Progress added.", "success")
+    next_url = request.form.get("next", "").strip()
+    if next_url and next_url.startswith("/"):
+        return redirect(next_url)
     return redirect(url_for("target_detail", target_id=target.id))
 
 

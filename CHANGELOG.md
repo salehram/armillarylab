@@ -13,6 +13,33 @@ _Nothing yet._
 
 ---
 
+## [2.7.0] - 2026-06-11
+
+### Added
+
+- **Mosaic Groups** — group any set of panel targets under one named mosaic project.
+  - New `MosaicGroup` model (`mosaic_groups` table): `name`, `description`, `panel_count_goal`, `notes`, `created_at`.
+  - Two new nullable columns on `Target`: `mosaic_group_id` (FK → `mosaic_groups.id`) and `mosaic_panel_number` (integer, 1-based ordering). Both added via `apply_additive_schema_migrations()` on startup — no manual migration needed.
+  - Five new routes: `GET /mosaics`, `GET|POST /mosaic/new`, `GET /mosaic/<id>`, `GET|POST /mosaic/<id>/edit`, `POST /mosaic/<id>/delete`, plus `POST /mosaic/<id>/update-notes` (AJAX inline edit).
+  - **Mosaic detail page** (`mosaic_detail.html`): "Tonight's Panel" recommendation card (reuses priority-score logic), per-channel aggregate progress table with Bootstrap progress bars (total planned/done/remaining across all active panels), and an ordered panel grid showing per-panel completion %, per-channel done/planned, and status badges (Completed/In Progress/Started).
+  - **Mosaic list page** (`mosaic_list.html`): table of all groups with completion bars and panel counts.
+  - **Mosaic form** (`mosaic_form.html`): shared create/edit form.
+  - **Dashboard integration**: compact "Mosaics" summary section on `/` (visible only when groups exist) with per-group completion bars; "Mosaics" nav link in `base.html`.
+  - **Target form** (`target_form.html`): "Mosaic Group" dropdown and "Panel Number" input added to the New/Edit Target form; panel number field shows/hides via JS.
+  - **Dashboard badge**: active targets that belong to a mosaic group show a small blue badge (`P3 · Cygnus Loop Mosaic`) linking to the mosaic detail page.
+  - Delete mosaic group unlinks all panels (sets FK to NULL) rather than cascading — panels are preserved as standalone targets.
+
+### Fixed / Performance
+
+- **Dashboard load time (~10× faster)** — `compute_target_window()` was running a 61-point altitude + `get_body('moon', …)` loop for every active target on every page load. Added `skip_profile=False` parameter: when `True`, the loop runs 12 steps with no moon position calls (saves ~90% of per-target compute). Applied to `index()`, `mosaic_detail()` tonight's-panel loop, `export_nina_v2()` window-end calculation, and `api_conditions()`.
+- Added a 10-minute process-level TTL cache for `skip_profile=True` results, keyed on target coordinates + observer location — rapid re-renders are near-instant after first computation.
+
+### Migration
+
+- `apply_additive_schema_migrations()` creates `mosaic_groups` table (via `db.create_all()`) then adds `targets.mosaic_group_id` (INTEGER FK) and `targets.mosaic_panel_number` (INTEGER) if not present. Both are nullable; existing targets are unaffected.
+
+---
+
 ## [2.6.0] - 2026-06-01
 
 ### Added

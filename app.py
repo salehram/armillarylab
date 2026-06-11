@@ -58,7 +58,7 @@ from config.flask_process import (
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.7.0"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -205,6 +205,18 @@ def apply_additive_schema_migrations(log=print):
     )
 
     db.create_all()
+
+    # Mosaic group columns — added after db.create_all() so mosaic_groups table exists first.
+    add_column_if_missing(
+        "targets",
+        "mosaic_group_id",
+        "ALTER TABLE targets ADD COLUMN mosaic_group_id INTEGER REFERENCES mosaic_groups(id)",
+    )
+    add_column_if_missing(
+        "targets",
+        "mosaic_panel_number",
+        "ALTER TABLE targets ADD COLUMN mosaic_panel_number INTEGER",
+    )
 
     # Ensure the 8 canonical TargetType rows exist (idempotent upsert).
     # This is the single source of truth used by detect_target_type(), the
@@ -700,6 +712,23 @@ class PaletteFilter(db.Model):
         return f"<PaletteFilter palette={self.palette_id} filter={self.filter_id} rgb={self.rgb_channel}>"
 
 
+class MosaicGroup(db.Model):
+    """Groups multiple panel targets (e.g. 9-panel mosaic) under one named project."""
+    __tablename__ = "mosaic_groups"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False)
+    description = db.Column(db.Text)
+    panel_count_goal = db.Column(db.Integer)  # e.g. 9 for a 9-panel mosaic
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    targets = relationship("Target", back_populates="mosaic_group")
+
+    def __repr__(self):
+        return f"<MosaicGroup {self.name!r}>"
+
+
 class Target(db.Model):
     __tablename__ = "targets"
 
@@ -742,6 +771,10 @@ class Target(db.Model):
     archived_at = db.Column(db.DateTime)
     completion_notes = db.Column(db.Text)  # Notes about the completed project
 
+    # Mosaic group association (nullable — most targets are standalone)
+    mosaic_group_id = db.Column(db.Integer, db.ForeignKey("mosaic_groups.id"), nullable=True)
+    mosaic_panel_number = db.Column(db.Integer, nullable=True)  # 1-based panel ordering
+
     plans = relationship("TargetPlan", back_populates="target",
                          cascade="all, delete-orphan")
     sessions = relationship("ImagingSession", back_populates="target",
@@ -753,6 +786,7 @@ class Target(db.Model):
         "CalibrationCheckpointSkip", back_populates="target", cascade="all, delete-orphan"
     )
     palette = relationship("Palette", back_populates="targets")
+    mosaic_group = relationship("MosaicGroup", back_populates="targets")
 
 
 class TargetPlan(db.Model):
@@ -1072,6 +1106,47 @@ def add_object_mapping(catalog_name, target_type_name):
 # ROUTES
 # ---------------------------------------------------------------------------
 
+
+def _build_mosaic_index_summaries():
+    """Return compact stats for each mosaic group used on the dashboard."""
+    from collections import defaultdict
+
+    groups = MosaicGroup.query.order_by(MosaicGroup.name).all()
+    result = []
+    for g in groups:
+        total_done = 0.0
+        total_planned = 0.0
+        active_panels = 0
+        completed_panels = 0
+        for t in g.targets:
+            if t.is_archived:
+                completed_panels += 1
+            else:
+                active_panels += 1
+            plan = (
+                TargetPlan.query
+                .filter_by(target_id=t.id, palette_name=t.preferred_palette)
+                .order_by(TargetPlan.created_at.desc())
+                .first()
+            )
+            if plan:
+                pd = json.loads(plan.plan_json)
+                total_planned += float(pd.get("total_planned_minutes", 0) or 0)
+            done_sec = sum(s.sub_exposure_seconds * s.sub_count for s in t.sessions)
+            total_done += done_sec / 60.0
+        completion_pct = round((total_done / total_planned * 100) if total_planned > 0 else 0.0, 1)
+        result.append({
+            "group": g,
+            "active_panels": active_panels,
+            "completed_panels": completed_panels,
+            "total_panels": active_panels + completed_panels,
+            "total_done": round(total_done, 1),
+            "total_planned": round(total_planned, 1),
+            "completion_pct": completion_pct,
+        })
+    return result
+
+
 @app.route("/")
 def index():
     from collections import defaultdict
@@ -1145,6 +1220,7 @@ def index():
             elevation_m=elev,
             packup_time_local=packup_time,
             min_altitude_deg=get_effective_min_altitude(t),
+            skip_profile=True,
         )
 
         if window_info.get("deps_available"):
@@ -1270,6 +1346,7 @@ def index():
         target_summaries=summaries,
         archived_summaries=archived_summaries,
         tonight_pick=tonight_pick,
+        mosaic_summaries=_build_mosaic_index_summaries(),
     )
 
 
@@ -1300,6 +1377,15 @@ def new_target():
             preferred_palette=preferred_palette,
             packup_time_local=packup_time_local,
         )
+
+        # Mosaic group assignment
+        mosaic_group_id_raw = request.form.get("mosaic_group_id", "").strip()
+        if mosaic_group_id_raw.isdigit():
+            target.mosaic_group_id = int(mosaic_group_id_raw)
+        mosaic_panel_number_raw = request.form.get("mosaic_panel_number", "").strip()
+        if mosaic_panel_number_raw.isdigit():
+            target.mosaic_panel_number = int(mosaic_panel_number_raw)
+
         db.session.add(target)
         db.session.commit()
         
@@ -1327,7 +1413,8 @@ def new_target():
     # Pass global config to template for default values
     global_config = get_global_config()
     palettes = Palette.query.filter_by(is_active=True).order_by(Palette.name).all()
-    return render_template("target_form.html", target=None, global_config=global_config, palettes=palettes)
+    mosaic_groups = MosaicGroup.query.order_by(MosaicGroup.name).all()
+    return render_template("target_form.html", target=None, global_config=global_config, palettes=palettes, mosaic_groups=mosaic_groups)
 
 
 @app.route("/target/<int:target_id>")
@@ -1562,6 +1649,7 @@ def export_nina_v2(target_id):
             elevation_m=elev,
             packup_time_local=packup_time,
             min_altitude_deg=effective_min_alt,
+            skip_profile=True,
         )
         if w.get("deps_available") and w.get("end_time_local") and w["end_time_local"] != "N/A":
             import datetime as _dt
@@ -1918,6 +2006,12 @@ def edit_target(target_id):
         target.notes = request.form.get("notes")
         target.pixinsight_workflow = request.form.get("pixinsight_workflow")
 
+        # Mosaic group assignment
+        mosaic_group_id_raw = request.form.get("mosaic_group_id", "").strip()
+        target.mosaic_group_id = int(mosaic_group_id_raw) if mosaic_group_id_raw.isdigit() else None
+        mosaic_panel_number_raw = request.form.get("mosaic_panel_number", "").strip()
+        target.mosaic_panel_number = int(mosaic_panel_number_raw) if mosaic_panel_number_raw.isdigit() else None
+
         db.session.commit()
         flash("Target updated.", "success")
         return redirect(url_for("target_detail", target_id=target.id))
@@ -1925,7 +2019,8 @@ def edit_target(target_id):
     # Pass global config to template for default values
     global_config = get_global_config()
     palettes = Palette.query.filter_by(is_active=True).order_by(Palette.name).all()
-    return render_template("target_form.html", target=target, global_config=global_config, palettes=palettes)
+    mosaic_groups = MosaicGroup.query.order_by(MosaicGroup.name).all()
+    return render_template("target_form.html", target=target, global_config=global_config, palettes=palettes, mosaic_groups=mosaic_groups)
 
 
 @app.route("/target/<int:target_id>/update-notes", methods=["POST"])
@@ -2549,6 +2644,241 @@ def api_target_calibration(target_id):
     return jsonify(_build_calibration_api_response(target))
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mosaic Group Routes
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route("/mosaics")
+def mosaic_list():
+    """List all mosaic groups with aggregated stats."""
+    groups = MosaicGroup.query.order_by(MosaicGroup.name).all()
+    summaries = []
+    for g in groups:
+        total = len(g.targets)
+        active = sum(1 for t in g.targets if not t.is_archived)
+        archived = sum(1 for t in g.targets if t.is_archived)
+        summaries.append({
+            "group": g,
+            "total_panels": total,
+            "active_panels": active,
+            "completed_panels": archived,
+        })
+    return render_template("mosaic_list.html", summaries=summaries)
+
+
+@app.route("/mosaic/new", methods=["GET", "POST"])
+def new_mosaic():
+    """Create a new mosaic group."""
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        if not name:
+            flash("Mosaic group name is required.", "danger")
+            return redirect(url_for("new_mosaic"))
+        description = request.form.get("description", "").strip() or None
+        panel_count_goal_raw = request.form.get("panel_count_goal", "").strip()
+        panel_count_goal = int(panel_count_goal_raw) if panel_count_goal_raw.isdigit() else None
+        notes = request.form.get("notes", "").strip() or None
+        group = MosaicGroup(
+            name=name,
+            description=description,
+            panel_count_goal=panel_count_goal,
+            notes=notes,
+        )
+        db.session.add(group)
+        db.session.commit()
+        flash(f"Mosaic group \"{name}\" created.", "success")
+        return redirect(url_for("mosaic_detail", group_id=group.id))
+    return render_template("mosaic_form.html", group=None)
+
+
+@app.route("/mosaic/<int:group_id>")
+def mosaic_detail(group_id):
+    """Aggregated view for one mosaic group: per-panel progress + channel totals."""
+    from collections import defaultdict
+
+    group = MosaicGroup.query.get_or_404(group_id)
+
+    # All panels ordered by panel_number (NULLS last), then name
+    panels = (
+        Target.query
+        .filter_by(mosaic_group_id=group_id)
+        .order_by(
+            Target.mosaic_panel_number.is_(None),
+            Target.mosaic_panel_number,
+            Target.name,
+        )
+        .all()
+    )
+
+    lat, lon, elev = get_observer_location()
+
+    panel_data = []
+    # Collect all unique channels across all panels (preserving order of first appearance)
+    all_channels_ordered = []
+    seen_channels = set()
+
+    # First pass: compute per-panel progress
+    for t in panels:
+        plan = (
+            TargetPlan.query
+            .filter_by(target_id=t.id, palette_name=t.preferred_palette)
+            .order_by(TargetPlan.created_at.desc())
+            .first()
+        )
+        plan_data = json.loads(plan.plan_json) if plan else None
+        planned_channels = plan_data.get("channels", []) if plan_data else []
+        planned_total = float(plan_data.get("total_planned_minutes", 0) or 0) if plan_data else 0.0
+
+        per_channel_done = defaultdict(float)
+        total_done_sec = 0.0
+        for s in t.sessions:
+            secs = s.sub_exposure_seconds * s.sub_count
+            per_channel_done[s.channel] += secs / 60.0
+            total_done_sec += secs
+        done_total = total_done_sec / 60.0
+
+        completion_pct = round((done_total / planned_total * 100) if planned_total > 0 else 0.0, 1)
+
+        # Collect channels
+        for ch in planned_channels:
+            ch_name = ch.get("name", "")
+            if ch_name and ch_name not in seen_channels:
+                seen_channels.add(ch_name)
+                all_channels_ordered.append({"name": ch_name, "label": ch.get("label", ch_name)})
+
+        panel_data.append({
+            "target": t,
+            "plan_data": plan_data,
+            "planned_total": round(planned_total, 1),
+            "done_total": round(done_total, 1),
+            "completion_pct": completion_pct,
+            "per_channel_done": dict(per_channel_done),
+            "per_channel_planned": {
+                ch.get("name", ""): float(ch.get("planned_minutes", 0) or 0)
+                for ch in planned_channels
+            },
+        })
+
+    # Aggregate totals across all non-archived panels
+    agg_done = defaultdict(float)
+    agg_planned = defaultdict(float)
+    for pd in panel_data:
+        if pd["target"].is_archived:
+            continue
+        for ch_name, done_min in pd["per_channel_done"].items():
+            agg_done[ch_name] += done_min
+        for ch_name, planned_min in pd["per_channel_planned"].items():
+            agg_planned[ch_name] += planned_min
+
+    channel_totals = []
+    for ch_info in all_channels_ordered:
+        ch_name = ch_info["name"]
+        done = round(agg_done.get(ch_name, 0.0), 1)
+        planned = round(agg_planned.get(ch_name, 0.0), 1)
+        remaining = round(max(planned - done, 0.0), 1)
+        pct = round((done / planned * 100) if planned > 0 else 0.0, 1)
+        channel_totals.append({
+            "name": ch_name,
+            "label": ch_info["label"],
+            "done": done,
+            "planned": planned,
+            "remaining": remaining,
+            "pct": pct,
+        })
+
+    # Tonight's Panel: priority score on non-archived panels that have remaining time
+    tonight_panel = None
+    best_score = -1.0
+    for pd in panel_data:
+        t = pd["target"]
+        if t.is_archived or pd["remaining_total"] if "remaining_total" in pd else pd["planned_total"] - pd["done_total"] <= 0:
+            continue
+        remaining = pd["planned_total"] - pd["done_total"]
+        if remaining <= 0:
+            continue
+        packup_time = parse_time_str(get_effective_packup_time(t))
+        try:
+            w = compute_target_window(
+                ra_hours=t.ra_hours,
+                dec_deg=t.dec_deg,
+                latitude_deg=lat,
+                longitude_deg=lon,
+                elevation_m=elev,
+                packup_time_local=packup_time,
+                min_altitude_deg=get_effective_min_altitude(t),
+                skip_profile=True,
+            )
+            window_min = float(w.get("total_minutes") or 0.0) if w.get("deps_available") else 0.0
+        except Exception:
+            window_min = 0.0
+
+        planned = pd["planned_total"]
+        done = pd["done_total"]
+        completion_ratio = done / planned if planned > 0 else 0.0
+        window_fit = min(1.0, window_min / remaining) if remaining > 0 else 0.0
+        tonight_fraction = min(window_min, remaining) / remaining if remaining > 0 else 0.0
+        score = 0.35 * completion_ratio + 0.25 * window_fit + 0.20 * tonight_fraction
+        if score > best_score:
+            best_score = score
+            tonight_panel = {"panel_data": pd, "window_minutes": round(window_min, 1), "score": round(score, 3)}
+
+    return render_template(
+        "mosaic_detail.html",
+        group=group,
+        panel_data=panel_data,
+        channel_totals=channel_totals,
+        tonight_panel=tonight_panel,
+    )
+
+
+@app.route("/mosaic/<int:group_id>/edit", methods=["GET", "POST"])
+def edit_mosaic(group_id):
+    """Edit a mosaic group's metadata."""
+    group = MosaicGroup.query.get_or_404(group_id)
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        if not name:
+            flash("Mosaic group name is required.", "danger")
+            return redirect(url_for("edit_mosaic", group_id=group_id))
+        group.name = name
+        group.description = request.form.get("description", "").strip() or None
+        panel_count_goal_raw = request.form.get("panel_count_goal", "").strip()
+        group.panel_count_goal = int(panel_count_goal_raw) if panel_count_goal_raw.isdigit() else None
+        group.notes = request.form.get("notes", "").strip() or None
+        db.session.commit()
+        flash("Mosaic group updated.", "success")
+        return redirect(url_for("mosaic_detail", group_id=group_id))
+    return render_template("mosaic_form.html", group=group)
+
+
+@app.route("/mosaic/<int:group_id>/delete", methods=["POST"])
+def delete_mosaic(group_id):
+    """Unlink all targets then delete the mosaic group."""
+    group = MosaicGroup.query.get_or_404(group_id)
+    name = group.name
+    # Unlink targets (keep them as standalone)
+    for t in group.targets:
+        t.mosaic_group_id = None
+        t.mosaic_panel_number = None
+    db.session.delete(group)
+    db.session.commit()
+    flash(f"Mosaic group \"{name}\" deleted. Panels remain as standalone targets.", "success")
+    return redirect(url_for("mosaic_list"))
+
+
+@app.route("/mosaic/<int:group_id>/update-notes", methods=["POST"])
+def update_mosaic_notes(group_id):
+    """AJAX endpoint — update mosaic group notes inline."""
+    group = MosaicGroup.query.get_or_404(group_id)
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    group.notes = data.get("notes", "")
+    db.session.commit()
+    return jsonify({"ok": True, "notes": group.notes})
+
+
 @app.route("/imaging-logs")
 def imaging_logs():
     """Display light sessions and calibration captures grouped by date."""
@@ -2792,6 +3122,7 @@ def api_conditions(target_id):
                 elevation_m=elev,
                 packup_time_local=packup_time,
                 min_altitude_deg=get_effective_min_altitude(target),
+                skip_profile=True,
             )
             if window_info.get("deps_available"):
                 window_start_local = window_info.get("start_time_local")

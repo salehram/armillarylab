@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">
+    {% if group %}Edit Mosaic Group{% else %}New Mosaic Group{% endif %}
+  </h1>
+  <a href="{{ url_for('mosaic_list') }}" class="btn btn-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Back to Mosaics
+  </a>
+</div>
+
+<div class="card bg-secondary text-light">
+  <div class="card-body">
+    <form method="post">
+      <div class="row">
+        <div class="col-md-6">
+
+          <div class="mb-3">
+            <label class="form-label">Group Name <span class="text-danger">*</span></label>
+            <input class="form-control" name="name" required
+                   value="{{ group.name if group else '' }}"
+                   placeholder="e.g. Cygnus Loop Mosaic">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <input class="form-control" name="description"
+                   value="{{ group.description if group else '' }}"
+                   placeholder="e.g. 9-panel SHO mosaic of the full Cygnus Loop SNR">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Panel Count Goal</label>
+            <input class="form-control" name="panel_count_goal" type="number" min="1"
+                   value="{{ group.panel_count_goal if group else '' }}"
+                   placeholder="e.g. 9">
+            <div class="form-text">Total number of panels planned (e.g. 9 for a 3×3 grid).</div>
+          </div>
+
+        </div>
+        <div class="col-md-6">
+
+          <div class="mb-3">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" name="notes" rows="6"
+                      placeholder="Capture strategy, processing notes, FOV overlaps…">{{ group.notes if group else '' }}</textarea>
+          </div>
+
+        </div>
+      </div>
+
+      <button class="btn btn-primary mt-2" type="submit">
+        {% if group %}
+          <i class="bi bi-floppy me-1"></i>Save Changes
+        {% else %}
+          <i class="bi bi-plus-circle me-1"></i>Create Group
+        {% endif %}
+      </button>
+      {% if group %}
+        <a href="{{ url_for('mosaic_detail', group_id=group.id) }}"
+           class="btn btn-secondary mt-2">
+          <i class="bi bi-x-circle me-1"></i>Cancel
+        </a>
+      {% else %}
+        <a href="{{ url_for('mosaic_list') }}" class="btn btn-secondary mt-2">
+          <i class="bi bi-x-circle me-1"></i>Cancel
+        </a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+{% endblock %}

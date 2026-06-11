@@ -13,7 +13,7 @@ Welcome to the ArmillaryLab documentation. This folder contains detailed guides 
 | [README.md](../README.md) | Project overview, installation, and quick start |
 | [CHANGELOG.md](../CHANGELOG.md) | Version history and release notes |
 
-**Current release:** **v2.4.0** — Comprehensive object resolver (local NGC/IC/Messier/Caldwell + SIMBAD/NED/VizieR/Sesame chain), DB-backed cache, confirmation modal, and bidirectional cross-catalog aliases. Details in §18 of [Features Roadmap](FEATURES_ROADMAP.md) and the top of [CHANGELOG.md](../CHANGELOG.md).
+**Current release:** **v2.7.0** — Mosaic Groups: label any set of panel targets as one mosaic, track per-channel aggregate progress across all panels, and get a "Tonight's Panel" recommendation. Dashboard performance significantly improved (10× faster window calculations). See [CHANGELOG.md](../CHANGELOG.md) for full history.
 
 ### User Guides
 

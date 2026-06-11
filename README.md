@@ -2,19 +2,19 @@
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
-![Version](https://img.shields.io/badge/version-2.6.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.7.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 
-## 🎉 Current release: v2.6.0 — NINA V2 Advanced Sequence Export & Session Gain/Cooling Tracking
+## 🎉 Current release: v2.7.0 — Mosaic Groups & Dashboard Performance
 
-**ArmillaryLab v2.6.0** ships a fully rewritten **NINA Advanced Sequencer export** built on a new V2 template. Clicking **Export NINA Sequence…** now opens a customization dialog where you set the sequence name, position angle, cooldown duration, guider calibration flag, dither cadence, export mode (all channels / single channel / separate ZIP), and a per-channel gain table — then downloads a ready-to-import `.json` (or `.zip`) directly into NINA's Advanced Sequencer. The new template includes `CoolCamera`, `StartGuider`, `CenterAndRotate`, `AutofocusAfterSetTime`, a `TimeCondition` stop guard keyed to tonight's imaging window end, and one `SequentialContainer` per filter channel. See [NINA Integration Guide](docs/NINA_INTEGRATION.md).
+**ArmillaryLab v2.7.0** introduces **Mosaic Groups**: label any set of panel targets as one named mosaic, track per-channel aggregate progress across all panels (total Ha/OIII/SII done vs. planned), get a nightly “Tonight’s Panel” recommendation, and navigate directly from each panel’s dashboard badge to the mosaic overview. The `mosaic_groups` table and two new nullable columns on `targets` (`mosaic_group_id`, `mosaic_panel_number`) are added automatically on startup — no manual migration needed. The mosaic group dropdown appears on the New/Edit Target form; a “Mosaics” nav link and a compact dashboard summary section keep everything one click away.
 
-v2.6.0 also adds optional **gain and sensor-cooling fields** to every imaging session log. Values are shown as small badges on session rows, used to pre-populate the AstroBin export modal, and written per-row into the AstroBin CSV when available (with a uniform fallback). The `imaging_sessions` table gains two new nullable columns added automatically on startup — no manual migration needed.
+v2.7.0 also fixes a significant **dashboard performance regression** (present since v2.3.0): `compute_target_window()` was running a 61-point altitude + moon-position loop for *every active target on every page load*. Callers that only need `total_minutes` (the dashboard, NINA export, conditions API) now pass `skip_profile=True`, reducing per-target cost by ~90% and adding a 10-minute process-level TTL cache so re-renders are near-instant.
 
-**v2.5.0** rewrote calibration suggestions to fire once per channel at end-of-lights only (one reminder, your workflow). **v2.4.0** ships the end-to-end object resolver (NGC/IC/Messier/Caldwell + SIMBAD/NED/VizieR/Sesame, 90-day cache, confirmation modal). **v2.3.0** adds Seeing Guide & 5-Day Forecast tabs. **v2.2.0** adds optional calibration frame tracking with AstroBin prefill. **v2.1.0** adds the Night Conditions navbar popup. See [CHANGELOG.md](CHANGELOG.md) for the full history.
+**v2.6.0** ships a fully rewritten NINA V2 Advanced Sequencer export and optional per-session gain/cooling tracking. **v2.5.0** rewrote calibration suggestions to end-of-channel only. **v2.4.0** ships the end-to-end object resolver. **v2.3.0** adds Seeing Guide & 5-Day Forecast. **v2.2.0** adds calibration frame tracking. **v2.1.0** adds the Night Conditions navbar popup. See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ## 🌟 Features
 
@@ -540,7 +540,7 @@ docker-compose up --build
 
 ## 📊 Current Status
 
-**Shipping version:** **2.5.0** (`APP_VERSION` in `app.py`; tag `v2.5.0` on GitHub). Install from `main` or check out that tag for a frozen snapshot. v2.5.0 drops the v2.2.0 two-point flat nudge in favour of a single end-of-channel reminder; the `checkpoint` field is now free-form metadata, and the deprecated `default_calibration_two_point` / `override_calibration_two_point` columns are scheduled for removal in v2.6 (see [CHANGELOG.md](CHANGELOG.md) and [FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) §19).
+**Shipping version:** **2.7.0** (`APP_VERSION` in `app.py`). Install from `main` for the latest. v2.7.0 adds Mosaic Groups (multi-panel mosaic project grouping with aggregate progress and tonight’s panel recommendation) and a ~10× dashboard window-calculation speedup. v2.6.0 added the NINA V2 Advanced Sequencer export and per-session gain/cooling tracking. v2.5.0 dropped the two-point flat nudge in favour of a single end-of-channel reminder. See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ### ✅ New in v2.4.0 (Comprehensive Object Resolver)
 

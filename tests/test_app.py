@@ -14,6 +14,7 @@ from app import (
     GlobalConfig,
     CalibrationCapture,
     CalibrationCheckpointSkip,
+    MosaicGroup,
     get_effective_calibration_config,
 )
 from calibration_utils import (
@@ -686,3 +687,196 @@ def test_update_plan_per_channel_overrides_win_over_master_total(client):
         assert channels["O"] == pytest.approx(1200.0)
         assert channels["S"] == pytest.approx(1800.0)
         assert data["total_planned_minutes"] == 4200
+
+
+# ---------------------------------------------------------------------------
+# Mosaic Group Tests
+# ---------------------------------------------------------------------------
+
+def test_mosaic_group_crud(client):
+    """Create, list, edit, and delete a mosaic group via HTTP routes."""
+    # Create
+    resp = client.post("/mosaic/new", data={
+        "name": "Cygnus Loop Mosaic",
+        "description": "9-panel SHO mosaic",
+        "panel_count_goal": "9",
+        "notes": "Test notes",
+    })
+    assert resp.status_code == 302
+
+    with app.app_context():
+        g = MosaicGroup.query.filter_by(name="Cygnus Loop Mosaic").first()
+        assert g is not None
+        assert g.panel_count_goal == 9
+        assert g.description == "9-panel SHO mosaic"
+        group_id = g.id
+
+    # List
+    resp = client.get("/mosaics")
+    assert resp.status_code == 200
+    assert b"Cygnus Loop Mosaic" in resp.data
+
+    # Detail (empty group)
+    resp = client.get(f"/mosaic/{group_id}")
+    assert resp.status_code == 200
+    assert b"Cygnus Loop Mosaic" in resp.data
+
+    # Edit
+    resp = client.post(f"/mosaic/{group_id}/edit", data={
+        "name": "Cygnus Loop Mosaic Updated",
+        "description": "Updated description",
+        "panel_count_goal": "9",
+        "notes": "",
+    })
+    assert resp.status_code == 302
+
+    with app.app_context():
+        g = MosaicGroup.query.get(group_id)
+        assert g.name == "Cygnus Loop Mosaic Updated"
+
+    # Delete
+    resp = client.post(f"/mosaic/{group_id}/delete")
+    assert resp.status_code == 302
+
+    with app.app_context():
+        assert MosaicGroup.query.get(group_id) is None
+
+
+def test_mosaic_detail_aggregation(client):
+    """Panel targets assigned to a group appear in the detail view with correct aggregation."""
+    with app.app_context():
+        group = MosaicGroup(name="Test Mosaic", panel_count_goal=2)
+        db.session.add(group)
+        db.session.flush()
+
+        plan_json = json.dumps({
+            "palette": "SHO",
+            "total_planned_minutes": 300,
+            "channels": [
+                {"name": "H", "label": "Ha", "planned_minutes": 180,
+                 "sub_exposure_seconds": 300, "weight": 0.6, "weight_fraction": 0.6},
+                {"name": "O", "label": "OIII", "planned_minutes": 120,
+                 "sub_exposure_seconds": 300, "weight": 0.4, "weight_fraction": 0.4},
+            ],
+        })
+
+        for i in range(1, 3):
+            t = Target(
+                name=f"Panel {i}",
+                ra_hours=20.0 + i * 0.1,
+                dec_deg=31.0,
+                preferred_palette="SHO",
+                mosaic_group_id=group.id,
+                mosaic_panel_number=i,
+            )
+            db.session.add(t)
+            db.session.flush()
+            db.session.add(TargetPlan(
+                target_id=t.id, palette_name="SHO", plan_json=plan_json
+            ))
+            # 60 min of Ha = 12 × 300s
+            db.session.add(ImagingSession(
+                target_id=t.id, date=date.today(), channel="H",
+                sub_exposure_seconds=300, sub_count=12,
+            ))
+        db.session.commit()
+        group_id = group.id
+
+    resp = client.get(f"/mosaic/{group_id}")
+    assert resp.status_code == 200
+    assert b"Panel 1" in resp.data
+    assert b"Panel 2" in resp.data
+
+    # Both panels together: 2 × 60 min Ha done, 2 × 180 planned
+    # The aggregation check is done via the response body (values rendered in template)
+    assert b"120.0" in resp.data  # total Ha done (2 × 60 min)
+
+
+def test_target_form_mosaic_group_assignment(client):
+    """Creating a target with a mosaic_group_id links it to the group."""
+    with app.app_context():
+        group = MosaicGroup(name="My Mosaic")
+        db.session.add(group)
+        db.session.commit()
+        group_id = group.id
+
+    resp = client.post("/target/new", data={
+        "name": "Panel A",
+        "ra_hours": "20.5",
+        "dec_deg": "31.0",
+        "target_type": "emission",
+        "preferred_palette": "SHO",
+        "packup_time_local": "02:00",
+        "mosaic_group_id": str(group_id),
+        "mosaic_panel_number": "1",
+    })
+    assert resp.status_code == 302
+
+    with app.app_context():
+        t = Target.query.filter_by(name="Panel A").first()
+        assert t is not None
+        assert t.mosaic_group_id == group_id
+        assert t.mosaic_panel_number == 1
+
+
+def test_mosaic_delete_unlinks_targets(client):
+    """Deleting a mosaic group sets mosaic_group_id to None on linked targets."""
+    with app.app_context():
+        group = MosaicGroup(name="Temp Mosaic")
+        db.session.add(group)
+        db.session.flush()
+        t = Target(
+            name="Temp Panel",
+            ra_hours=20.0,
+            dec_deg=31.0,
+            mosaic_group_id=group.id,
+            mosaic_panel_number=1,
+        )
+        db.session.add(t)
+        db.session.commit()
+        group_id = group.id
+        target_id = t.id
+
+    resp = client.post(f"/mosaic/{group_id}/delete")
+    assert resp.status_code == 302
+
+    with app.app_context():
+        assert MosaicGroup.query.get(group_id) is None
+        t = Target.query.get(target_id)
+        assert t.mosaic_group_id is None
+        assert t.mosaic_panel_number is None
+
+
+def test_mosaic_update_notes_ajax(client):
+    """AJAX inline notes update returns ok and persists the notes."""
+    with app.app_context():
+        group = MosaicGroup(name="Notes Mosaic")
+        db.session.add(group)
+        db.session.commit()
+        group_id = group.id
+
+    resp = client.post(
+        f"/mosaic/{group_id}/update-notes",
+        json={"notes": "Updated inline notes"},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["notes"] == "Updated inline notes"
+
+    with app.app_context():
+        g = MosaicGroup.query.get(group_id)
+        assert g.notes == "Updated inline notes"
+
+
+def test_index_includes_mosaic_summaries(client):
+    """Dashboard returns mosaic summary data when a group exists."""
+    with app.app_context():
+        group = MosaicGroup(name="Dashboard Mosaic", panel_count_goal=3)
+        db.session.add(group)
+        db.session.commit()
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Dashboard Mosaic" in resp.data

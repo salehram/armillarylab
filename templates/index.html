@@ -66,6 +66,66 @@
   </div>
 {% endif %}
 
+<!-- Mosaics Summary (shown only when mosaic groups exist) -->
+{% if mosaic_summaries %}
+<div class="card bg-secondary text-light mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-grid-3x3-gap me-2"></i>Mosaics</span>
+    <a href="{{ url_for('mosaic_list') }}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-arrow-right me-1"></i>View All
+    </a>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-dark align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Mosaic</th>
+            <th class="text-center">Panels</th>
+            <th class="text-center">Completion</th>
+            <th>Done Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ms in mosaic_summaries %}
+            {% set g = ms.group %}
+            <tr>
+              <td>
+                <a href="{{ url_for('mosaic_detail', group_id=g.id) }}"
+                   class="text-light text-decoration-none">
+                  {{ g.name }}
+                </a>
+                {% if g.description %}
+                  <div class="small text-muted">{{ g.description }}</div>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if g.panel_count_goal %}
+                  {{ ms.total_panels }} / {{ g.panel_count_goal }}
+                {% else %}
+                  {{ ms.total_panels }}
+                {% endif %}
+                {% if ms.completed_panels > 0 %}
+                  <span class="badge bg-success ms-1">{{ ms.completed_panels }} done</span>
+                {% endif %}
+              </td>
+              <td class="text-center" style="min-width: 130px;">
+                <div class="progress" style="height: 6px;">
+                  <div class="progress-bar bg-success"
+                       style="width: {{ ms.completion_pct }}%;"></div>
+                </div>
+                <small class="text-muted">{{ ms.completion_pct }}%</small>
+              </td>
+              <td class="text-muted small">{{ ms.total_done }} / {{ ms.total_planned }} min</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Active Targets Table -->
 <div class="card bg-secondary text-light">
   <div class="card-header d-flex justify-content-between align-items-center">
@@ -102,6 +162,16 @@
                      class="text-light text-decoration-none">
                     {{ t.name }}
                   </a>
+                  {% if t.mosaic_group %}
+                    <div class="mt-1">
+                      <a href="{{ url_for('mosaic_detail', group_id=t.mosaic_group.id) }}"
+                         class="badge text-decoration-none"
+                         style="background-color:#3a6fd8; font-size:0.7rem;"
+                         title="Part of mosaic: {{ t.mosaic_group.name }}">
+                        <i class="bi bi-grid-3x3-gap me-1"></i>{% if t.mosaic_panel_number %}P{{ t.mosaic_panel_number }} · {% endif %}{{ t.mosaic_group.name }}
+                      </a>
+                    </div>
+                  {% endif %}
                   <div class="small text-warning">
                     {{ t.catalog_id or "" }}
                   </div>

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-grid-3x3-gap me-2"></i>Mosaic Groups</h1>
+  <a href="{{ url_for('new_mosaic') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-circle me-1"></i>New Mosaic Group
+  </a>
+</div>
+
+{% if summaries %}
+  <div class="card bg-secondary text-light">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-dark align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th class="text-center">Panels</th>
+              <th class="text-center">Completion</th>
+              <th>Created</th>
+              <th style="width: 120px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in summaries %}
+              {% set g = s.group %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('mosaic_detail', group_id=g.id) }}"
+                     class="text-light text-decoration-none fw-semibold">
+                    {{ g.name }}
+                  </a>
+                </td>
+                <td class="text-muted small">{{ g.description or '—' }}</td>
+                <td class="text-center">
+                  {% if g.panel_count_goal %}
+                    <span class="badge bg-info text-dark">
+                      {{ s.active_panels + s.completed_panels }} / {{ g.panel_count_goal }}
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ s.total_panels }}</span>
+                  {% endif %}
+                  {% if s.completed_panels > 0 %}
+                    <span class="badge bg-success ms-1">
+                      <i class="bi bi-check-circle me-1"></i>{{ s.completed_panels }} done
+                    </span>
+                  {% endif %}
+                </td>
+                <td class="text-center" style="min-width: 140px;">
+                  <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-success"
+                         style="width: {{ s.completion_pct }}%;" aria-valuenow="{{ s.completion_pct }}"
+                         aria-valuemin="0" aria-valuemax="100"></div>
+                  </div>
+                  <small class="text-muted">{{ s.completion_pct }}%</small>
+                </td>
+                <td class="text-muted small">
+                  {{ g.created_at.strftime('%Y-%m-%d') if g.created_at else '—' }}
+                </td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <a href="{{ url_for('mosaic_detail', group_id=g.id) }}"
+                       class="btn btn-outline-light btn-sm" title="View">
+                      <i class="bi bi-eye"></i>
+                    </a>
+                    <a href="{{ url_for('edit_mosaic', group_id=g.id) }}"
+                       class="btn btn-outline-secondary btn-sm" title="Edit">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    <form method="post" action="{{ url_for('delete_mosaic', group_id=g.id) }}"
+                          onsubmit="return confirm('Delete mosaic group &quot;{{ g.name }}&quot;? Panels will remain as standalone targets.');">
+                      <button class="btn btn-outline-danger btn-sm" type="submit" title="Delete">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="alert alert-secondary">
+    No mosaic groups yet. Click <strong>+ New Mosaic Group</strong> to create one, then assign panel
+    targets to it from each target's edit form.
+  </div>
+{% endif %}
+
+{% endblock %}

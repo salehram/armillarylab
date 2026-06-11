@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h4 mb-0">
+      <i class="bi bi-grid-3x3-gap me-2"></i>{{ group.name }}
+    </h1>
+    {% if group.description %}
+      <p class="text-muted mb-0 mt-1">{{ group.description }}</p>
+    {% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('edit_mosaic', group_id=group.id) }}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-pencil me-1"></i>Edit
+    </a>
+    <a href="{{ url_for('mosaic_list') }}" class="btn btn-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>All Mosaics
+    </a>
+  </div>
+</div>
+
+<!-- Tonight's Panel Recommendation -->
+{% if tonight_panel %}
+  {% set pd = tonight_panel.panel_data %}
+  {% set t = pd.target %}
+  <div class="card bg-success bg-gradient text-white mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-moon-stars me-2"></i>Tonight's Panel Recommendation</span>
+      <small class="text-white-50">Priority score: {{ tonight_panel.score }}</small>
+    </div>
+    <div class="card-body">
+      <h2 class="h5 mb-1">
+        <a href="{{ url_for('target_detail', target_id=t.id) }}"
+           class="text-white text-decoration-none">
+          {% if t.mosaic_panel_number %}P{{ t.mosaic_panel_number }} — {% endif %}{{ t.name }}
+        </a>
+      </h2>
+      <p class="mb-2 text-white-50">{{ t.catalog_id or 'No catalog ID' }}</p>
+      <div class="row">
+        <div class="col-md-3 mb-2">
+          <div class="small text-white-50">Panel Completion</div>
+          <div class="fw-bold">{{ pd.completion_pct }}%</div>
+        </div>
+        <div class="col-md-3 mb-2">
+          <div class="small text-white-50">Done / Planned</div>
+          <div class="fw-bold">{{ pd.done_total }} / {{ pd.planned_total }} min</div>
+        </div>
+        <div class="col-md-3 mb-2">
+          <div class="small text-white-50">Tonight's Window</div>
+          <div class="fw-bold">{{ tonight_panel.window_minutes }} min</div>
+        </div>
+        <div class="col-md-3 mb-2">
+          <div class="small text-white-50">Remaining</div>
+          <div class="fw-bold">{{ (pd.planned_total - pd.done_total)|round(1) }} min</div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="alert alert-secondary mb-4">
+    <i class="bi bi-moon me-2"></i>No panel recommendation available tonight (all panels may be
+    complete, or no plans defined yet).
+  </div>
+{% endif %}
+
+<!-- Overall Progress Stats -->
+<div class="row mb-4">
+  <div class="col-md-4">
+    <div class="card bg-secondary text-light h-100">
+      <div class="card-body">
+        <div class="small text-muted mb-1">Panels</div>
+        {% set total = panel_data|length %}
+        {% set completed = panel_data|selectattr('target.is_archived')|list|length %}
+        {% set active = total - completed %}
+        <div class="fs-4 fw-bold">
+          {{ completed }} / {% if group.panel_count_goal %}{{ group.panel_count_goal }}{% else %}{{ total }}{% endif %}
+          <small class="fs-6 text-muted">completed</small>
+        </div>
+        {% if group.panel_count_goal and total < group.panel_count_goal %}
+          <div class="small text-warning mt-1">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            {{ group.panel_count_goal - total }} panel(s) not yet created
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-8">
+    <div class="card bg-secondary text-light h-100">
+      <div class="card-body">
+        <div class="small text-muted mb-2">Channel Progress Across All Active Panels</div>
+        {% if channel_totals %}
+          <div class="table-responsive">
+            <table class="table table-sm table-dark mb-0">
+              <thead>
+                <tr>
+                  <th>Channel</th>
+                  <th>Done</th>
+                  <th>Planned</th>
+                  <th>Remaining</th>
+                  <th style="min-width: 120px;">Progress</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for ch in channel_totals %}
+                  <tr>
+                    <td>{{ ch.label }} <small class="text-muted">({{ ch.name }})</small></td>
+                    <td>{{ ch.done }} min</td>
+                    <td>{{ ch.planned }} min</td>
+                    <td>{{ ch.remaining }} min</td>
+                    <td>
+                      <div class="progress" style="height: 8px;">
+                        <div class="progress-bar
+                          {% if ch.pct >= 100 %}bg-success
+                          {% elif ch.pct >= 50 %}bg-info
+                          {% else %}bg-warning{% endif %}"
+                             style="width: {{ [ch.pct, 100]|min }}%;"
+                             aria-valuenow="{{ ch.pct }}" aria-valuemin="0" aria-valuemax="100">
+                        </div>
+                      </div>
+                      <small class="text-muted">{{ ch.pct }}%</small>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-muted mb-0 small">No channel plans defined yet. Add plans to each panel target.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel Grid -->
+<div class="card bg-secondary text-light">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-grid me-2"></i>Panels</span>
+    <a href="{{ url_for('new_target') }}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-plus-circle me-1"></i>Add Panel
+    </a>
+  </div>
+  <div class="card-body p-0">
+    {% if panel_data %}
+      <div class="table-responsive">
+        <table class="table table-sm table-dark align-middle mb-0">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Panel Name</th>
+              <th>Status</th>
+              <th>Completion</th>
+              <th>Done / Planned</th>
+              {% if channel_totals %}
+                {% for ch in channel_totals %}
+                  <th class="text-center small">{{ ch.name }}</th>
+                {% endfor %}
+              {% endif %}
+              <th style="width: 130px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for pd in panel_data %}
+              {% set t = pd.target %}
+              <tr class="{% if t.is_archived %}table-success{% endif %}">
+                <td class="text-muted">
+                  {% if t.mosaic_panel_number %}P{{ t.mosaic_panel_number }}{% else %}—{% endif %}
+                </td>
+                <td>
+                  <a href="{{ url_for('target_detail', target_id=t.id) }}"
+                     class="{% if t.is_archived %}text-success{% else %}text-light{% endif %} text-decoration-none">
+                    {{ t.name }}
+                  </a>
+                  {% if t.catalog_id %}
+                    <div class="small text-warning">{{ t.catalog_id }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if t.is_archived %}
+                    <span class="badge bg-success">
+                      <i class="bi bi-check-circle me-1"></i>Completed
+                    </span>
+                  {% elif pd.completion_pct >= 100 %}
+                    <span class="badge bg-info text-dark">Finishable</span>
+                  {% elif pd.completion_pct >= 50 %}
+                    <span class="badge bg-warning text-dark">In Progress</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Started</span>
+                  {% endif %}
+                </td>
+                <td style="min-width: 120px;">
+                  <div class="progress" style="height: 6px;">
+                    <div class="progress-bar
+                      {% if t.is_archived or pd.completion_pct >= 100 %}bg-success
+                      {% elif pd.completion_pct >= 50 %}bg-info
+                      {% else %}bg-warning{% endif %}"
+                         style="width: {{ [pd.completion_pct, 100]|min }}%;"></div>
+                  </div>
+                  <small class="text-muted">{{ pd.completion_pct }}%</small>
+                </td>
+                <td class="text-muted small">{{ pd.done_total }} / {{ pd.planned_total }} min</td>
+                {% if channel_totals %}
+                  {% for ch in channel_totals %}
+                    <td class="text-center small">
+                      {% set done = pd.per_channel_done.get(ch.name, 0)|round(0)|int %}
+                      {% set planned = pd.per_channel_planned.get(ch.name, 0)|round(0)|int %}
+                      {% if planned > 0 %}
+                        <span class="{% if done >= planned %}text-success{% elif done > 0 %}text-warning{% else %}text-muted{% endif %}">
+                          {{ done }}m
+                        </span>
+                        <span class="text-muted">/{{ planned }}m</span>
+                      {% else %}
+                        <span class="text-muted">—</span>
+                      {% endif %}
+                    </td>
+                  {% endfor %}
+                {% endif %}
+                <td>
+                  <div class="d-flex gap-1">
+                    <a href="{{ url_for('target_detail', target_id=t.id) }}"
+                       class="btn btn-outline-light btn-sm" title="View">
+                      <i class="bi bi-eye"></i>
+                    </a>
+                    <a href="{{ url_for('edit_target', target_id=t.id) }}"
+                       class="btn btn-outline-secondary btn-sm" title="Edit Panel">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-3 text-muted">
+        No panels in this group yet. Create targets and assign them to this mosaic group via the
+        <strong>New Target</strong> or <strong>Edit Target</strong> form.
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Notes (inline editable) -->
+<div class="card bg-secondary text-light mt-4">
+  <div class="card-header">
+    <i class="bi bi-journal-text me-2"></i>Mosaic Notes
+  </div>
+  <div class="card-body">
+    <div id="mosaic-notes-display" class="{% if not group.notes %}text-muted{% endif %}">
+      {{ group.notes or 'No notes yet. Click Edit to add notes.' }}
+    </div>
+    <div id="mosaic-notes-edit" class="d-none">
+      <textarea id="mosaic-notes-textarea" class="form-control bg-dark text-light mb-2"
+                rows="5">{{ group.notes or '' }}</textarea>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-success" id="mosaic-notes-save">
+          <i class="bi bi-floppy me-1"></i>Save
+        </button>
+        <button class="btn btn-sm btn-secondary" id="mosaic-notes-cancel">Cancel</button>
+      </div>
+    </div>
+    <button class="btn btn-outline-secondary btn-sm mt-2" id="mosaic-notes-edit-btn">
+      <i class="bi bi-pencil me-1"></i>Edit Notes
+    </button>
+  </div>
+</div>
+
+<script>
+(function () {
+  const display = document.getElementById('mosaic-notes-display');
+  const editArea = document.getElementById('mosaic-notes-edit');
+  const textarea = document.getElementById('mosaic-notes-textarea');
+  const editBtn = document.getElementById('mosaic-notes-edit-btn');
+  const saveBtn = document.getElementById('mosaic-notes-save');
+  const cancelBtn = document.getElementById('mosaic-notes-cancel');
+
+  editBtn.addEventListener('click', function () {
+    display.classList.add('d-none');
+    editArea.classList.remove('d-none');
+    editBtn.classList.add('d-none');
+  });
+
+  cancelBtn.addEventListener('click', function () {
+    editArea.classList.add('d-none');
+    display.classList.remove('d-none');
+    editBtn.classList.remove('d-none');
+    textarea.value = display.textContent.trim() === 'No notes yet. Click Edit to add notes.'
+      ? '' : display.textContent.trim();
+  });
+
+  saveBtn.addEventListener('click', async function () {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+    try {
+      const resp = await fetch('{{ url_for("update_mosaic_notes", group_id=group.id) }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({notes: textarea.value}),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        display.textContent = data.notes || 'No notes yet. Click Edit to add notes.';
+        display.className = data.notes ? '' : 'text-muted';
+        editArea.classList.add('d-none');
+        display.classList.remove('d-none');
+        editBtn.classList.remove('d-none');
+      }
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save';
+    }
+  });
+})();
+</script>
+
+{% endblock %}

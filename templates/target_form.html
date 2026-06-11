@@ -122,6 +122,38 @@
 {{ (target and target.pixinsight_workflow) or '' }}</textarea>
       </div>
 
+      <!-- MOSAIC GROUP -->
+      {% if mosaic_groups %}
+      <div class="mb-3">
+        <label class="form-label">Mosaic Group</label>
+        <select class="form-select" name="mosaic_group_id" id="mosaic_group_id">
+          <option value="">— None (standalone target) —</option>
+          {% for g in mosaic_groups %}
+            <option value="{{ g.id }}"
+              {% if target and target.mosaic_group_id == g.id %}selected{% endif %}>
+              {{ g.name }}{% if g.panel_count_goal %} ({{ g.panel_count_goal }}-panel){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">
+          Assign this target as a panel in a mosaic.
+          <a href="{{ url_for('new_mosaic') }}" target="_blank" class="text-info">
+            <i class="bi bi-plus-circle me-1"></i>Create a new group
+          </a>
+        </div>
+      </div>
+
+      <div class="mb-3" id="panel_number_group"
+           style="{{ '' if (target and target.mosaic_group_id) else 'display:none;' }}">
+        <label class="form-label">Panel Number</label>
+        <input class="form-control" type="number" name="mosaic_panel_number" min="1"
+               id="mosaic_panel_number"
+               value="{{ (target and target.mosaic_panel_number) or '' }}"
+               placeholder="e.g. 1 for P1">
+        <div class="form-text">Ordering within the mosaic (1-based). Used to label panels P1, P2, …</div>
+      </div>
+      {% endif %}
+
     </div>
   </div>
 
@@ -317,6 +349,15 @@ document.addEventListener("DOMContentLoaded", function () {
     return String(s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // Show/hide panel number input based on mosaic group selection
+  const mosaicGroupSelect = document.getElementById("mosaic_group_id");
+  const panelNumberGroup = document.getElementById("panel_number_group");
+  if (mosaicGroupSelect && panelNumberGroup) {
+    mosaicGroupSelect.addEventListener("change", function () {
+      panelNumberGroup.style.display = this.value ? "" : "none";
+    });
   }
 
 });

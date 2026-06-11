@@ -4,7 +4,15 @@ import json
 import math
 import os
 import datetime
+import time as _time
 from zoneinfo import ZoneInfo
+
+# ---------------------------------------------------------------------------
+# Process-level TTL cache for skip_profile=True results.
+# "Tonight's window" changes very slowly; 10 minutes is safe.
+# ---------------------------------------------------------------------------
+_quick_window_cache: dict = {}
+_QUICK_CACHE_TTL = 600  # seconds
 
 try:
     from astropy.coordinates import SkyCoord, EarthLocation, AltAz, get_sun, get_body
@@ -39,7 +47,14 @@ def compute_target_window(
     elevation_m: float,
     packup_time_local: datetime.time | None,
     min_altitude_deg: float = 30.0,
+    skip_profile: bool = False,
 ):
+    """
+    When skip_profile=True the 61-point altitude/moon loop is replaced by a
+    12-point window-only pass (no moon positions).  Caller gets total_minutes
+    and the clipped start/end times but empty altitude_profile lists.  Result
+    is cached for _QUICK_CACHE_TTL seconds so rapid re-renders are free.
+    """
     """
     Compute observing window information for tonight for a celestial target.
 
@@ -63,6 +78,20 @@ def compute_target_window(
       midpoint_altitude_deg
       altitude_profile: list of {time_label: HH:MM, alt_deg: float}
     """
+
+    # Quick-mode cache lookup ------------------------------------------------
+    if skip_profile:
+        _cache_key = (
+            round(ra_hours, 3), round(dec_deg, 3),
+            round(latitude_deg, 4), round(longitude_deg, 4),
+            round(elevation_m, -1), str(packup_time_local),
+            round(min_altitude_deg, 1),
+        )
+        _now = _time.monotonic()
+        if _cache_key in _quick_window_cache:
+            _cached, _exp = _quick_window_cache[_cache_key]
+            if _now < _exp:
+                return _cached
 
     tz_name = os.environ.get("OBSERVER_TZ", "Asia/Riyadh")
 
@@ -156,11 +185,15 @@ def compute_target_window(
     except Exception:
         meridian = None
 
-    # Moon rise and set times
-    try:
-        moon_rise = observer.moon_rise_time(t_now, which="nearest")
-        moon_set = observer.moon_set_time(t_now, which="nearest")
-    except Exception:
+    # Moon rise and set times (skipped in quick mode — saves 2 observer queries)
+    if not skip_profile:
+        try:
+            moon_rise = observer.moon_rise_time(t_now, which="nearest")
+            moon_set = observer.moon_set_time(t_now, which="nearest")
+        except Exception:
+            moon_rise = None
+            moon_set = None
+    else:
         moon_rise = None
         moon_set = None
 
@@ -191,9 +224,10 @@ def compute_target_window(
         raw_total = int((base_end_local - base_start_local).total_seconds() // 60)
 
     # Altitude clipping
+    # skip_profile=True: 12 steps, no moon altitude (saves ~90% of the loop cost)
     from astropy.time import Time as ATime
 
-    steps = 60
+    steps = 12 if skip_profile else 60
     sample_times = []
     altitudes = []
     moon_altitudes = []
@@ -207,14 +241,14 @@ def compute_target_window(
             t_ast = ATime(t_utc)
             altaz = coord.transform_to(AltAz(obstime=t_ast, location=location))
             alt = float(altaz.alt.deg)
-            # Calculate moon altitude
-            moon_coord = get_body('moon', t_ast, location)
-            moon_altaz = moon_coord.transform_to(AltAz(obstime=t_ast, location=location))
-            moon_alt = max(0, float(moon_altaz.alt.deg))  # Clip negative values to 0
             sample_times.append(t_loc)
             altitudes.append(alt)
-            moon_altitudes.append(moon_alt)
             above.append(alt >= min_altitude_deg)
+            if not skip_profile:
+                # Moon altitude (expensive get_body call — only needed for the chart)
+                moon_coord = get_body('moon', t_ast, location)
+                moon_altaz = moon_coord.transform_to(AltAz(obstime=t_ast, location=location))
+                moon_altitudes.append(max(0, float(moon_altaz.alt.deg)))
     else:
         sample_times = []
         altitudes = []
@@ -232,8 +266,8 @@ def compute_target_window(
 
     total_minutes = int(max((end_local - start_local).total_seconds() // 60, 0))
 
-    # Midpoint altitude
-    if end_local > start_local:
+    # Midpoint altitude (skip in quick mode)
+    if not skip_profile and end_local > start_local:
         mid_local = start_local + (end_local - start_local) / 2
         mid_utc = mid_local.astimezone(datetime.timezone.utc)
         t_mid = Time(mid_utc)
@@ -247,17 +281,20 @@ def compute_target_window(
     raw_start_utc = base_start_local.astimezone(datetime.timezone.utc)
     raw_end_utc = base_end_local.astimezone(datetime.timezone.utc)
 
-    altitude_profile = [
-        {"time_label": fmt_short(t), "alt_deg": round(a, 1)}
-        for t, a in zip(sample_times, altitudes)
-    ]
+    if skip_profile:
+        altitude_profile = []
+        moon_altitude_profile = []
+    else:
+        altitude_profile = [
+            {"time_label": fmt_short(t), "alt_deg": round(a, 1)}
+            for t, a in zip(sample_times, altitudes)
+        ]
+        moon_altitude_profile = [
+            {"time_label": fmt_short(t), "alt_deg": round(a, 1)}
+            for t, a in zip(sample_times, moon_altitudes)
+        ]
 
-    moon_altitude_profile = [
-        {"time_label": fmt_short(t), "alt_deg": round(a, 1)}
-        for t, a in zip(sample_times, moon_altitudes)
-    ]
-
-    return {
+    result = {
         "deps_available": True,
         "note": "",
         "timezone_name": tz_name,
@@ -297,6 +334,12 @@ def compute_target_window(
         "altitude_profile": altitude_profile,
         "moon_altitude_profile": moon_altitude_profile,
     }
+
+    # Store quick results in cache
+    if skip_profile:
+        _quick_window_cache[_cache_key] = (result, _time.monotonic() + _QUICK_CACHE_TTL)
+
+    return result
 
 
 # ---------------------------------------------------------------------------

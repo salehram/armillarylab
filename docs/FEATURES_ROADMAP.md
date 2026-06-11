@@ -1,5 +1,5 @@
 # ArmillaryLab – Feature Roadmap  
-*Status: Updated to 2026-06-01 | Version 2.6.0 (NINA V2 Advanced Sequence Export)*
+*Status: Updated to 2026-06-11 | Version 2.7.0 (Mosaic Groups & Dashboard Performance)*
 
 This document tracks the major features of the ArmillaryLab project, what has been completed, and what remains.  
 It is intended to be version-controlled in Git for transparency, planning, and future development.
@@ -11,7 +11,8 @@ It is intended to be version-controlled in Git for transparency, planning, and f
 **🆕 Version 2.3.0 — Seeing Guide & 5-Day Forecast tabs**  
 **🆕 Version 2.4.0 — Comprehensive object resolver & bidirectional catalog aliases**  
 **🆕 Version 2.5.0 — Calibration suggestions simplified to end-of-channel only**  
-**🆕 Version 2.6.0 — NINA V2 Advanced Sequence export with full session setup; session gain/cooling tracking**
+**🆕 Version 2.6.0 — NINA V2 Advanced Sequence export with full session setup; session gain/cooling tracking**  
+**🆕 Version 2.7.0 — Mosaic Groups (multi-panel project grouping, aggregate progress, tonight's panel recommendation); dashboard window-calculation performance (~10× faster)**
 
 ---
 

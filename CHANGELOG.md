@@ -13,7 +13,15 @@ _Nothing yet._
 
 ---
 
-## [2.7.3] - 2026-06-11
+## [2.7.4] - 2026-06-12
+
+### Fixed
+
+- **Imaging Logs nav link broken** — `@app.route("/imaging-logs")` decorator was accidentally dropped when the `mosaic_log` route was inserted above it in v2.7.3, causing a `BuildError` on every page that uses `base.html`. Decorator restored.
+
+---
+
+## [2.7.3] - 2026-06-12
 
 ### Added
 

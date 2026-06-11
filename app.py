@@ -58,7 +58,7 @@ from config.flask_process import (
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.7.3"
+APP_VERSION = "2.7.4"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -2933,6 +2933,8 @@ def mosaic_log(group_id):
         stats=stats,
     )
 
+
+@app.route("/imaging-logs")
 def imaging_logs():
     """Display light sessions and calibration captures grouped by date."""
     sessions = (

@@ -1,6 +1,0 @@
-fix: v2.7.2 - fix text contrast in dashboard mosaics block
-
-- Fix completion %, done/planned time, and description sub-text using
-  text-muted class which is near-invisible on table-dark background
-- Replace with text-light and explicit rgba(255,255,255,x) values
-- Bump version to 2.7.2

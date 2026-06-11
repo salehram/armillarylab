@@ -1,9 +1,0 @@
-fix: v2.7.4 - restore missing @app.route on imaging_logs
-
-The @app.route("/imaging-logs") decorator was accidentally dropped
-when the mosaic_log route was inserted above it in v2.7.3, causing a
-BuildError (Could not build url for endpoint 'imaging_logs') on every
-page rendering base.html.
-
-- Restore @app.route("/imaging-logs") decorator on imaging_logs()
-- Bump version to 2.7.4 in app.py, VERSION, README badge, CHANGELOG

@@ -96,7 +96,7 @@
                   {{ g.name }}
                 </a>
                 {% if g.description %}
-                  <div class="small text-muted">{{ g.description }}</div>
+                  <div class="small" style="color:rgba(255,255,255,0.6)">{{ g.description }}</div>
                 {% endif %}
               </td>
               <td class="text-center">
@@ -114,9 +114,9 @@
                   <div class="progress-bar bg-success"
                        style="width: {{ ms.completion_pct }}%;"></div>
                 </div>
-                <small class="text-muted">{{ ms.completion_pct }}%</small>
+                <small style="color:rgba(255,255,255,0.7)">{{ ms.completion_pct }}%</small>
               </td>
-              <td class="text-muted small">{{ ms.total_done }} / {{ ms.total_planned }} min</td>
+              <td class="text-light small">{{ ms.total_done }} / {{ ms.total_planned }} min</td>
             </tr>
           {% endfor %}
         </tbody>

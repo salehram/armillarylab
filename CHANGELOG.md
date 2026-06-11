@@ -13,6 +13,50 @@ _Nothing yet._
 
 ---
 
+## [2.7.3] - 2026-06-11
+
+### Added
+
+- **Mosaic session log page** (`/mosaic/<id>/log`) — aggregated imaging & calibration log across all panels in a mosaic group, styled like the per-target imaging log.
+  - Groups sessions by date; within each date, panels are listed with their panel number badge (P1, P2 …) and a link to the individual target page.
+  - Edit and delete buttons on every session and calibration entry work identically to the per-target log.
+  - Summary stats bar: imaging nights, panel count, total light sessions, total light time.
+  - "Session Log" button added to the mosaic detail header.
+
+### Fixed
+
+- **Dashboard Mosaics block text contrast** — completion %, done/planned time, and description sub-text were using `text-muted` which is near-invisible on `table-dark`; replaced with `text-light` and explicit `rgba(255,255,255,x)` values.
+
+---
+
+## [2.7.2] - 2026-06-11
+
+### Fixed
+
+- **Dashboard Mosaics block** — completion %, done/planned time, and description rendered nearly invisible (`text-muted` on `table-dark`); replaced with legible `text-light` and inline `rgba` values.
+
+---
+
+## [2.7.1] - 2026-06-11
+
+### Added
+
+- **RA/Dec coordinate input flexibility** — the New/Edit Target form now accepts HMS (`20h 44m 00s`, `20:44:00`) and DMS (`+41° 16' 07"`, `+41:16:07`) in addition to decimal hours/degrees. A live preview converts between formats as you type; values are normalised to decimal on submit.
+- **Mosaic quick-log card** — "Log Session to Panel" card on the mosaic overview page allows logging imaging progress to any non-archived panel without navigating into the panel. Channels are dynamically populated from the selected panel's plan.
+
+### Fixed
+
+- **Mosaic quick-log channel dropdown not populating** — `data-channels` HTML attribute encoding broke `JSON.parse`; replaced with a server-side `PANEL_CHANNELS` JS object map.
+- **Mosaic quick-log form submission** — `next` redirect and `channel` field name routing corrected.
+- **Text contrast in mosaic tables** — `text-muted` class is near-invisible on `table-dark`; replaced throughout Channel Progress and Panels tables with explicit `rgba(255,255,255,x)` and `text-light`.
+- **Archived panel row readability** — `table-success` rows in the Panels table now use dark text overrides so content is legible.
+
+### Changed
+
+- Channel Progress totals table now shows HMS (`H:MM:SS`) alongside minutes for Done, Planned, and Remaining columns.
+
+---
+
 ## [2.7.0] - 2026-06-11
 
 ### Added

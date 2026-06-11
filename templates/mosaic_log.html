@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h4 mb-0">
+      <i class="bi bi-journal-text me-2"></i>Session Log — {{ group.name }}
+    </h1>
+    {% if group.description %}
+      <p style="color:rgba(255,255,255,0.6)" class="small mb-0 mt-1">{{ group.description }}</p>
+    {% endif %}
+  </div>
+  <a href="{{ url_for('mosaic_detail', group_id=group.id) }}" class="btn btn-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Back to Mosaic
+  </a>
+</div>
+
+<!-- Stats -->
+<div class="row mb-4 g-3">
+  <div class="col-6 col-md-3">
+    <div class="card bg-primary text-white text-center">
+      <div class="card-body py-3">
+        <div class="fs-4 fw-bold">{{ stats.imaging_days }}</div>
+        <div class="small">Imaging Nights</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card bg-secondary text-white text-center">
+      <div class="card-body py-3">
+        <div class="fs-4 fw-bold">{{ stats.total_panels }}</div>
+        <div class="small">Panels</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card bg-info text-dark text-center">
+      <div class="card-body py-3">
+        <div class="fs-4 fw-bold">{{ stats.total_sessions }}</div>
+        <div class="small">Light Sessions</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card bg-success text-white text-center">
+      <div class="card-body py-3">
+        <div class="fs-4 fw-bold">{{ stats.total_light_min }} min</div>
+        <div class="small">Total Light Time</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if grouped_log_days %}
+  {% for date, target_groups in grouped_log_days %}
+    <div class="card bg-secondary text-light mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+          <i class="bi bi-calendar-date me-2"></i>{{ date.strftime('%A, %B %d, %Y') }}
+        </h5>
+        {% set day_count = namespace(n=0) %}
+        {% for group_item in target_groups %}
+          {% for entry in group_item.entries %}
+            {% set day_count.n = day_count.n + 1 %}
+          {% endfor %}
+        {% endfor %}
+        <span class="badge bg-primary">{{ day_count.n }} entr{{ 'y' if day_count.n == 1 else 'ies' }}</span>
+      </div>
+
+      <div class="card-body">
+        {% for group_item in target_groups %}
+          {% set t = group_item.target %}
+          <div class="border rounded p-3 mb-3 bg-dark">
+            <!-- Panel header -->
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="mb-0">
+                {% if t.mosaic_panel_number %}
+                  <span class="badge bg-info text-dark me-2">P{{ t.mosaic_panel_number }}</span>
+                {% endif %}
+                <a href="{{ url_for('target_detail', target_id=t.id) }}"
+                   class="text-light text-decoration-none">
+                  {{ t.name }}
+                </a>
+                {% if t.catalog_id %}
+                  <small class="text-warning ms-1">{{ t.catalog_id }}</small>
+                {% endif %}
+              </h6>
+              <a href="{{ url_for('target_detail', target_id=t.id) }}"
+                 class="btn btn-outline-secondary btn-sm" title="Open panel">
+                <i class="bi bi-box-arrow-up-right"></i>
+              </a>
+            </div>
+
+            <!-- Entries -->
+            {% set light_min_ns = namespace(total=0.0) %}
+            {% set cal_frames_ns = namespace(total=0) %}
+            {% for entry in group_item.entries %}
+              {% if entry.kind == 'light' %}
+                {% set light_min_ns.total = light_min_ns.total + entry.minutes %}
+              {% else %}
+                {% set cal_frames_ns.total = cal_frames_ns.total + entry.frame_count %}
+              {% endif %}
+
+              <div class="d-flex justify-content-between align-items-center py-2
+                          {% if not loop.last %}border-bottom border-secondary{% endif %}">
+                <div class="flex-grow-1">
+                  {% if entry.kind == 'light' %}
+                    <span class="badge bg-warning text-dark me-2">{{ entry.channel }}</span>
+                    <span class="text-light">
+                      {{ entry.sub_count }}x {{ entry.sub_exposure_seconds }}s
+                      <small style="color:rgba(255,255,255,0.6)">({{ entry.minutes | round(1) }}m)</small>
+                    </span>
+                    <span class="badge bg-primary ms-1">Light</span>
+                    {% if entry.gain is not none %}
+                      <span class="badge bg-dark border border-secondary text-light ms-1" title="Gain">G{{ entry.gain }}</span>
+                    {% endif %}
+                    {% if entry.sensor_cooling is not none %}
+                      <span class="badge bg-dark border border-secondary text-light ms-1" title="Sensor cooling">{{ entry.sensor_cooling }}°C</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge bg-secondary me-2">{{ entry.frame_label }}</span>
+                    {% if entry.channel %}
+                      <span class="badge bg-warning text-dark me-2">{{ entry.channel }}</span>
+                    {% endif %}
+                    <span class="text-light">{{ entry.frame_count }} frames</span>
+                    {% if entry.checkpoint %}<small style="color:rgba(255,255,255,0.55)" class="ms-1">({{ entry.checkpoint }})</small>{% endif %}
+                    {% if entry.sub_exposure_seconds %}<small style="color:rgba(255,255,255,0.55)" class="ms-1">@ {{ entry.sub_exposure_seconds }}s</small>{% endif %}
+                    <span class="badge bg-info text-dark ms-1">Calibration</span>
+                  {% endif %}
+                  {% if entry.notes %}
+                    <div class="mt-1">
+                      <small class="text-light" title="{{ entry.notes }}">
+                        <i class="bi bi-chat-quote me-1"></i>{{ entry.notes[:50] }}{% if entry.notes|length > 50 %}…{% endif %}
+                      </small>
+                    </div>
+                  {% endif %}
+                </div>
+                <!-- Edit / Delete actions -->
+                <div class="text-end d-flex align-items-center ms-2">
+                  {% if entry.kind == 'light' %}
+                    <a href="{{ url_for('edit_session', session_id=entry.id) }}"
+                       class="btn btn-sm btn-outline-info me-1" title="Edit session">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    <form method="post" action="{{ url_for('delete_session', session_id=entry.id) }}"
+                          style="display:inline;"
+                          onsubmit="return confirm('Delete this session from {{ t.name }}?')">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete session">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  {% else %}
+                    <a href="{{ url_for('edit_calibration_capture', capture_id=entry.id) }}"
+                       class="btn btn-sm btn-outline-info me-1" title="Edit calibration">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    <form method="post" action="{{ url_for('delete_calibration_capture', capture_id=entry.id) }}"
+                          style="display:inline;"
+                          onsubmit="return confirm('Delete this calibration entry from {{ t.name }}?')">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete calibration">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+
+            <!-- Day subtotals per panel -->
+            <div class="mt-2 pt-2 border-top border-secondary">
+              <small>
+                {% if light_min_ns.total > 0 %}
+                  <span class="text-success">
+                    <i class="bi bi-clock me-1"></i><strong>Light: {{ light_min_ns.total | round(1) }} min</strong>
+                  </span>
+                {% endif %}
+                {% if cal_frames_ns.total > 0 %}
+                  <span class="text-info {% if light_min_ns.total > 0 %}ms-3{% endif %}">
+                    <strong>Calibration: {{ cal_frames_ns.total }} frames</strong>
+                  </span>
+                {% endif %}
+              </small>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="alert alert-secondary">
+    <i class="bi bi-journal-x me-2"></i>No imaging sessions logged for any panel in this mosaic yet.
+  </div>
+{% endif %}
+
+{% endblock %}

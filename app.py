@@ -58,7 +58,7 @@ from config.flask_process import (
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.7.0"
+APP_VERSION = "2.7.3"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -2882,7 +2882,57 @@ def update_mosaic_notes(group_id):
     return jsonify({"ok": True, "notes": group.notes})
 
 
-@app.route("/imaging-logs")
+@app.route("/mosaic/<int:group_id>/log")
+def mosaic_log(group_id):
+    """Aggregated imaging & calibration log for all panels in a mosaic group."""
+    group = MosaicGroup.query.get_or_404(group_id)
+
+    panels = (
+        Target.query
+        .filter_by(mosaic_group_id=group_id)
+        .order_by(
+            Target.mosaic_panel_number.is_(None),
+            Target.mosaic_panel_number,
+            Target.name,
+        )
+        .all()
+    )
+    panel_ids = {t.id for t in panels}
+
+    sessions = (
+        ImagingSession.query
+        .filter(ImagingSession.target_id.in_(panel_ids))
+        .order_by(ImagingSession.date.desc(), ImagingSession.id.desc())
+        .all()
+    ) if panel_ids else []
+
+    captures = (
+        CalibrationCapture.query
+        .filter(CalibrationCapture.target_id.in_(panel_ids))
+        .order_by(CalibrationCapture.date.desc(), CalibrationCapture.id.desc())
+        .all()
+    ) if panel_ids else []
+
+    grouped_log_days = build_global_imaging_log_days(sessions, captures)
+
+    total_light_min = sum(
+        s.sub_exposure_seconds * s.sub_count / 60.0 for s in sessions
+    )
+    stats = {
+        "imaging_days": len(grouped_log_days),
+        "total_panels": len(panels),
+        "total_sessions": len(sessions),
+        "total_calibration_captures": len(captures),
+        "total_light_min": round(total_light_min, 1),
+    }
+
+    return render_template(
+        "mosaic_log.html",
+        group=group,
+        grouped_log_days=grouped_log_days,
+        stats=stats,
+    )
+
 def imaging_logs():
     """Display light sessions and calibration captures grouped by date."""
     sessions = (

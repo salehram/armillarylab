@@ -114,6 +114,22 @@
           </span>
       {% endif %}
     </div>
+    {% if target.mosaic_group %}
+      <div class="mt-1">
+        <a href="{{ url_for('mosaic_detail', group_id=target.mosaic_group.id) }}"
+           class="badge text-decoration-none"
+           style="background-color:#3a6fd8; font-size:0.75rem;"
+           title="View mosaic group: {{ target.mosaic_group.name }}">
+          <i class="bi bi-grid-3x3-gap me-1"></i>
+          {% if target.mosaic_panel_number %}P{{ target.mosaic_panel_number }} · {% endif %}{{ target.mosaic_group.name }}
+        </a>
+        {% if target.mosaic_group.panel_count_goal %}
+          <small class="text-muted ms-1">
+            (panel {{ target.mosaic_panel_number or '?' }} of {{ target.mosaic_group.panel_count_goal }})
+          </small>
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
   <div class="d-flex gap-2">
     {% if not target.is_archived %}

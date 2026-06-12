@@ -28,7 +28,7 @@ from nina_integration import (
     build_nina_sequences_v2,
     ra_dec_to_nina_coords,
 )
-from time_utils import register_time_filters, format_hms, parse_hms, hms_to_minutes
+from time_utils import register_time_filters, format_hms, parse_hms, hms_to_minutes, minutes_to_hms
 from calibration_utils import (
     get_calibration_payload,
     aggregate_calibration_for_export,
@@ -1142,6 +1142,8 @@ def _build_mosaic_index_summaries():
             "total_panels": active_panels + completed_panels,
             "total_done": round(total_done, 1),
             "total_planned": round(total_planned, 1),
+            "total_done_hms": minutes_to_hms(total_done),
+            "total_planned_hms": minutes_to_hms(total_planned),
             "completion_pct": completion_pct,
         })
     return result
@@ -2655,18 +2657,7 @@ def api_target_calibration(target_id):
 @app.route("/mosaics")
 def mosaic_list():
     """List all mosaic groups with aggregated stats."""
-    groups = MosaicGroup.query.order_by(MosaicGroup.name).all()
-    summaries = []
-    for g in groups:
-        total = len(g.targets)
-        active = sum(1 for t in g.targets if not t.is_archived)
-        archived = sum(1 for t in g.targets if t.is_archived)
-        summaries.append({
-            "group": g,
-            "total_panels": total,
-            "active_panels": active,
-            "completed_panels": archived,
-        })
+    summaries = _build_mosaic_index_summaries()
     return render_template("mosaic_list.html", summaries=summaries)
 
 

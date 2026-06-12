@@ -109,6 +109,33 @@
             {{ group.panel_count_goal - total }} panel(s) not yet created
           </div>
         {% endif %}
+        {% if channel_totals %}
+          {%- set ns = namespace(grand_done=0.0, grand_planned=0.0) -%}
+          {%- for ch in channel_totals -%}
+            {%- set ns.grand_done = ns.grand_done + ch.done -%}
+            {%- set ns.grand_planned = ns.grand_planned + ch.planned -%}
+          {%- endfor -%}
+          <hr class="border-secondary my-2">
+          <div class="small text-muted mb-1">Total Time (all panels)</div>
+          {%- set ns_rem = [ns.grand_planned - ns.grand_done, 0.0]|max -%}
+          <div class="d-flex flex-column gap-1">
+            <div>
+              <span class="text-success me-1"><i class="bi bi-check2"></i> Completed:</span>
+              <span class="fw-semibold">{{ to_hms(ns.grand_done) }}</span>
+              <span class="text-muted small">({{ ns.grand_done | round(1) }} min)</span>
+            </div>
+            <div>
+              <span class="text-warning me-1"><i class="bi bi-hourglass-split"></i> Remaining:</span>
+              <span class="fw-semibold">{{ to_hms(ns_rem) }}</span>
+              <span class="text-muted small">({{ ns_rem | round(1) }} min)</span>
+            </div>
+            <div>
+              <span class="text-info me-1"><i class="bi bi-clock"></i> Planned:</span>
+              <span class="fw-semibold">{{ to_hms(ns.grand_planned) }}</span>
+              <span class="text-muted small">({{ ns.grand_planned | round(1) }} min)</span>
+            </div>
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -117,6 +144,12 @@
       <div class="card-body">
         <div class="small text-muted mb-2">Channel Progress Across All Active Panels</div>
         {% if channel_totals %}
+          {%- set ns2 = namespace(grand_done=0.0, grand_planned=0.0, grand_remaining=0.0) -%}
+          {%- for ch in channel_totals -%}
+            {%- set ns2.grand_done = ns2.grand_done + ch.done -%}
+            {%- set ns2.grand_planned = ns2.grand_planned + ch.planned -%}
+            {%- set ns2.grand_remaining = ns2.grand_remaining + ch.remaining -%}
+          {%- endfor -%}
           <div class="table-responsive">
             <table class="table table-sm table-dark mb-0">
               <thead>
@@ -150,6 +183,31 @@
                   </tr>
                 {% endfor %}
               </tbody>
+              <tfoot>
+                <tr class="fw-semibold" style="border-top: 2px solid rgba(255,255,255,0.2);">
+                  <td class="text-white-50 small">TOTAL</td>
+                  <td class="text-success">
+                    {{ ns2.grand_done | round(1) }} min
+                    <small class="text-muted">({{ to_hms(ns2.grand_done) }})</small>
+                  </td>
+                  <td class="text-info">
+                    {{ ns2.grand_planned | round(1) }} min
+                    <small class="text-muted">({{ to_hms(ns2.grand_planned) }})</small>
+                  </td>
+                  <td class="text-warning">
+                    {{ ns2.grand_remaining | round(1) }} min
+                    <small class="text-muted">({{ to_hms(ns2.grand_remaining) }})</small>
+                  </td>
+                  <td>
+                    {%- set grand_pct = ((ns2.grand_done / ns2.grand_planned * 100) if ns2.grand_planned > 0 else 0) | round(1) -%}
+                    <div class="progress" style="height: 8px;">
+                      <div class="progress-bar {% if grand_pct >= 100 %}bg-success{% elif grand_pct >= 50 %}bg-info{% else %}bg-warning{% endif %}"
+                           style="width: {{ [grand_pct, 100]|min }}%;"></div>
+                    </div>
+                    <small style="color:rgba(255,255,255,0.7)">{{ grand_pct }}%</small>
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         {% else %}

@@ -151,6 +151,25 @@
       .cp-columns { flex-direction: column; gap: 8px; }
       .cp-col-divider { width: auto; height: 1px; }
     }
+
+    /*
+     * GLOBAL CONTRAST FIX — The entire app uses a dark theme (body.bg-dark).
+     * Bootstrap's default semantic colors are designed for white backgrounds and become
+     * near-invisible on dark/secondary card backgrounds. Lift them to readable light variants.
+     */
+    body.bg-dark .text-muted    { color: rgba(255, 255, 255, 0.55) !important; }
+    body.bg-dark .text-success  { color: #6ee097 !important; }  /* dark green → bright green */
+    body.bg-dark .text-info     { color: #69cef5 !important; }  /* teal → light sky blue */
+    body.bg-dark .text-warning  { color: #f8c85a !important; }  /* amber → warm yellow */
+    body.bg-dark .text-danger   { color: #f47c7c !important; }  /* red → soft coral */
+    /* Restore original colors inside light-background contexts (table-success, etc.) */
+    body.bg-dark .table-success .text-muted,
+    body.bg-dark .bg-light .text-muted,
+    body.bg-dark .bg-white .text-muted   { color: #6c757d !important; }
+    body.bg-dark .table-success .text-success { color: #146c43 !important; }
+    body.bg-dark .table-success .text-warning { color: #856404 !important; }
+    body.bg-dark .table-success .text-danger  { color: #842029 !important; }
+    body.bg-dark .table-success .text-info    { color: #087990 !important; }
   </style>
 </head>
 <body class="bg-dark text-light">

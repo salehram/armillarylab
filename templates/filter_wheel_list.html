@@ -19,7 +19,7 @@
 </p>
 
 {% for wheel in wheels %}
-<div class="card mb-4 {% if wheel.is_active %}border-success{% endif %}">
+<div class="card bg-secondary text-light mb-4 {% if wheel.is_active %}border-success border-2{% endif %}">
   <div class="card-header d-flex justify-content-between align-items-center">
     <div>
       <h5 class="mb-0">
@@ -38,7 +38,7 @@
           </button>
         </form>
       {% endif %}
-      <a href="{{ url_for('edit_filter_wheel', wheel_id=wheel.id) }}" class="btn btn-sm btn-outline-secondary">
+      <a href="{{ url_for('edit_filter_wheel', wheel_id=wheel.id) }}" class="btn btn-sm btn-outline-light">
         <i class="bi bi-pencil"></i> Edit
       </a>
       {% if not wheel.is_active %}
@@ -62,7 +62,7 @@
     
     <!-- Slot Configuration Table -->
     <div class="table-responsive">
-      <table class="table table-sm table-hover mb-0">
+      <table class="table table-sm table-dark table-hover mb-0">
         <thead>
           <tr>
             <th style="width: 60px;">Position</th>

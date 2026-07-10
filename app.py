@@ -2505,8 +2505,33 @@ def log_calibration_capture(target_id):
         notes=request.form.get("notes"),
     )
     db.session.add(capture)
-    db.session.commit()
-    flash("Calibration capture logged.", "success")
+
+    also_log_counterpart = request.form.get("also_log_counterpart") == "1"
+    if also_log_counterpart and frame_type in ("flat", "dark_flat"):
+        counterpart_type = "dark_flat" if frame_type == "flat" else "flat"
+        counterpart = CalibrationCapture(
+            target_id=target.id,
+            date=capture_date,
+            frame_type=counterpart_type,
+            channel=channel,
+            sub_exposure_seconds=None,
+            checkpoint=checkpoint,
+            frame_count=frame_count,
+            notes=request.form.get("notes"),
+        )
+        db.session.add(counterpart)
+        db.session.commit()
+        main_label = "flats" if frame_type == "flat" else "dark flats"
+        counter_label = "dark flats" if frame_type == "flat" else "flats"
+        flash(
+            f"Logged {frame_count} {main_label} and {frame_count} {counter_label}"
+            + (f" for {channel}" if channel else "") + ".",
+            "success",
+        )
+    else:
+        db.session.commit()
+        flash("Calibration capture logged.", "success")
+
     return redirect(url_for("target_detail", target_id=target.id))
 
 

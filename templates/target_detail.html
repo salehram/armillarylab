@@ -210,6 +210,32 @@
   </div>
 </div>
 
+<!-- Calibration Counterpart Modal -->
+<div class="modal fade" id="calCounterpartModal" tabindex="-1" aria-labelledby="calCounterpartModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header">
+        <h5 class="modal-title" id="calCounterpartModalLabel">
+          <i class="bi bi-layers me-2"></i>Also log counterpart frames?
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="cal-counterpart-message" class="mb-0"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-outline-primary" id="cal-counterpart-only">
+          Log <span id="cal-counterpart-main-label"></span> only
+        </button>
+        <button type="button" class="btn btn-primary" id="cal-counterpart-both">
+          <i class="bi bi-plus-circle me-1"></i>Log both
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% if target.is_archived and target.completion_notes %}
 <!-- Completion Notes Card -->
 <div class="alert alert-success mb-3">
@@ -802,6 +828,7 @@
               <input class="form-control form-control-sm" name="notes" placeholder="Optional">
             </div>
           </div>
+          <input type="hidden" name="also_log_counterpart" id="cal_also_counterpart" value="0">
           <button type="submit" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-circle me-1"></i>Log Calibration
           </button>
@@ -2765,6 +2792,55 @@ document.addEventListener("DOMContentLoaded", function () {
       console.warn('Calibration bootstrap parse failed', e);
     }
   }
+
+  // Counterpart modal: ask to log dark flats when logging flats, and vice versa
+  const calMainForm = document.getElementById('main-calibration-form');
+  const calAlsoCounterpart = document.getElementById('cal_also_counterpart');
+  const calCounterpartModalEl = document.getElementById('calCounterpartModal');
+  const calCounterpartMsg = document.getElementById('cal-counterpart-message');
+  const calCounterpartMainLabel = document.getElementById('cal-counterpart-main-label');
+  const calCounterpartBothBtn = document.getElementById('cal-counterpart-both');
+  const calCounterpartOnlyBtn = document.getElementById('cal-counterpart-only');
+  let _bsCounterpartModal = null;
+  if (calCounterpartModalEl && typeof bootstrap !== 'undefined') {
+    _bsCounterpartModal = new bootstrap.Modal(calCounterpartModalEl);
+  }
+  if (calMainForm) {
+    calMainForm.addEventListener('submit', function(ev) {
+      if (!calLogType) return;
+      const ft = calLogType.value;
+      if (ft !== 'flat' && ft !== 'dark_flat') return;
+      if (calAlsoCounterpart && calAlsoCounterpart.value === '1') return; // already decided
+      ev.preventDefault();
+      const count = calLogCount ? (calLogCount.value || '?') : '?';
+      const channel = calLogChannel ? (calLogChannel.value || '') : '';
+      const mainLabel = ft === 'flat' ? 'flats' : 'dark flats';
+      const counterLabel = ft === 'flat' ? 'dark flats' : 'flats';
+      if (calCounterpartMsg) {
+        calCounterpartMsg.innerHTML =
+          'You\'re logging <strong>' + escHtml(count) + ' ' + escHtml(mainLabel) + '</strong>' +
+          (channel ? ' for channel <strong>' + escHtml(channel) + '</strong>' : '') + '.' +
+          '<br>Do you also want to log <strong>' + escHtml(count) + ' ' + escHtml(counterLabel) + '</strong>?';
+      }
+      if (calCounterpartMainLabel) calCounterpartMainLabel.textContent = mainLabel;
+      if (_bsCounterpartModal) _bsCounterpartModal.show();
+    });
+  }
+  if (calCounterpartBothBtn) {
+    calCounterpartBothBtn.addEventListener('click', function() {
+      if (calAlsoCounterpart) calAlsoCounterpart.value = '1';
+      if (_bsCounterpartModal) _bsCounterpartModal.hide();
+      if (calMainForm) calMainForm.submit();
+    });
+  }
+  if (calCounterpartOnlyBtn) {
+    calCounterpartOnlyBtn.addEventListener('click', function() {
+      if (calAlsoCounterpart) calAlsoCounterpart.value = '0';
+      if (_bsCounterpartModal) _bsCounterpartModal.hide();
+      if (calMainForm) calMainForm.submit();
+    });
+  }
+
   bindCalibrationInteractions();
 });
 

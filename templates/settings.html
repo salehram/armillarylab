@@ -64,6 +64,22 @@
               <div class="form-text">Cloud cover above this threshold triggers a go/skip warning in Night Conditions</div>
             </div>
           </div>
+          <div class="row mt-3">
+            <div class="col-md-4">
+              <label for="default_sensor_gain" class="form-label">Default Sensor Gain</label>
+              <input type="number" class="form-control" id="default_sensor_gain" name="default_sensor_gain"
+                     min="0" max="65535" placeholder="e.g. 100"
+                     value="{{ config.default_sensor_gain if config.default_sensor_gain is not none else '' }}">
+              <div class="form-text">Pre-filled in session log forms; leave blank for no default</div>
+            </div>
+            <div class="col-md-4">
+              <label for="default_sensor_temp" class="form-label">Default Sensor Temp (°C)</label>
+              <input type="number" class="form-control" id="default_sensor_temp" name="default_sensor_temp"
+                     step="0.5" min="-274" max="60" placeholder="e.g. -10"
+                     value="{{ config.default_sensor_temp if config.default_sensor_temp is not none else '' }}">
+              <div class="form-text">Pre-filled in session log forms; leave blank for no default</div>
+            </div>
+          </div>
         </div>
       </div>
 

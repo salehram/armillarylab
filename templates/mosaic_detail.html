@@ -421,6 +421,16 @@
     {% endif %}{% endfor %}
   };
 
+  // Per-panel camera defaults (target default → global default → null)
+  const PANEL_CAMERA_DEFAULTS = {
+    {% for pd in panel_data %}{% if not pd.target.is_archived %}
+    {{ pd.target.id }}: {
+      gain: {{ pd.target.default_sensor_gain if pd.target.default_sensor_gain is not none else (global_config.default_sensor_gain if global_config.default_sensor_gain is not none else 'null') }},
+      temp: {{ pd.target.default_sensor_temp if pd.target.default_sensor_temp is not none else (global_config.default_sensor_temp if global_config.default_sensor_temp is not none else 'null') }}
+    },
+    {% endif %}{% endfor %}
+  };
+
   const panelSel   = document.getElementById('mosaic_panel_select');
   const channelSel = document.getElementById('mosaic_channel_select');
   const manualWrap = document.getElementById('mosaic_channel_manual_wrap');
@@ -432,6 +442,8 @@
   const submitBtn  = document.getElementById('mosaic_log_submit');
   const form       = document.getElementById('mosaic-log-form');
   const dateInp    = document.getElementById('mosaic_log_date');
+  const gainInp    = document.querySelector('input[name="gain"]');
+  const tempInp    = document.querySelector('input[name="sensor_cooling"]');
 
   // Default date to today
   const today = new Date();
@@ -447,6 +459,11 @@
       form.action          = '';
       return;
     }
+
+    // Pre-fill gain and temp from per-panel (or global) defaults
+    const cam = PANEL_CAMERA_DEFAULTS[targetId] || {};
+    gainInp.value = cam.gain != null ? cam.gain : '';
+    tempInp.value = cam.temp != null ? cam.temp : '';
 
     form.action = `/target/${targetId}/progress/add`;
     fields.style.display = '';

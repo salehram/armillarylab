@@ -659,12 +659,14 @@
             <div class="col-md-4">
               <label class="form-label">Gain <span class="text-muted small">(optional)</span></label>
               <input class="form-control" name="gain" type="number" min="0" max="65535"
-                     placeholder="e.g. 100">
+                     placeholder="e.g. 100"
+                     value="{{ target.default_sensor_gain if target.default_sensor_gain is not none else (global_config.default_sensor_gain if global_config.default_sensor_gain is not none else '') }}">
             </div>
             <div class="col-md-4">
               <label class="form-label">Camera Temp °C <span class="text-muted small">(actual)</span></label>
               <input class="form-control" name="sensor_cooling" type="number" step="0.5"
-                     min="-274" max="60" placeholder="e.g. -10">
+                     min="-274" max="60" placeholder="e.g. -10"
+                     value="{{ target.default_sensor_temp if target.default_sensor_temp is not none else (global_config.default_sensor_temp if global_config.default_sensor_temp is not none else '') }}">
             </div>
           </div>
 

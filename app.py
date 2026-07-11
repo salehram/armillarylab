@@ -166,6 +166,9 @@ def apply_additive_schema_migrations(log=print):
         ("resolver_enable_sesame", f"ALTER TABLE global_config ADD COLUMN resolver_enable_sesame BOOLEAN {bool_true}"),
         ("resolver_offline_mode",  f"ALTER TABLE global_config ADD COLUMN resolver_offline_mode BOOLEAN {bool_false}"),
         ("resolver_cache_ttl_days","ALTER TABLE global_config ADD COLUMN resolver_cache_ttl_days INTEGER DEFAULT 90"),
+        # Default camera settings
+        ("default_sensor_gain", "ALTER TABLE global_config ADD COLUMN default_sensor_gain INTEGER"),
+        ("default_sensor_temp", f"ALTER TABLE global_config ADD COLUMN default_sensor_temp {float_type}"),
     ):
         add_column_if_missing("global_config", col, ddl)
 
@@ -183,6 +186,9 @@ def apply_additive_schema_migrations(log=print):
         ("override_calibration_dark_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_dark_flats_per_channel INTEGER"),
         ("override_calibration_bias", "ALTER TABLE targets ADD COLUMN override_calibration_bias INTEGER"),
         ("override_calibration_two_point", "ALTER TABLE targets ADD COLUMN override_calibration_two_point BOOLEAN"),
+        # Per-target default camera settings
+        ("default_sensor_gain", "ALTER TABLE targets ADD COLUMN default_sensor_gain INTEGER"),
+        ("default_sensor_temp", f"ALTER TABLE targets ADD COLUMN default_sensor_temp {float_type}"),
     ):
         add_column_if_missing("targets", col, ddl)
 
@@ -491,6 +497,10 @@ class GlobalConfig(db.Model):
     resolver_offline_mode = db.Column(db.Boolean, default=False)
     resolver_cache_ttl_days = db.Column(db.Integer, default=90)
 
+    # Default camera settings (auto-filled in session log forms)
+    default_sensor_gain = db.Column(db.Integer, nullable=True)
+    default_sensor_temp = db.Column(db.Float, nullable=True)
+
     # Tracking
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -760,6 +770,10 @@ class Target(db.Model):
     override_calibration_dark_flats_per_channel = db.Column(db.Integer)
     override_calibration_bias = db.Column(db.Integer)
     override_calibration_two_point = db.Column(db.Boolean)
+
+    # Per-target default camera settings (NULL = use global config)
+    default_sensor_gain = db.Column(db.Integer, nullable=True)
+    default_sensor_temp = db.Column(db.Float, nullable=True)
 
     final_image_filename = db.Column(db.String(255))
 
@@ -1535,6 +1549,7 @@ def target_detail(target_id):
         imaging_log_days=imaging_log_days,
         latest_session_gain=latest_session_gain,
         latest_session_cooling=latest_session_cooling,
+        global_config=get_global_config(),
     )
 
 @app.post("/target/<int:target_id>/export_nina_v2")
@@ -2848,6 +2863,7 @@ def mosaic_detail(group_id):
         panel_data=panel_data,
         channel_totals=channel_totals,
         tonight_panel=tonight_panel,
+        global_config=get_global_config(),
     )
 
 
@@ -3276,6 +3292,12 @@ def global_settings():
         except Exception:
             pass
 
+        # Default camera settings
+        gain_raw = request.form.get("default_sensor_gain", "").strip()
+        config.default_sensor_gain = int(gain_raw) if gain_raw else None
+        temp_raw = request.form.get("default_sensor_temp", "").strip()
+        config.default_sensor_temp = float(temp_raw) if temp_raw else None
+
         config.updated_at = datetime.utcnow()
         
         try:
@@ -3517,6 +3539,12 @@ def target_settings(target_id):
         # Note: override_calibration_two_point column is retained but no longer
         # written from the UI (two-point nudge removed in v2.5.0). Column will
         # be dropped in v2.6.
+
+        # Per-target default camera settings
+        tgt_gain_raw = request.form.get("default_sensor_gain", "").strip()
+        target.default_sensor_gain = int(tgt_gain_raw) if tgt_gain_raw else None
+        tgt_temp_raw = request.form.get("default_sensor_temp", "").strip()
+        target.default_sensor_temp = float(tgt_temp_raw) if tgt_temp_raw else None
         
         try:
             db.session.commit()

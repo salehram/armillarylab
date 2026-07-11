@@ -77,6 +77,34 @@
         </div>
       </div>
 
+      <!-- Default Camera Settings -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Default Camera Settings</h5>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">Pre-filled when logging sessions for this target. Leave blank to use the global default.</p>
+          <div class="row">
+            <div class="col-md-6">
+              <label for="default_sensor_gain" class="form-label">Default Gain</label>
+              <input type="number" class="form-control" id="default_sensor_gain" name="default_sensor_gain"
+                     min="0" max="65535"
+                     value="{{ target.default_sensor_gain if target.default_sensor_gain is not none else '' }}"
+                     placeholder="Global: {{ global_config.default_sensor_gain if global_config.default_sensor_gain is not none else 'not set' }}">
+              <div class="form-text">Leave blank to fall back to global default</div>
+            </div>
+            <div class="col-md-6">
+              <label for="default_sensor_temp" class="form-label">Default Sensor Temp (°C)</label>
+              <input type="number" class="form-control" id="default_sensor_temp" name="default_sensor_temp"
+                     step="0.5" min="-274" max="60"
+                     value="{{ target.default_sensor_temp if target.default_sensor_temp is not none else '' }}"
+                     placeholder="Global: {{ global_config.default_sensor_temp if global_config.default_sensor_temp is not none else 'not set' }}">
+              <div class="form-text">Leave blank to fall back to global default</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">
           <i class="bi bi-floppy me-1"></i>Save Target Settings
@@ -89,7 +117,7 @@
   </div>
 
   <div class="col-md-4">
-    <div class="card">
+    <div class="card bg-dark text-light">
       <div class="card-header">
         <h5 class="mb-0">Current Effective Settings</h5>
       </div>
@@ -112,7 +140,7 @@
         {% endif %}
         </p>
 
-        <hr>
+        <hr class="border-secondary">
         <p><strong>Calibration tracking:</strong><br>
         {% if target.calibration_tracking_enabled %}
           <span class="badge bg-success">Enabled</span>
@@ -122,7 +150,7 @@
         </p>
         {% if target.calibration_tracking_enabled %}
         <p class="small mb-1"><strong>Effective counts:</strong></p>
-        <ul class="small text-muted">
+        <ul class="small text-light opacity-75">
           <li>Darks: {{ effective_calibration.darks }}</li>
           <li>Flats / channel: {{ effective_calibration.flats_per_channel }}</li>
           <li>Dark flats / channel: {{ effective_calibration.dark_flats_per_channel }}</li>
@@ -131,8 +159,36 @@
         </ul>
         {% endif %}
 
-        <hr>
-        <p class="small text-muted">
+        <hr class="border-secondary">
+        {% set eff_gain = target.default_sensor_gain if target.default_sensor_gain is not none else global_config.default_sensor_gain %}
+        {% set eff_temp = target.default_sensor_temp if target.default_sensor_temp is not none else global_config.default_sensor_temp %}
+        <p><strong>Session Gain default:</strong><br>
+          {% if eff_gain is not none %}
+            {{ eff_gain }}
+            {% if target.default_sensor_gain is not none %}
+              <span class="badge bg-warning ms-2">Target Override</span>
+            {% else %}
+              <span class="badge bg-secondary ms-2">Global Default</span>
+            {% endif %}
+          {% else %}
+            <span class="text-light opacity-50">Not set</span>
+          {% endif %}
+        </p>
+        <p><strong>Session Temp default:</strong><br>
+          {% if eff_temp is not none %}
+            {{ eff_temp }}°C
+            {% if target.default_sensor_temp is not none %}
+              <span class="badge bg-warning ms-2">Target Override</span>
+            {% else %}
+              <span class="badge bg-secondary ms-2">Global Default</span>
+            {% endif %}
+          {% else %}
+            <span class="text-light opacity-50">Not set</span>
+          {% endif %}
+        </p>
+
+        <hr class="border-secondary">
+        <p class="small text-light opacity-75">
           These settings affect window calculations and altitude charts for this specific target. 
           Global settings can be changed from the main settings page.
         </p>

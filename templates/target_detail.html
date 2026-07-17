@@ -607,9 +607,13 @@
         <form method="post" action="{{ url_for('add_progress', target_id=target.id) }}">
           <div class="row mb-2">
             <div class="col-md-6">
-              <label class="form-label">Date</label>
+              <label class="form-label">Date
+                {% if use_nina_date %}
+                  <span class="badge bg-info text-dark ms-1" title="Date shifted back 12 h — NINA convention">NINA date</span>
+                {% endif %}
+              </label>
               <input class="form-control" name="imaging_date" type="date" 
-                     value="{{ datetime.now().strftime('%Y-%m-%d') }}" required>
+                     value="{{ default_session_date }}" required>
             </div>
           </div>
           
@@ -769,9 +773,13 @@
         <form method="post" action="{{ url_for('log_calibration_capture', target_id=target.id) }}" id="main-calibration-form">
           <div class="row mb-2">
             <div class="col-md-4">
-              <label class="form-label">Date</label>
+              <label class="form-label">Date
+              {% if use_nina_date %}
+                <span class="badge bg-info text-dark ms-1" title="Date shifted back 12 h — NINA convention">NINA date</span>
+              {% endif %}
+            </label>
               <input class="form-control form-control-sm" type="date" name="imaging_date"
-                     value="{{ datetime.now().strftime('%Y-%m-%d') }}" required>
+                     value="{{ default_session_date }}" required>
             </div>
             <div class="col-md-4">
               <label class="form-label">Type</label>

@@ -353,8 +353,13 @@
           </select>
         </div>
         <div class="col-md-6">
-          <label class="form-label">Date</label>
-          <input class="form-control" name="imaging_date" id="mosaic_log_date" type="date" required>
+          <label class="form-label">Date
+            {% if use_nina_date %}
+              <span class="badge bg-info text-dark ms-1" title="Date shifted back 12 h — NINA convention">NINA date</span>
+            {% endif %}
+          </label>
+          <input class="form-control" name="imaging_date" id="mosaic_log_date" type="date"
+                 value="{{ default_session_date }}" required>
         </div>
       </div>
 
@@ -445,10 +450,12 @@
   const gainInp    = document.querySelector('input[name="gain"]');
   const tempInp    = document.querySelector('input[name="sensor_cooling"]');
 
-  // Default date to today
-  const today = new Date();
+  // Default date — uses NINA convention when enabled (pre-filled by server via value attribute)
   const pad = n => String(n).padStart(2, '0');
-  dateInp.value = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+  if (!dateInp.value) {
+    const today = new Date();
+    dateInp.value = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+  }
 
   panelSel.addEventListener('change', function () {
     const targetId = this.value;

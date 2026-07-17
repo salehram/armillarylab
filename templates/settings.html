@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+  /*
+   * On this page, form cards keep their default light background.
+   * base.html's global fix makes .text-muted white (for dark-card contexts),
+   * but that becomes invisible on white-bg cards and list-group items.
+   * Restore it to a readable dark gray for those light-background contexts.
+   */
+  .card:not([class*="bg-"]) .text-muted { color: rgba(33,37,41,.65) !important; }
+  .list-group-item .text-muted         { color: rgba(33,37,41,.65) !important; }
+</style>
 <div class="row">
   <div class="col-md-8">
     <h1>Global Settings</h1>
@@ -78,6 +88,19 @@
                      step="0.5" min="-274" max="60" placeholder="e.g. -10"
                      value="{{ config.default_sensor_temp if config.default_sensor_temp is not none else '' }}">
               <div class="form-text">Pre-filled in session log forms; leave blank for no default</div>
+            </div>
+          </div>
+          <div class="row mt-3">
+            <div class="col-md-8">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="use_nina_date"
+                       name="use_nina_date"
+                       {{ 'checked' if config.use_nina_date else '' }}>
+                <label class="form-check-label" for="use_nina_date">
+                  <strong>Use NINA date convention</strong> — shift default session date back 12 h
+                </label>
+              </div>
+              <div class="form-text">When enabled, the date field in new session and calibration logs defaults to 12 hours ago, matching how NINA names nightly image folders (e.g. a session at 01:00 AM will pre-fill as the previous day).</div>
             </div>
           </div>
         </div>
@@ -311,7 +334,7 @@
   </div>
 
   <div class="col-md-4">
-    <div class="card">
+    <div class="card bg-secondary text-light">
       <div class="card-header">
         <h5 class="mb-0">Configuration Info</h5>
       </div>
@@ -323,7 +346,7 @@
         <p><strong>Last Updated:</strong><br>
         {{ config.updated_at.strftime('%Y-%m-%d %H:%M UTC') if config.updated_at else 'Never' }}</p>
         
-        <hr>
+        <hr class="border-light opacity-25">
         <p class="small text-muted">
           These settings affect window calculations, altitude charts, and NINA exports for all targets. 
           Individual targets can override the pack-up time and minimum altitude settings.
@@ -331,7 +354,7 @@
       </div>
     </div>
 
-    <div class="card mt-3">
+    <div class="card mt-3 bg-secondary text-light">
       <div class="card-header">
         <h5 class="mb-0">CLI Commands</h5>
       </div>

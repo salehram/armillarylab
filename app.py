@@ -75,6 +75,34 @@ def inject_version():
         'datetime': datetime
     }
 
+@app.context_processor
+def inject_default_session_date():
+    """Provide default_session_date (YYYY-MM-DD string) to all templates.
+
+    When use_nina_date is enabled the date is shifted back 12 hours so that
+    sessions logged in the early-morning hours default to the previous
+    calendar date — matching NINA's nightly folder-naming convention.
+    Also exposes use_nina_date (bool) for conditional hints in templates.
+    """
+    from datetime import timedelta
+    try:
+        cfg = get_global_config()
+        tz = get_local_tz()
+        now_local = datetime.now(tz)
+        if cfg and cfg.use_nina_date:
+            default_dt = now_local - timedelta(hours=12)
+        else:
+            default_dt = now_local
+        return {
+            'default_session_date': default_dt.strftime('%Y-%m-%d'),
+            'use_nina_date': bool(cfg and cfg.use_nina_date),
+        }
+    except Exception:
+        return {
+            'default_session_date': datetime.now().strftime('%Y-%m-%d'),
+            'use_nina_date': False,
+        }
+
 # --- Database configuration with PostgreSQL support ----------------------
 flask_config, db_config = get_flask_config(BASE_DIR)
 app.config.update(flask_config)
@@ -169,6 +197,8 @@ def apply_additive_schema_migrations(log=print):
         # Default camera settings
         ("default_sensor_gain", "ALTER TABLE global_config ADD COLUMN default_sensor_gain INTEGER"),
         ("default_sensor_temp", f"ALTER TABLE global_config ADD COLUMN default_sensor_temp {float_type}"),
+        # Session logging behaviour
+        ("use_nina_date", f"ALTER TABLE global_config ADD COLUMN use_nina_date BOOLEAN {bool_false}"),
     ):
         add_column_if_missing("global_config", col, ddl)
 
@@ -500,6 +530,9 @@ class GlobalConfig(db.Model):
     # Default camera settings (auto-filled in session log forms)
     default_sensor_gain = db.Column(db.Integer, nullable=True)
     default_sensor_temp = db.Column(db.Float, nullable=True)
+
+    # Session logging behaviour
+    use_nina_date = db.Column(db.Boolean, default=False)
 
     # Tracking
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -3297,6 +3330,9 @@ def global_settings():
         config.default_sensor_gain = int(gain_raw) if gain_raw else None
         temp_raw = request.form.get("default_sensor_temp", "").strip()
         config.default_sensor_temp = float(temp_raw) if temp_raw else None
+
+        # Session logging behaviour
+        config.use_nina_date = bool(request.form.get("use_nina_date"))
 
         config.updated_at = datetime.utcnow()
         

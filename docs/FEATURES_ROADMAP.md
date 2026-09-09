@@ -979,6 +979,32 @@ Replaced the old single-click export button with a **modal dialog** (`#ninaExpor
 
 ---
 
+## 🟡 21. Database Parity Follow-ups (Pending)
+
+Carried over from the SQLite/PostgreSQL parity review. The main gaps (migration backup honesty, frozen session dates, PostgreSQL health gate, loud PostgreSQL test skips, `nullslast` on archived ordering) are done; these remain.
+
+### 21.1 Interactive fallback when `pg_dump` is unavailable
+
+`create_backup()` now raises instead of silently skipping, so `flask db migrate` aborts on a machine without the PostgreSQL client tools. That leaves a blunt choice between aborting and re-running with `--no-backup` (no safety net at all).
+
+#### Proposed
+- Catch the specific "pg_dump not found" refusal in the `flask db migrate` command
+- Re-prompt in place: *"No backup can be taken — continue anyway? [y/N]"*, defaulting to no
+- Keep the hard failure for non-interactive/scripted runs so CI never silently migrates unprotected
+
+### 21.2 `pg_dump` success path unverified
+
+The refusal branch is covered by tests, but the actual dump has never run — no PostgreSQL server or `psycopg2` in the dev environment. Needs one real run against `docker-compose.postgres.yml` before being trusted in production.
+
+### 21.3 `TargetPlan.created_at` ordering
+
+The "latest plan" lookup `order_by(TargetPlan.created_at.desc()).first()` appears in ~15 places. `created_at` is nullable, and PostgreSQL sorts NULLs *first* on DESC where SQLite sorts them last — so a plan with a NULL `created_at` would be selected as the newest on PostgreSQL only. Decide between `nullslast()` at each call site or a shared `latest_plan(target_id)` helper.
+
+### Status
+**🟡 Pending.**
+
+---
+
 # Next Recommended Focus
 **11. Session Recommendation Engine** - AI-driven session optimization  
 Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, enhanced custom filter system, Night Conditions, calibration frame tracking, and NINA V2 export), the next major enhancement is implementing an intelligent session recommendation engine. Note that weather integration and moon phase awareness are now partially delivered through the Night Conditions popup (feature 16), which provides real-time weather data, seeing conditions, and moon-aware channel suggestions. Calibration tracking (feature 17) covers flat/dark-flat workflow suggestions per channel. The remaining scope for this feature includes:

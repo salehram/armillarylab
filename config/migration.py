@@ -6,12 +6,15 @@ with validation, progress tracking, and rollback capabilities.
 """
 import json
 import logging
+import os
+import subprocess
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 from pathlib import Path
 import shutil
 
 from sqlalchemy import create_engine, MetaData, Table, select, insert, text, inspect, func
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -347,24 +350,72 @@ class DatabaseMigrator:
         return count_validation
     
     def create_backup(self, db_config) -> Optional[str]:
-        """Create backup of database before migration."""
+        """Back up the target database before migration. Raises if it cannot."""
         if db_config.db_type == 'sqlite':
-            # For SQLite, copy the database file
             source_path = db_config.connection_string.replace('sqlite:///', '')
             backup_path = f"{source_path}.backup_{self.migration_id}"
-            
+
+            if not Path(source_path).exists():
+                logger.info("SQLite target %s does not exist yet; nothing to back up.", source_path)
+                return None
             try:
                 shutil.copy2(source_path, backup_path)
                 logger.info(f"SQLite backup created: {backup_path}")
                 return backup_path
             except Exception as e:
-                logger.error(f"Failed to create SQLite backup: {str(e)}")
-                return None
-        
-        else:
-            # For PostgreSQL, would need pg_dump (not implemented in this version)
-            logger.warning("PostgreSQL backup not implemented")
-            return None
+                raise RuntimeError(
+                    f"Failed to back up SQLite target {source_path}: {e}. "
+                    f"Migration aborted so the target is left untouched."
+                ) from e
+
+        return self._create_postgresql_backup(db_config)
+
+    def _create_postgresql_backup(self, db_config) -> str:
+        """Dump the PostgreSQL target with pg_dump. Refuses rather than skipping."""
+        pg_dump = shutil.which('pg_dump')
+        if not pg_dump:
+            raise RuntimeError(
+                "pg_dump was not found on PATH, so the PostgreSQL target cannot be "
+                "backed up before migration. Install the PostgreSQL client tools, or "
+                "take a platform-level snapshot yourself and re-run the migration with "
+                "backup_target=False to acknowledge that."
+            )
+
+        url = make_url(db_config.connection_string)
+        if not url.database:
+            raise RuntimeError(
+                "PostgreSQL connection string has no database name, so pg_dump cannot "
+                "run; migration aborted."
+            )
+        base_dir = Path(getattr(db_config, 'base_dir', None) or '.')
+        backup_path = base_dir / f"{url.database}_backup_{self.migration_id}.dump"
+
+        cmd = [pg_dump, '--format=custom', '--file', str(backup_path)]
+        if url.host:
+            cmd += ['--host', url.host]
+        if url.port:
+            cmd += ['--port', str(url.port)]
+        if url.username:
+            cmd += ['--username', url.username]
+        cmd.append(url.database)
+
+        env = os.environ.copy()
+        if url.password:
+            env['PGPASSWORD'] = url.password  # never passed on the command line
+
+        try:
+            result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=3600)
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError("pg_dump timed out; migration aborted.") from e
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"pg_dump failed (exit {result.returncode}); migration aborted. "
+                f"{result.stderr.strip()}"
+            )
+
+        logger.info(f"PostgreSQL backup created: {backup_path}")
+        return str(backup_path)
 
 
 def migrate_database(source_config, target_config, **kwargs) -> Dict[str, Any]:

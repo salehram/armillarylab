@@ -104,3 +104,18 @@ def requires_postgresql(func):
         not os.getenv('TEST_DATABASE_URL'),
         reason="PostgreSQL test database not configured"
     )(func)
+
+
+def pytest_terminal_summary(terminalreporter):
+    """Make it obvious that a green run says nothing about PostgreSQL."""
+    if os.getenv('TEST_DATABASE_URL'):
+        return
+    terminalreporter.write_sep("=", "PostgreSQL parity NOT covered", yellow=True, bold=True)
+    terminalreporter.write_line(
+        "TEST_DATABASE_URL is unset, so every test above ran against in-memory SQLite "
+        "only.\nPostgreSQL-specific behaviour is UNVERIFIED by this run. To cover it:\n"
+        "  docker-compose -f docker-compose.postgres.yml up -d postgres\n"
+        "  $env:TEST_DATABASE_URL = "
+        "'postgresql://armillarylab:armillarylab@localhost:5432/armillarylab'\n"
+        "  python run_tests.py"
+    )

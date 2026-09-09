@@ -75,6 +75,19 @@ def inject_version():
         'datetime': datetime
     }
 
+def current_session_date():
+    """Today's logging date, shifted back 12h when NINA-style night dating is on."""
+    from datetime import timedelta
+    try:
+        cfg = get_global_config()
+        now_local = datetime.now(get_local_tz())
+        if cfg and cfg.use_nina_date:
+            return (now_local - timedelta(hours=12)).date()
+        return now_local.date()
+    except Exception:
+        return datetime.now().date()
+
+
 @app.context_processor
 def inject_default_session_date():
     """Provide default_session_date (YYYY-MM-DD string) to all templates.
@@ -84,17 +97,10 @@ def inject_default_session_date():
     calendar date — matching NINA's nightly folder-naming convention.
     Also exposes use_nina_date (bool) for conditional hints in templates.
     """
-    from datetime import timedelta
     try:
         cfg = get_global_config()
-        tz = get_local_tz()
-        now_local = datetime.now(tz)
-        if cfg and cfg.use_nina_date:
-            default_dt = now_local - timedelta(hours=12)
-        else:
-            default_dt = now_local
         return {
-            'default_session_date': default_dt.strftime('%Y-%m-%d'),
+            'default_session_date': current_session_date().strftime('%Y-%m-%d'),
             'use_nina_date': bool(cfg and cfg.use_nina_date),
         }
     except Exception:
@@ -395,6 +401,24 @@ def _check_sqlite_health() -> tuple[bool, str]:
     return ok, msg
 
 
+def _check_postgresql_health() -> tuple[bool, str]:
+    """Verify the PostgreSQL server is reachable before serving a request."""
+    if db_config.db_type != "postgresql" or app.config.get("TESTING"):
+        return True, ""
+    from sqlalchemy import text
+
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True, ""
+    except Exception as exc:
+        app.logger.error("PostgreSQL unavailable: %s", exc)
+        return False, (
+            "Cannot reach the PostgreSQL server. Check that the database is running "
+            "and that DATABASE_URL is correct."
+        )
+
+
 @app.before_request
 def _ensure_db_before_request():
     """Run startup schema sync and block requests when DB is unavailable."""
@@ -402,7 +426,12 @@ def _ensure_db_before_request():
         return
     if db_config.db_type == "postgresql":
         _ensure_pg_schema_ready()
-        return
+        ok, msg = _check_postgresql_health()
+        if ok:
+            return
+        if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+            return jsonify({"error": "Database unavailable", "detail": msg}), 503
+        return render_template("db_unavailable.html", message=msg), 503
     if not should_open_live_sqlite():
         return
     ensure_sqlite_serving_ready()
@@ -869,7 +898,7 @@ class ImagingSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     target_id = db.Column(db.Integer, db.ForeignKey("targets.id"), nullable=False)
 
-    date = db.Column(db.Date, nullable=False, default=datetime.now().date)
+    date = db.Column(db.Date, nullable=False, default=lambda: datetime.now().date())
     channel = db.Column(db.String(16), nullable=False)  # H, O, S, L, R, G, B
     sub_exposure_seconds = db.Column(db.Integer, nullable=False)
     sub_count = db.Column(db.Integer, nullable=False)
@@ -888,7 +917,7 @@ class CalibrationCapture(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     target_id = db.Column(db.Integer, db.ForeignKey("targets.id"), nullable=False)
-    date = db.Column(db.Date, nullable=False, default=datetime.now().date)
+    date = db.Column(db.Date, nullable=False, default=lambda: datetime.now().date())
     frame_type = db.Column(db.String(16), nullable=False)  # dark, flat, dark_flat, bias
     channel = db.Column(db.String(16))  # required for flat/dark_flat
     sub_exposure_seconds = db.Column(db.Float)  # required for dark — matches plan light sub-exp
@@ -1205,7 +1234,9 @@ def index():
         (Target.is_archived == False) | (Target.is_archived == None)
     ).order_by(Target.name).all()
     
-    archived_targets = Target.query.filter(Target.is_archived == True).order_by(Target.archived_at.desc()).all()
+    archived_targets = Target.query.filter(Target.is_archived == True).order_by(
+        db.nullslast(Target.archived_at.desc())
+    ).all()
 
     # Observer location from global config
     lat, lon, elev = get_observer_location()
@@ -2326,7 +2357,7 @@ def add_progress(target_id):
         from datetime import datetime as dt
         imaging_date = dt.strptime(imaging_date_str, '%Y-%m-%d').date()
     else:
-        imaging_date = datetime.now().date()
+        imaging_date = current_session_date()
 
     session = ImagingSession(
         target_id=target.id,
@@ -2540,7 +2571,7 @@ def log_calibration_capture(target_id):
         from datetime import datetime as dt
         capture_date = dt.strptime(imaging_date_str, "%Y-%m-%d").date()
     else:
-        capture_date = datetime.now().date()
+        capture_date = current_session_date()
 
     capture = CalibrationCapture(
         target_id=target.id,

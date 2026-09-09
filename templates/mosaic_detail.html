@@ -18,6 +18,8 @@
   .table-dark tr.table-success td .text-muted,
   .table-dark tr.table-success td small.text-muted { color: #555 !important; }
   .table-dark tr.table-success td .text-warning { color: #856404 !important; }
+  .panel-hms { font-size: 0.72rem; line-height: 1.1; white-space: nowrap; display: none; }
+  #panelsCard.show-hms .panel-hms { display: block; }
   .table-dark tr.table-success td .text-success  { color: #146c43 !important; }
 </style>
 
@@ -219,12 +221,20 @@
 </div>
 
 <!-- Panel Grid -->
-<div class="card bg-secondary text-light">
+<div class="card bg-secondary text-light" id="panelsCard">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span><i class="bi bi-grid me-2"></i>Panels</span>
-    <a href="{{ url_for('new_target') }}" class="btn btn-outline-light btn-sm">
-      <i class="bi bi-plus-circle me-1"></i>Add Panel
-    </a>
+    <div class="d-flex align-items-center gap-3">
+      {% if panel_data %}
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="togglePanelHms">
+          <label class="form-check-label small" for="togglePanelHms">Show hours</label>
+        </div>
+      {% endif %}
+      <a href="{{ url_for('new_target') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-plus-circle me-1"></i>Add Panel
+      </a>
+    </div>
   </div>
   <div class="card-body p-0">
     {% if panel_data %}
@@ -284,7 +294,10 @@
                   </div>
                   <small style="color:rgba(255,255,255,0.7)">{{ pd.completion_pct }}%</small>
                 </td>
-                <td class="text-light small">{{ pd.done_total }} / {{ pd.planned_total }} min</td>
+                <td class="text-light small">
+                  {{ pd.done_total }} / {{ pd.planned_total }} min
+                  <div class="text-muted panel-hms">{{ to_hms(pd.done_total) }} / {{ to_hms(pd.planned_total) }}</div>
+                </td>
                 {% if channel_totals %}
                   {% for ch in channel_totals %}
                     <td class="text-center small">
@@ -295,6 +308,7 @@
                           {{ done }}m
                         </span>
                         <span style="color:rgba(255,255,255,0.5)">/{{ planned }}m</span>
+                        <div class="text-muted panel-hms">{{ to_hms(done) }} / {{ to_hms(planned) }}</div>
                       {% else %}
                         <span style="color:rgba(255,255,255,0.25)">—</span>
                       {% endif %}
@@ -326,6 +340,24 @@
     {% endif %}
   </div>
 </div>
+
+{% if panel_data %}
+<script>
+(function () {
+  const card = document.getElementById('panelsCard');
+  const box = document.getElementById('togglePanelHms');
+  if (!card || !box) return;
+  const KEY = 'mosaicPanelShowHms';
+  const on = localStorage.getItem(KEY) === '1';
+  box.checked = on;
+  card.classList.toggle('show-hms', on);
+  box.addEventListener('change', function () {
+    card.classList.toggle('show-hms', box.checked);
+    localStorage.setItem(KEY, box.checked ? '1' : '0');
+  });
+})();
+</script>
+{% endif %}
 
 <!-- Quick Session Log -->
 <div class="card bg-secondary text-light mt-4">

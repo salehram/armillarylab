@@ -12,7 +12,12 @@ from pathlib import Path
 from flask import current_app
 from flask.cli import with_appcontext
 from config.database import get_database_config, DatabaseConfig
-from config.migration import migrate_database
+from config.migration import (
+    PgDumpUnavailableError,
+    create_postgresql_backup,
+    migrate_database,
+)
+import sys
 
 
 @click.group()
@@ -300,60 +305,49 @@ def migrate(to, target_url, backup, validate, update_env):
         return
     
     try:
-        # Step 2: Initialize target database schema
+        # Step 2: Initialize target database schema (create_all only adds missing tables)
         click.echo(f"\nStep 2: Initializing {to} database schema...")
-        from sqlalchemy import create_engine, inspect
-        
+        from sqlalchemy import create_engine
+
         target_engine = create_engine(target_config.connection_string, **target_config.get_engine_args())
-        inspector = inspect(target_engine)
-        existing_tables = inspector.get_table_names()
+        db.metadata.create_all(target_engine)
         target_engine.dispose()
-        
-        required_tables = ['targets', 'target_plans', 'imaging_sessions']
-        missing_tables = [t for t in required_tables if t not in existing_tables]
-        
-        if missing_tables:
-            click.echo(f"  Creating schema in {to} database...")
-            # Temporarily switch app to target database to create schema
-            from sqlalchemy import create_engine
-            target_engine = create_engine(target_config.connection_string, **target_config.get_engine_args())
-            db.metadata.create_all(target_engine)
-            target_engine.dispose()
-            click.echo("  ✓ Schema created")
-        else:
-            click.echo("  ✓ Schema already exists")
-        
-        # Step 3: Clear target database data
-        click.echo(f"\nStep 3: Clearing existing data in {to} database...")
+        click.echo("  ✓ Schema ready")
+
+        # Step 3: Back up the target before anything is deleted from it
+        if backup:
+            click.echo(f"\nStep 3: Backing up target {to} database...")
+            try:
+                backup_path = _backup_database(target_config)
+                if backup_path:
+                    click.echo(f"  ✓ Backup created: {backup_path}")
+            except PgDumpUnavailableError as e:
+                click.echo(f"  ⚠ {e}")
+                if not sys.stdin.isatty() or not click.confirm(
+                    "No backup can be taken — continue anyway?", default=False
+                ):
+                    raise click.ClickException("Migration aborted: no backup of the target was taken.")
+
+        # Step 4: Clear target database data (children first)
+        click.echo(f"\nStep 4: Clearing existing data in {to} database...")
         target_engine = create_engine(target_config.connection_string, **target_config.get_engine_args())
-        
+
         from sqlalchemy.orm import Session
         with Session(target_engine) as session:
-            # Delete in reverse dependency order using raw SQL for reliability
-            tables_to_clear = [
-                'calibration_checkpoint_skips', 'calibration_captures',
-                'imaging_sessions', 'target_plans', 'targets',
-                'filter_wheel_slots', 'filter_wheels',
-                'palette_filters', 'object_mappings',
-                'filters', 'palettes', 'target_types', 'global_config'
-            ]
-            for table_name in tables_to_clear:
-                try:
-                    session.execute(db.text(f'DELETE FROM {table_name}'))
-                except Exception:
-                    pass  # Table might not exist
+            for table in reversed(db.metadata.sorted_tables):
+                session.execute(table.delete())
             session.commit()
         target_engine.dispose()
         click.echo("  ✓ Target database cleared")
-        
-        # Step 4: Perform migration
-        click.echo(f"\nStep 4: Migrating data from {source_config.db_type} to {to}...")
+
+        # Step 5: Perform migration
+        click.echo(f"\nStep 5: Migrating data from {source_config.db_type} to {to}...")
         result = migrate_database(
             source_config, 
             target_config,
             validate_before=validate,
             validate_after=validate,
-            backup_target=backup
+            backup_target=False
         )
         
         # Display results
@@ -380,9 +374,9 @@ def migrate(to, target_url, backup, validate, update_env):
         if result['status'] == 'completed':
             click.echo("\n✓ Migration completed successfully")
             
-            # Step 5: Update .env file
+            # Step 6: Update .env file
             if update_env:
-                click.echo(f"\nStep 5: Updating .env file to use {to}...")
+                click.echo(f"\nStep 6: Updating .env file to use {to}...")
                 try:
                     update_env_file(to, target_url)
                     click.echo(f"  ✓ .env file updated")
@@ -411,30 +405,34 @@ def migrate(to, target_url, backup, validate, update_env):
             os.environ['DATABASE_URL'] = original_db_url
 
 
+def _backup_database(db_config):
+    """Back up SQLite (file copy) or PostgreSQL (pg_dump). Returns path or None if nothing to back up."""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    if db_config.db_type == 'sqlite':
+        import shutil
+        source_path = db_config.connection_string.replace('sqlite:///', '')
+        if not Path(source_path).exists():
+            return None
+        backup_path = f"{source_path}.backup_{timestamp}"
+        shutil.copy2(source_path, backup_path)
+        return backup_path
+    return create_postgresql_backup(db_config, timestamp)
+
+
 @db_cli.command()
 @with_appcontext
 def backup():
     """Create a backup of the current database."""
     db_config = get_database_config()
-    
-    if db_config.db_type == 'sqlite':
-        source_path = db_config.connection_string.replace('sqlite:///', '')
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        backup_path = f"{source_path}.backup_{timestamp}"
-        
-        try:
-            import shutil
-            shutil.copy2(source_path, backup_path)
-            click.echo(f"✓ SQLite backup created: {backup_path}")
-        except Exception as e:
-            click.echo(f"✗ Backup failed: {str(e)}")
-    
-    elif db_config.db_type == 'postgresql':
-        click.echo("PostgreSQL backup requires pg_dump. Please use:")
-        click.echo("pg_dump DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql")
-    
+    try:
+        backup_path = _backup_database(db_config)
+    except Exception as e:
+        click.echo(f"✗ Backup failed: {str(e)}")
+        return
+    if backup_path:
+        click.echo(f"✓ {db_config.db_type} backup created: {backup_path}")
     else:
-        click.echo(f"Backup not supported for database type: {db_config.db_type}")
+        click.echo("Nothing to back up (database file does not exist).")
 
 
 @db_cli.command()

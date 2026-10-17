@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_session_flats.html" import session_flats_fields %}
 {% block content %}
 
 {% macro notes_and_pixi_cards() %}
@@ -114,6 +115,13 @@
           </span>
       {% endif %}
     </div>
+    <div class="mt-1">
+      <a href="{{ url_for('switch_target_filter_wheel', target_id=target.id) }}"
+         class="badge bg-dark border text-decoration-none" style="font-size:0.75rem;"
+         title="Filter wheel used by this project — click to switch">
+        <i class="bi bi-circle me-1"></i>{{ target.filter_wheel.name if target.filter_wheel else 'Active wheel (unassigned)' }}
+      </a>
+    </div>
     {% if target.mosaic_group %}
       <div class="mt-1">
         <a href="{{ url_for('mosaic_detail', group_id=target.mosaic_group.id) }}"
@@ -140,6 +148,10 @@
       <a href="{{ url_for('target_settings', target_id=target.id) }}"
          class="btn btn-outline-info btn-sm">
         <i class="bi bi-gear me-1"></i>Settings
+      </a>
+      <a href="{{ url_for('switch_target_filter_wheel', target_id=target.id) }}"
+         class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-arrow-left-right me-1"></i>Switch Wheel
       </a>
       <form method="post" action="{{ url_for('clone_target', target_id=target.id) }}"
             class="d-inline">
@@ -674,6 +686,9 @@
             </div>
           </div>
 
+          {% set default_flats = calibration_config.flats_per_channel if calibration_config.flats_per_channel else '' %}
+          {{ session_flats_fields(default_flats) }}
+
           <button class="btn btn-primary btn-sm" type="submit">
             <i class="bi bi-plus-circle me-1"></i>Add Progress
           </button>
@@ -740,9 +755,7 @@
               <tr>
                 <th>Ch</th>
                 <th>Flats</th>
-                <th>Mid</th>
                 <th>Dark flats</th>
-                <th>Mid</th>
               </tr>
             </thead>
             <tbody id="calibration-channel-tbody">
@@ -750,13 +763,7 @@
               <tr>
                 <td>{{ ch_name }}</td>
                 <td>{{ ch_cal.flat.captured }}/{{ ch_cal.flat.planned }}</td>
-                <td class="small cal-mid-cell" data-channel="{{ ch_name }}" data-frame-type="flat">
-                  {% if ch_cal.flat.mid_skipped %}—{% elif ch_cal.flat.mid_complete %}✓{% else %}pending{% endif %}
-                </td>
                 <td>{{ ch_cal.dark_flat.captured }}/{{ ch_cal.dark_flat.planned }}</td>
-                <td class="small cal-mid-cell" data-channel="{{ ch_name }}" data-frame-type="dark_flat">
-                  {% if ch_cal.dark_flat.mid_skipped %}—{% elif ch_cal.dark_flat.mid_complete %}✓{% else %}pending{% endif %}
-                </td>
               </tr>
               {% endfor %}
             </tbody>
@@ -829,7 +836,6 @@
               <label class="form-label">Checkpoint</label>
               <select class="form-control form-control-sm" name="checkpoint" id="cal_log_checkpoint">
                 <option value="manual">Manual</option>
-                <option value="midpoint">Midpoint</option>
                 <option value="end">End</option>
               </select>
             </div>
@@ -2578,12 +2584,6 @@ document.addEventListener("DOMContentLoaded", function () {
     return frameType.replace(/_/g, ' ');
   }
 
-  function midStatusText(detail) {
-    if (detail.mid_skipped) return '—';
-    if (detail.mid_complete) return '✓';
-    return 'pending';
-  }
-
   function showCalToast(message, level) {
     if (!calToast) return;
     calToast.textContent = message;
@@ -2680,9 +2680,7 @@ document.addEventListener("DOMContentLoaded", function () {
         '<tr>' +
           '<td>' + escHtml(chName) + '</td>' +
           '<td>' + escHtml(ch.flat.captured) + '/' + escHtml(ch.flat.planned) + '</td>' +
-          '<td class="small cal-mid-cell" data-channel="' + escHtml(chName) + '" data-frame-type="flat">' + escHtml(midStatusText(ch.flat)) + '</td>' +
           '<td>' + escHtml(ch.dark_flat.captured) + '/' + escHtml(ch.dark_flat.planned) + '</td>' +
-          '<td class="small cal-mid-cell" data-channel="' + escHtml(chName) + '" data-frame-type="dark_flat">' + escHtml(midStatusText(ch.dark_flat)) + '</td>' +
         '</tr>'
       );
     }).join('');

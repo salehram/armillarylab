@@ -89,7 +89,6 @@ astroplanner/
 | default_calibration_flats_per_channel | Integer, default 0 | Flats per plan channel |
 | default_calibration_dark_flats_per_channel | Integer, default 0 | Dark flats per channel |
 | default_calibration_bias | Integer, default 0 | Optional bias count |
-| default_calibration_two_point | Boolean, default True | Split flats at midpoint + end |
 | max_cloud_cover_pct | Integer, default 25 | Cloud cover % threshold for go/skip advice |
 | timezone_name | String(64), default "Asia/Riyadh" | IANA timezone |
 | updated_at | DateTime, default utcnow | |
@@ -165,6 +164,7 @@ Relationships: `slots` → FilterWheelSlot (cascade all, delete-orphan)
 | filter_id | Integer FK → filters.id (nullable) | |
 | nina_filter_name | String(64) | NINA-specific name |
 | physical_filter_brand | String(128) | |
+| astrobin_id | Integer, nullable | Physical filter's AstroBin ID; falls back to Filter.astrobin_id (v2.8.0) |
 | notes | Text | |
 
 ### Target (`targets`)
@@ -189,7 +189,7 @@ Relationships: `slots` → FilterWheelSlot (cascade all, delete-orphan)
 | override_calibration_flats_per_channel | Integer, nullable | NULL → global |
 | override_calibration_dark_flats_per_channel | Integer, nullable | NULL → global |
 | override_calibration_bias | Integer, nullable | NULL → global |
-| override_calibration_two_point | Boolean, nullable | NULL → global |
+| filter_wheel_id | Integer FK → filter_wheels.id, nullable | Project's wheel; NULL → active wheel (v2.8.0) |
 | final_image_filename | String(256) | |
 | created_at | DateTime, default utcnow | |
 | is_archived | Boolean, default False | |
@@ -238,6 +238,7 @@ Relationships: `plans` → TargetPlan, `sessions` → ImagingSession, `calibrati
 | sub_exposure_seconds | Float, not null | |
 | sub_count | Integer, not null | |
 | notes | Text | |
+| filter_wheel_id | Integer FK → filter_wheels.id, nullable | Wheel the subs were captured with (v2.8.0) |
 
 ---
 
@@ -489,7 +490,7 @@ Settings are stored in the `GlobalConfig` DB model (single row). Legacy .env may
 - `get_global_config()` → `GlobalConfig` instance (creates default singleton if missing)
 - `get_effective_packup_time(target)` → resolved packup time (target override > global default)
 - `get_effective_min_altitude(target)` → resolved min altitude (target override > global default)
-- `get_effective_calibration_config(target)` → resolved calibration counts + two_point + enabled flag
+- `get_effective_calibration_config(target)` → resolved calibration counts + enabled flag
 - `get_observer_location()` → `(lat, lon, elev)` tuple from GlobalConfig
 - `get_palettes_with_filters()` → list of palette dicts with nested filter info
 - `get_recommended_palette(target_type)` → palette name from TargetType table or fallback map

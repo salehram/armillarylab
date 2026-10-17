@@ -21,6 +21,76 @@ from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
+REQUIRED_TABLES = [
+    'targets', 'target_plans', 'imaging_sessions', 'calibration_captures',
+    'calibration_checkpoint_skips', 'filters', 'palettes', 'target_types',
+    'global_config', 'filter_wheels', 'filter_wheel_slots', 'object_mappings',
+    'palette_filters', 'mosaic_groups', 'resolver_cache',
+]
+
+
+class PgDumpUnavailableError(RuntimeError):
+    """pg_dump is not installed, so no PostgreSQL backup can be taken."""
+
+
+def create_postgresql_backup(db_config, stamp: str) -> str:
+    """Dump a PostgreSQL database with pg_dump. Raises rather than skipping."""
+    pg_dump = shutil.which('pg_dump')
+    if not pg_dump:
+        raise PgDumpUnavailableError(
+            "pg_dump was not found on PATH, so the PostgreSQL database cannot be "
+            "backed up. Install the PostgreSQL client tools, or take a platform-level "
+            "snapshot yourself and re-run with --no-backup to acknowledge that."
+        )
+
+    url = make_url(db_config.connection_string)
+    if not url.database:
+        raise RuntimeError(
+            "PostgreSQL connection string has no database name, so pg_dump cannot run."
+        )
+    base_dir = Path(getattr(db_config, 'base_dir', None) or '.')
+    backup_path = base_dir / f"{url.database}_backup_{stamp}.dump"
+
+    cmd = [pg_dump, '--format=custom', '--file', str(backup_path)]
+    if url.host:
+        cmd += ['--host', url.host]
+    if url.port:
+        cmd += ['--port', str(url.port)]
+    if url.username:
+        cmd += ['--username', url.username]
+    cmd.append(url.database)
+
+    env = os.environ.copy()
+    if url.password:
+        env['PGPASSWORD'] = url.password  # never passed on the command line
+
+    try:
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=3600)
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("pg_dump timed out.") from e
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"pg_dump failed (exit {result.returncode}). {result.stderr.strip()}"
+        )
+
+    logger.info(f"PostgreSQL backup created: {backup_path}")
+    return str(backup_path)
+
+
+def reset_postgresql_sequences(conn, table_names) -> None:
+    """Move each table's id sequence past MAX(id) so new inserts don't collide."""
+    if conn.dialect.name != 'postgresql':
+        return
+    quote = conn.dialect.identifier_preparer.quote
+    for table_name in table_names:
+        qt = quote(table_name)
+        conn.execute(text(
+            f"SELECT setval(pg_get_serial_sequence(:t, 'id'), "
+            f"COALESCE((SELECT MAX(id) FROM {qt}), 1), "
+            f"(SELECT MAX(id) FROM {qt}) IS NOT NULL)"
+        ), {"t": table_name})
+
 
 class DatabaseMigrator:
     """Handles bidirectional database migration between SQLite and PostgreSQL."""
@@ -171,7 +241,8 @@ class DatabaseMigrator:
         import_result = {
             'tables_migrated': [],
             'records_migrated': 0,
-            'import_errors': []
+            'import_errors': [],
+            'warnings': [],
         }
         
         # Get table metadata for target
@@ -195,11 +266,23 @@ class DatabaseMigrator:
                         continue
                     
                     logger.info(f"Importing {len(records)} records to {table_name}")
-                    
+
+                    target_columns = set(table.c.keys())
+                    skipped_columns = sorted(set(records[0].keys()) - target_columns)
+                    if skipped_columns:
+                        msg = (
+                            f"{table_name}: source columns not present in target were skipped: "
+                            f"{', '.join(skipped_columns)}"
+                        )
+                        logger.warning(msg)
+                        import_result['warnings'].append(msg)
+
                     processed_records = []
                     for record in records:
                         processed_record = {}
                         for key, value in record.items():
+                            if key not in target_columns:
+                                continue
                             if isinstance(value, str) and (key.endswith('_at') or key == 'date'):
                                 try:
                                     processed_record[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
@@ -217,7 +300,11 @@ class DatabaseMigrator:
                     
                     import_result['tables_migrated'].append(table_name)
                     import_result['records_migrated'] += len(records)
-                
+
+                reset_postgresql_sequences(
+                    conn,
+                    [t for t in import_result['tables_migrated'] if 'id' in metadata.tables[t].c],
+                )
                 trans.commit()
                 logger.info("Database import completed successfully")
                 
@@ -230,42 +317,8 @@ class DatabaseMigrator:
         return import_result
     
     def _get_table_export_order(self, metadata) -> List[str]:
-        """Get table names in export order (dependencies first)."""
-        # For ArmillaryLab, the dependency order is:
-        # 1. Independent tables (no foreign keys)
-        # 2. Tables with foreign keys to independent tables
-        # 3. Tables with foreign keys to dependent tables
-        
-        # Level 1: No foreign key dependencies
-        independent_tables = ['target_types', 'palettes', 'global_config', 'filters', 'filter_wheels']
-        
-        # Level 2: Depend on independent tables
-        level2_tables = ['targets', 'object_mappings', 'filter_wheel_slots', 'palette_filters']
-        
-        # Level 3: Depend on level 2 tables
-        level3_tables = ['target_plans', 'imaging_sessions', 'calibration_captures', 'calibration_checkpoint_skips']
-        
-        # Filter to only existing tables
-        all_tables = set(metadata.tables.keys())
-        export_order = []
-        
-        for table in independent_tables:
-            if table in all_tables:
-                export_order.append(table)
-        
-        for table in level2_tables:
-            if table in all_tables:
-                export_order.append(table)
-                
-        for table in level3_tables:
-            if table in all_tables:
-                export_order.append(table)
-        
-        # Add any remaining tables
-        remaining_tables = all_tables - set(export_order)
-        export_order.extend(sorted(remaining_tables))
-        
-        return export_order
+        """Get table names in export order (FK dependencies first)."""
+        return [t.name for t in metadata.sorted_tables]
     
     def _get_table_import_order(self, metadata) -> List[str]:
         """Get table names in import order (same as export for this app)."""
@@ -277,12 +330,7 @@ class DatabaseMigrator:
         inspector = inspect(self.target_engine)
         existing_tables = inspector.get_table_names()
         
-        required_tables = ['targets', 'target_plans', 'imaging_sessions', 'calibration_captures',
-                          'calibration_checkpoint_skips', 'filters',
-                          'palettes', 'target_types', 'global_config', 'filter_wheels',
-                          'filter_wheel_slots', 'object_mappings', 'palette_filters']
-        
-        missing_tables = [t for t in required_tables if t not in existing_tables]
+        missing_tables = [t for t in REQUIRED_TABLES if t not in existing_tables]
         
         if missing_tables:
             logger.warning(f"Missing tables in target database: {missing_tables}")
@@ -371,51 +419,7 @@ class DatabaseMigrator:
         return self._create_postgresql_backup(db_config)
 
     def _create_postgresql_backup(self, db_config) -> str:
-        """Dump the PostgreSQL target with pg_dump. Refuses rather than skipping."""
-        pg_dump = shutil.which('pg_dump')
-        if not pg_dump:
-            raise RuntimeError(
-                "pg_dump was not found on PATH, so the PostgreSQL target cannot be "
-                "backed up before migration. Install the PostgreSQL client tools, or "
-                "take a platform-level snapshot yourself and re-run the migration with "
-                "backup_target=False to acknowledge that."
-            )
-
-        url = make_url(db_config.connection_string)
-        if not url.database:
-            raise RuntimeError(
-                "PostgreSQL connection string has no database name, so pg_dump cannot "
-                "run; migration aborted."
-            )
-        base_dir = Path(getattr(db_config, 'base_dir', None) or '.')
-        backup_path = base_dir / f"{url.database}_backup_{self.migration_id}.dump"
-
-        cmd = [pg_dump, '--format=custom', '--file', str(backup_path)]
-        if url.host:
-            cmd += ['--host', url.host]
-        if url.port:
-            cmd += ['--port', str(url.port)]
-        if url.username:
-            cmd += ['--username', url.username]
-        cmd.append(url.database)
-
-        env = os.environ.copy()
-        if url.password:
-            env['PGPASSWORD'] = url.password  # never passed on the command line
-
-        try:
-            result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=3600)
-        except subprocess.TimeoutExpired as e:
-            raise RuntimeError("pg_dump timed out; migration aborted.") from e
-
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"pg_dump failed (exit {result.returncode}); migration aborted. "
-                f"{result.stderr.strip()}"
-            )
-
-        logger.info(f"PostgreSQL backup created: {backup_path}")
-        return str(backup_path)
+        return create_postgresql_backup(db_config, self.migration_id)
 
 
 def migrate_database(source_config, target_config, **kwargs) -> Dict[str, Any]:

@@ -23,17 +23,18 @@ FILTER_CONFIG: dict[str, dict[str, int | str]] = {
 }
 
 
-def get_active_wheel_config() -> Optional[Dict[str, Dict[str, Any]]]:
+def get_active_wheel_config(wheel=None) -> Optional[Dict[str, Dict[str, Any]]]:
     """
-    Get filter configuration from the active filter wheel in the database.
+    Get filter configuration from a filter wheel (default: the active wheel).
     Returns a dict mapping filter codes to {nina_name, position}.
-    Returns None if no active wheel or database not available.
+    Returns None if no wheel or database not available.
     """
     try:
         # Import here to avoid circular imports
         from app import db, FilterWheel, FilterWheelSlot
         
-        wheel = FilterWheel.query.filter_by(is_active=True).first()
+        if wheel is None:
+            wheel = FilterWheel.query.filter_by(is_active=True).first()
         if not wheel:
             logger.warning("No active filter wheel found, using legacy FILTER_CONFIG")
             return None
@@ -48,7 +49,7 @@ def get_active_wheel_config() -> Optional[Dict[str, Dict[str, Any]]]:
                     "position": slot.position
                 }
         
-        logger.info(f"Using active filter wheel '{wheel.name}' with {len(config)} filters")
+        logger.info(f"Using filter wheel '{wheel.name}' with {len(config)} filters")
         return config
         
     except Exception as e:
@@ -56,12 +57,12 @@ def get_active_wheel_config() -> Optional[Dict[str, Dict[str, Any]]]:
         return None
 
 
-def get_filter_config() -> Dict[str, Dict[str, Any]]:
+def get_filter_config(wheel=None) -> Dict[str, Dict[str, Any]]:
     """
-    Get filter configuration, preferring active wheel from database,
+    Get filter configuration from the given wheel (default: active wheel),
     falling back to legacy FILTER_CONFIG.
     """
-    wheel_config = get_active_wheel_config()
+    wheel_config = get_active_wheel_config(wheel)
     if wheel_config:
         return wheel_config
     return FILTER_CONFIG

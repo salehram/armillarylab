@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h4 mb-0"><i class="bi bi-arrow-left-right me-2"></i>Switch Filter Wheel — {{ title }}</h1>
+    <p style="color:rgba(255,255,255,0.6)" class="small mb-0 mt-1">
+      A wheel is allowed only if it has a slot for every filter this project uses
+      (plan channels, logged lights and logged calibration).
+    </p>
+  </div>
+  <a href="{{ back_url }}" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card bg-secondary text-light mb-3">
+      <div class="card-header">Filters used by this project</div>
+      <div class="card-body">
+        {% for code in required %}
+          <span class="badge bg-warning text-dark me-1">{{ code }}</span>
+        {% else %}
+          <span class="text-light opacity-75 small">None yet — any wheel is compatible.</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card bg-secondary text-light mb-3">
+      <div class="card-header">Current wheel{{ 's' if targets|length > 1 }}</div>
+      <ul class="list-group list-group-flush">
+        {% for t in targets %}
+        <li class="list-group-item bg-secondary text-light small">
+          {% if t.mosaic_panel_number and targets|length > 1 %}<span class="badge bg-primary me-1">P{{ t.mosaic_panel_number }}</span>{% endif %}
+          {{ t.name }} — <strong>{{ t.filter_wheel.name if t.filter_wheel else 'Active wheel (unassigned)' }}</strong>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% if session_wheel_counts %}
+    <div class="card bg-secondary text-light">
+      <div class="card-header">Logged sessions by wheel</div>
+      <ul class="list-group list-group-flush">
+        {% for name, count in session_wheel_counts.items() %}
+        <li class="list-group-item bg-secondary text-light small d-flex justify-content-between">
+          <span>{{ name }}</span><span>{{ count }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-8">
+    <form method="post">
+      <div class="table-responsive mb-3">
+        <table class="table table-dark table-sm align-middle">
+          <thead>
+            <tr>
+              <th style="width:2rem;"></th>
+              <th>Wheel</th>
+              <th>Size</th>
+              <th>Slots</th>
+              <th>Compatibility</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for o in options %}
+            <tr class="{{ '' if o.compatible else 'opacity-75' }}">
+              <td>
+                <input class="form-check-input" type="radio" name="wheel_id" value="{{ o.wheel.id }}"
+                       id="wheel_{{ o.wheel.id }}" {% if not o.compatible or o.current %}disabled{% endif %} required>
+              </td>
+              <td>
+                <label for="wheel_{{ o.wheel.id }}">{{ o.wheel.name }}</label>
+                {% if o.current %}<span class="badge bg-info text-dark ms-1">Current</span>{% endif %}
+                {% if o.wheel.is_active %}<span class="badge bg-success ms-1">Active</span>{% endif %}
+              </td>
+              <td>{{ o.wheel.filter_size or '—' }}</td>
+              <td>
+                {% for slot in o.wheel.slots if slot.filter %}
+                  <span class="badge bg-dark border me-1" title="{{ slot.physical_filter_brand or '' }}">{{ slot.filter.name }}</span>
+                {% endfor %}
+              </td>
+              <td>
+                {% if o.compatible %}
+                  <span class="text-success"><i class="bi bi-check-circle me-1"></i>Compatible</span>
+                {% else %}
+                  <span class="text-danger"><i class="bi bi-x-circle me-1"></i>Missing</span>
+                  {% for code in o.missing %}<span class="badge bg-danger ms-1">{{ code }}</span>{% endfor %}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="remap_sessions" value="1" id="remap_sessions">
+        <label class="form-check-label" for="remap_sessions">
+          Also move all previously logged nights to the new wheel's filters
+          <span class="d-block small text-light opacity-75">
+            AstroBin export will then use the new wheel's physical-filter IDs for every night.
+            Leave unchecked to keep past nights on the filters they were captured with.
+          </span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary"><i class="bi bi-arrow-left-right me-1"></i>Switch Wheel</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

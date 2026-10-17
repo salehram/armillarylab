@@ -339,9 +339,18 @@ After upgrading from v2.1.x on an **existing SQLite database**:
 
 ```powershell
 flask db info      # confirm database path
-flask db backup    # optional extra snapshot (migrate-db also auto-backs up SQLite)
-flask migrate-db   # additive only: new columns + new tables; never deletes rows
+flask migrate-db   # backup (SQLite copy / PostgreSQL pg_dump), add new columns + tables, drop retired columns
 ```
+
+`flask migrate-db` behaves the same on SQLite and PostgreSQL (v2.8.0): it takes
+a backup first, adds missing columns/tables, then drops retired columns
+(currently the two `*_calibration_two_point` columns). It never deletes rows.
+On PostgreSQL without `pg_dump` it asks before continuing (interactive
+terminals only; scripts abort). Use `--no-backup` if you already have a snapshot.
+
+`flask db migrate` (SQLite ↔ PostgreSQL copy) now backs up the target before
+clearing it, imports tables in foreign-key order, skips source columns the
+target doesn't have (with a warning), and resets PostgreSQL ID sequences.
 
 **Important:** `migrate-db` only updates schema on the database shown by `flask db info`. It does not copy data from other files (e.g. `old-astroplanner.db`). If targets disappear, verify the SQLite path and restore from a `.backup_*` file or `flask db backup`.
 

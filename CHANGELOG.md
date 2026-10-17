@@ -13,6 +13,47 @@ _Nothing yet._
 
 ---
 
+## [2.8.0] - 2026-10-17
+
+### Added
+
+- **Log flats with a light session** (roadmap §19.3) — the *Add Imaging Progress* form and the mosaic *Log Session to Panel* card have an "Also log flats" option (count prefilled from the flats-per-channel setting) with a "+ matching dark flats" checkbox. Captures use the session's date and filter.
+- **Mosaic flat backfill** (`/mosaic/<id>/calibration/backfill`, "Backfill Flats" on the mosaic session log) — one row per night × panel × filter with light frames; rows without flats are pre-selected. Re-submitting never double-logs.
+- **Per-project filter wheels** — `targets.filter_wheel_id` and `imaging_sessions.filter_wheel_id`. New projects get the active wheel; each logged session records the wheel it was captured with.
+- **Switch filter wheel** (`/target/<id>/filter-wheel/switch`, `/mosaic/<id>/filter-wheel/switch`) — a wheel is allowed only if it has a slot for every filter the project uses (plan channels, logged lights and logged calibration). Optional "move previously logged nights to the new wheel". Mosaic switches apply to all panels.
+- **Per-physical-filter AstroBin IDs** — `filter_wheel_slots.astrobin_id` (wheel form + preset export/import). AstroBin export resolves each session's filter via its wheel slot, falling back to the filter's global ID.
+- `flask db backup` now runs `pg_dump` on PostgreSQL.
+
+### Changed
+
+- Calibration captures can be logged even when calibration tracking is off; tracking only controls planned counts and suggestions.
+- Activating a filter wheel now sets the default for new projects; projects with their own wheel are not affected.
+- NINA V2 export uses the project's wheel for filter names/positions.
+- `flask migrate-db` takes a backup on both SQLite and PostgreSQL (`--no-backup` to skip), then drops retired columns. Without `pg_dump` it asks interactively and aborts in scripts.
+- `flask db migrate` backs up the target **before** clearing it (previously after), clears tables in FK order, and prompts when `pg_dump` is missing.
+
+### Removed
+
+- `global_config.default_calibration_two_point` and `targets.override_calibration_two_point` columns (dropped by `flask migrate-db`), plus the stale "Two-point" line, "Mid" columns, "Midpoint" option on new calibration logs, and the `mid_*` / `midpoint_missed` API fields. Historical `checkpoint="midpoint"` rows are untouched and still editable.
+- `scripts/fix_target9_L_to_LP.py` and `scripts/restore_target8_logs.py` (applied SQLite-only one-shots).
+
+### Fixed (database parity)
+
+- SQLite → PostgreSQL migration imported `mosaic_groups` after `targets` (FK violation on PostgreSQL); table order now follows foreign keys.
+- PostgreSQL ID sequences are reset after import, so new rows no longer collide with migrated IDs.
+- Source columns missing from the target are skipped with a warning instead of aborting the import.
+- `prepare_target_schema()` requires `mosaic_groups` and `resolver_cache`; `flask db migrate` clears them too.
+- Latest-plan lookups use one `latest_plan()` helper with `NULLS LAST` + id tie-break, so SQLite and PostgreSQL pick the same plan (roadmap §21.3).
+- Preset import no longer marks every imported wheel active, and replace mode keeps wheels still used by projects.
+- Deleting a filter wheel used by a project or logged session is refused.
+
+### Migration
+
+- Startup adds `filter_wheel_slots.astrobin_id`, `targets.filter_wheel_id` and `imaging_sessions.filter_wheel_id`, then stamps wheel-less targets with the active wheel and their sessions with the target's wheel (idempotent).
+- Run `flask migrate-db` once to drop the two retired calibration columns (backup taken first).
+
+---
+
 ## [2.7.4] - 2026-06-12
 
 ### Fixed

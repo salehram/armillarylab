@@ -11,9 +11,14 @@
       <p style="color:rgba(255,255,255,0.6)" class="small mb-0 mt-1">{{ group.description }}</p>
     {% endif %}
   </div>
-  <a href="{{ url_for('mosaic_detail', group_id=group.id) }}" class="btn btn-secondary btn-sm">
-    <i class="bi bi-arrow-left me-1"></i>Back to Mosaic
-  </a>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('mosaic_calibration_backfill', group_id=group.id) }}" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-lightbulb me-1"></i>Backfill Flats
+    </a>
+    <a href="{{ url_for('mosaic_detail', group_id=group.id) }}" class="btn btn-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>Back to Mosaic
+    </a>
+  </div>
 </div>
 
 <!-- Stats -->

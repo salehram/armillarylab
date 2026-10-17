@@ -128,13 +128,10 @@ def _channel_checkpoint_detail(
 ) -> dict:
     """Per-channel calibration progress detail.
 
-    The ``mid_*`` fields are retained at zero/True for backward-compatible
-    response shape; nothing in the suggestion engine reads them. The
-    ``captured_mid`` / ``captured_end`` counts still surface historical
-    ``checkpoint`` tags so the UI can display them as honest metadata.
+    ``captured_end`` surfaces captures tagged ``checkpoint="end"`` as metadata
+    only; the suggestion engine does not read it.
     """
     captured_total = _captured_total(captures, channel, frame_type)
-    captured_mid = _captured_at_checkpoint(captures, channel, frame_type, "midpoint")
     captured_end = _captured_at_checkpoint(captures, channel, frame_type, "end")
     end_skipped = _is_skipped(skips, channel, frame_type, "end")
 
@@ -147,12 +144,8 @@ def _channel_checkpoint_detail(
     return {
         "planned": total_per_channel,
         "captured": captured_total,
-        "mid_target": 0,
-        "captured_mid": captured_mid,
         "captured_end": captured_end,
-        "mid_skipped": False,
         "end_skipped": end_skipped,
-        "mid_complete": True,
         "end_complete": end_complete,
     }
 
@@ -315,7 +308,6 @@ def _build_suggestion(
         "planned_total": planned_total,
         "captured_total": captured_total,
         "remaining_total": remaining_total,
-        "midpoint_missed": False,
         "title": title,
         "detail": detail,
         "actions": ["log", "skip"],
@@ -393,6 +385,7 @@ def build_astrobin_export_rows(
     captures,
     filter_name_map: dict[str, str],
     plan_data: dict | None = None,
+    astrobin_id_for=None,
 ) -> list[dict]:
     """
     Build AstroBin CSV rows with calibration allocated per session.
@@ -402,6 +395,9 @@ def build_astrobin_export_rows(
     - Flats / dark flats: same date + channel matches filter
     - Bias: same date, applied to the first light row of that date
     - Orphan calibration (no matching light row): row with number=0
+
+    ``astrobin_id_for(session, base_filter)`` resolves the physical filter's
+    AstroBin ID for a session (first non-null per row wins).
     """
     from collections import defaultdict
 
@@ -427,8 +423,11 @@ def build_astrobin_export_rows(
                 "bias": 0,
                 "gain": None,
                 "sensor_cooling": None,
+                "astrobin_id": None,
             }
         rows[key]["number"] += session.sub_count
+        if rows[key]["astrobin_id"] is None and astrobin_id_for is not None:
+            rows[key]["astrobin_id"] = astrobin_id_for(session, bf)
         # Capture per-session values; first non-null value for this key wins
         if rows[key]["gain"] is None and getattr(session, "gain", None) is not None:
             rows[key]["gain"] = session.gain

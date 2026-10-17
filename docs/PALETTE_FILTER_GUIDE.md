@@ -299,17 +299,40 @@ NINA uses specific filter names. Common mappings:
 
 ### Activating a Filter Wheel
 
-Only one filter wheel can be active at a time:
+One filter wheel is the **active (default)** wheel:
 
 1. Go to **Settings** → **Filter Wheels**
 2. Find your wheel
 3. Click **Set as Active**
 4. Confirm the change
 
-The active wheel is used for:
-- NINA sequence exports
-- Filter position display
-- Equipment tracking
+Since v2.8.0 the active wheel is the default for **new projects** (and for any
+project with no wheel assigned). Projects with their own wheel keep it.
+
+### Per-project wheels and switching (v2.8.0)
+
+Every project (target) records its filter wheel, and every logged session
+records the wheel it was captured with. The project's wheel drives NINA
+exports and AstroBin IDs.
+
+To move a project to other equipment, use **Switch Wheel** on the target page
+(or on the mosaic page to move all panels at once):
+
+- A wheel is offered only if it has a slot for **every filter the project
+  uses** — plan channels, logged lights and logged calibration. Filters match
+  by code (`H` = `H` regardless of brand). Example: a project that logged
+  `LP` cannot move to a 7-slot LRGBSHO wheel.
+- Tick **Also move all previously logged nights** to re-stamp past sessions
+  with the new wheel, so AstroBin export uses the new filters for every night.
+  Leave it unticked to keep past nights on the filters they were shot with.
+
+A wheel used by any project or logged session cannot be deleted.
+
+### Per-slot AstroBin IDs
+
+Each wheel slot has an optional **AstroBin ID** for the physical filter (e.g.
+Optolong Ha vs ZWO Ha). AstroBin export uses the slot ID of the wheel each
+session was captured with, falling back to the filter's global AstroBin ID.
 
 ---
 

@@ -680,7 +680,7 @@ palette_filters
 
 ### 14.1 Future Enhancements (Planned)
 - **Visual Wheel Diagram**: Drag-drop slot assignment interface for intuitive configuration
-- **Per-Target Wheel Override**: Allow targets to specify which wheel to use for mixed imaging setups
+- ~~**Per-Target Wheel Override**~~ ✅ v2.8.0: `targets.filter_wheel_id`, per-session wheel stamp, validated project/mosaic wheel switch, per-slot AstroBin IDs
 - **Profile Export/Import**: Backup and restore filter wheel configurations
 
 ### Status
@@ -946,8 +946,10 @@ v2.5.0 removed the two-point flat-capture workflow nudge and replaced it with si
 - Remove any `default_calibration_two_point` references from `config/presets/base.json` or other settings export paths once the columns are dropped
 
 ### Status
-**✅ 19.1 and 19.2 completed in v2.6.0** (columns dropped; `two_point` shim removed).  
-**🆕 19.3 and 19.4 remain planned for a future release.**
+**✅ 19.2 completed in v2.6.0** (`two_point` shim removed from the API).  
+**✅ 19.1 completed in v2.8.0** — v2.6.0 only removed the read/write paths; the columns are now dropped by `flask migrate-db` after a backup.  
+**✅ 19.3 completed in v2.8.0** as "log flats with the session": flats + matching dark flats from the session form (date + filter of that session) and a mosaic backfill page. The pairing rule stays implicit (same target, date, filter).  
+**✅ 19.4 verified in v2.8.0** — no `two_point` references in presets or settings export.
 
 ---
 
@@ -1000,8 +1002,10 @@ The refusal branch is covered by tests, but the actual dump has never run — no
 
 The "latest plan" lookup `order_by(TargetPlan.created_at.desc()).first()` appears in ~15 places. `created_at` is nullable, and PostgreSQL sorts NULLs *first* on DESC where SQLite sorts them last — so a plan with a NULL `created_at` would be selected as the newest on PostgreSQL only. Decide between `nullslast()` at each call site or a shared `latest_plan(target_id)` helper.
 
+✅ **Done in v2.8.0** — shared `latest_plan()` helper (`NULLS LAST`, id tie-break). 21.1 also done (interactive prompt in `flask db migrate` / `flask migrate-db`, hard failure when non-interactive). Additional v2.8.0 fixes: FK-ordered migration import, PostgreSQL sequence reset, column-intersection import, PG backup in `flask migrate-db` and `flask db backup`.
+
 ### Status
-**🟡 Pending.**
+**🟡 21.2 pending** — needs one real `pg_dump` run against `docker-compose.postgres.yml`.
 
 ---
 

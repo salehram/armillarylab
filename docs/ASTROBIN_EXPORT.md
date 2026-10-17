@@ -110,6 +110,15 @@ If using common equipment:
 3. Enter the AstroBin ID in the designated field
 4. Click **Save**
 
+#### Method 3: Per physical filter on a wheel (v2.8.0)
+
+If you own several brands of the same filter (e.g. ZWO Ha on one wheel and
+Optolong Ha on another), set the **AstroBin ID** column on each wheel slot
+(**Settings → Filter Wheels → Edit**). Each export row uses the slot ID of the
+wheel that session was captured with, falling back to the filter's global ID.
+After **Switch Wheel** with "move previously logged nights", every night
+exports with the new wheel's IDs.
+
 ### Common AstroBin Filter IDs
 
 | Filter | Brand | AstroBin ID |

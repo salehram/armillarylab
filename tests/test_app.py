@@ -15,7 +15,13 @@ from app import (
     CalibrationCapture,
     CalibrationCheckpointSkip,
     MosaicGroup,
+    Filter,
+    FilterWheel,
+    FilterWheelSlot,
     get_effective_calibration_config,
+    latest_plan,
+    apply_destructive_schema_cleanup,
+    stamp_unassigned_filter_wheels,
 )
 from calibration_utils import (
     get_calibration_payload,
@@ -163,8 +169,7 @@ def test_calibration_suggestion_fires_only_at_channel_end(client):
         assert flat[0]["checkpoint"] == "end"
         assert flat[0]["suggested_count"] == 100
         assert flat[0]["planned_total"] == 100
-        # midpoint_missed retained as False for response-shape stability.
-        assert flat[0]["midpoint_missed"] is False
+        assert "midpoint_missed" not in flat[0]
 
 
 def test_partial_midpoint_capture_reduces_end_suggestion(client):
@@ -201,8 +206,8 @@ def test_partial_midpoint_capture_reduces_end_suggestion(client):
         assert end_flat[0]["suggested_count"] == 70
 
 
-def test_manual_flat_counts_toward_midpoint(client):
-    """Manual bulk logs satisfy midpoint when total reaches mid_target."""
+def test_manual_flat_counts_toward_channel_total(client):
+    """Manual bulk logs complete the per-channel flat/dark-flat totals."""
     with app.app_context():
         target = _seed_target()
         plan = TargetPlan.query.filter_by(target_id=target.id).first()
@@ -233,9 +238,8 @@ def test_manual_flat_counts_toward_midpoint(client):
         r_flat = payload["summary"]["channels"]["R"]["flat"]
         r_df = payload["summary"]["channels"]["R"]["dark_flat"]
         assert r_flat["captured"] == 100
-        assert r_flat["mid_complete"] is True
+        assert "mid_complete" not in r_flat
         assert r_flat["end_complete"] is True
-        assert r_df["mid_complete"] is True
         assert r_df["end_complete"] is True
 
 
@@ -880,3 +884,366 @@ def test_index_includes_mosaic_summaries(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert b"Dashboard Mosaic" in resp.data
+
+
+# ---------------------------------------------------------------------------
+# v2.8.0: session-form flats, mosaic backfill, per-project filter wheels, parity
+# ---------------------------------------------------------------------------
+
+SHO_PLAN = {
+    "palette": "SHO",
+    "total_planned_minutes": 300,
+    "channels": [
+        {"name": "H", "label": "Ha", "planned_minutes": 100, "sub_exposure_seconds": 300},
+        {"name": "O", "label": "OIII", "planned_minutes": 100, "sub_exposure_seconds": 300},
+        {"name": "S", "label": "SII", "planned_minutes": 100, "sub_exposure_seconds": 300},
+    ],
+}
+
+
+def _make_filters():
+    codes = ["L", "R", "G", "B", "S", "H", "O", "LP"]
+    filters = {}
+    for code in codes:
+        f = Filter(name=code, display_name=code, astrobin_id=1000 + codes.index(code))
+        db.session.add(f)
+        filters[code] = f
+    db.session.flush()
+    return filters
+
+
+def _make_wheel(name, codes, filters, active=False, astrobin_ids=None):
+    wheel = FilterWheel(name=name, slot_count=len(codes), is_active=active)
+    db.session.add(wheel)
+    db.session.flush()
+    for pos, code in enumerate(codes):
+        db.session.add(FilterWheelSlot(
+            filter_wheel_id=wheel.id,
+            filter_id=filters[code].id,
+            position=pos,
+            astrobin_id=(astrobin_ids or {}).get(code),
+        ))
+    db.session.flush()
+    return wheel
+
+
+def _make_project(name, plan, wheel=None, mosaic=None, panel=None, tracking=False):
+    t = Target(
+        name=name, ra_hours=20.8, dec_deg=31.0, preferred_palette=plan["palette"],
+        filter_wheel_id=wheel.id if wheel else None,
+        mosaic_group_id=mosaic.id if mosaic else None, mosaic_panel_number=panel,
+        calibration_tracking_enabled=tracking,
+    )
+    db.session.add(t)
+    db.session.flush()
+    db.session.add(TargetPlan(target_id=t.id, palette_name=plan["palette"], plan_json=json.dumps(plan)))
+    db.session.flush()
+    return t
+
+
+def test_session_form_logs_flats_and_dark_flats_without_tracking(client):
+    with app.app_context():
+        filters = _make_filters()
+        wheel = _make_wheel("ZWO 7x2", ["L", "R", "G", "B", "S", "H", "O"], filters, active=True)
+        t = _make_project("Flats Target", SHO_PLAN, wheel=wheel, tracking=False)
+        db.session.commit()
+        target_id, wheel_id = t.id, wheel.id
+
+    resp = client.post(f"/target/{target_id}/progress/add", data={
+        "imaging_date": "2026-08-01", "channel": "H", "sub_exposure_seconds": "300",
+        "sub_count": "12", "log_flats": "1", "flat_count": "30", "log_dark_flats": "1",
+    })
+    assert resp.status_code == 302
+
+    with app.app_context():
+        session = ImagingSession.query.filter_by(target_id=target_id).one()
+        assert session.filter_wheel_id == wheel_id
+        caps = CalibrationCapture.query.filter_by(target_id=target_id).all()
+        assert sorted(c.frame_type for c in caps) == ["dark_flat", "flat"]
+        assert all(c.channel == "H" and c.frame_count == 30 for c in caps)
+        assert all(c.date == date(2026, 8, 1) for c in caps)
+
+
+def test_session_form_flats_only(client):
+    with app.app_context():
+        t = _make_project("Flats Only", SHO_PLAN)
+        db.session.commit()
+        target_id = t.id
+
+    client.post(f"/target/{target_id}/progress/add", data={
+        "imaging_date": "2026-08-02", "channel": "O", "sub_exposure_seconds": "300",
+        "sub_count": "5", "log_flats": "1", "flat_count": "20",
+    })
+    with app.app_context():
+        caps = CalibrationCapture.query.filter_by(target_id=target_id).all()
+        assert [(c.frame_type, c.frame_count) for c in caps] == [("flat", 20)]
+
+
+def test_calibration_log_allowed_without_tracking(client):
+    with app.app_context():
+        t = _make_project("No Tracking", SHO_PLAN, tracking=False)
+        db.session.commit()
+        target_id = t.id
+
+    client.post(f"/target/{target_id}/calibration/log", data={
+        "frame_type": "flat", "channel": "S", "frame_count": "15",
+        "imaging_date": "2026-08-03", "also_log_counterpart": "1",
+    })
+    with app.app_context():
+        caps = CalibrationCapture.query.filter_by(target_id=target_id).all()
+        assert sorted(c.frame_type for c in caps) == ["dark_flat", "flat"]
+
+
+def test_mosaic_backfill_logs_missing_rows_and_is_idempotent(client):
+    with app.app_context():
+        group = MosaicGroup(name="Cygnus Loop")
+        db.session.add(group)
+        db.session.flush()
+        p1 = _make_project("CL P1", SHO_PLAN, mosaic=group, panel=1)
+        p2 = _make_project("CL P2", SHO_PLAN, mosaic=group, panel=2)
+        night = date(2026, 7, 10)
+        for t, ch in ((p1, "H"), (p1, "O"), (p2, "H")):
+            db.session.add(ImagingSession(target_id=t.id, date=night, channel=ch,
+                                          sub_exposure_seconds=300, sub_count=10))
+        db.session.add(CalibrationCapture(target_id=p1.id, date=night, frame_type="flat",
+                                          channel="O", frame_count=25, checkpoint="manual"))
+        db.session.commit()
+        group_id, p1_id, p2_id = group.id, p1.id, p2.id
+
+    page = client.get(f"/mosaic/{group_id}/calibration/backfill")
+    assert page.status_code == 200
+    assert b"CL P2" in page.data
+
+    rows = [f"2026-07-10|{p1_id}|H", f"2026-07-10|{p1_id}|O", f"2026-07-10|{p2_id}|H",
+            "2026-07-10|99999|H"]
+    data = {"flat_count": "30", "log_dark_flats": "1", "rows": rows}
+    resp = client.post(f"/mosaic/{group_id}/calibration/backfill", data=data)
+    assert resp.status_code == 302
+
+    with app.app_context():
+        def counts(tid, ch):
+            caps = CalibrationCapture.query.filter_by(target_id=tid, channel=ch).all()
+            return sorted((c.frame_type, c.frame_count) for c in caps)
+        assert counts(p1_id, "H") == [("dark_flat", 30), ("flat", 30)]
+        # Existing flats kept; only the missing dark flats were added
+        assert counts(p1_id, "O") == [("dark_flat", 30), ("flat", 25)]
+        assert counts(p2_id, "H") == [("dark_flat", 30), ("flat", 30)]
+        assert CalibrationCapture.query.filter_by(target_id=99999).count() == 0
+        total = CalibrationCapture.query.count()
+
+    client.post(f"/mosaic/{group_id}/calibration/backfill", data=data)
+    with app.app_context():
+        assert CalibrationCapture.query.count() == total
+
+
+def test_wheel_switch_blocked_when_project_uses_filter_new_wheel_lacks(client):
+    with app.app_context():
+        filters = _make_filters()
+        eight = _make_wheel("ZWO 8x1.25", ["L", "R", "G", "B", "S", "H", "O", "LP"], filters, active=True)
+        seven = _make_wheel("Optolong 7x2", ["L", "R", "G", "B", "S", "H", "O"], filters)
+        t = _make_project("LP Project", SHO_PLAN, wheel=eight)
+        db.session.add(ImagingSession(target_id=t.id, date=date.today(), channel="LP",
+                                      sub_exposure_seconds=300, sub_count=5, filter_wheel_id=eight.id))
+        db.session.commit()
+        target_id, eight_id, seven_id = t.id, eight.id, seven.id
+
+    page = client.get(f"/target/{target_id}/filter-wheel/switch")
+    assert page.status_code == 200
+    assert b"LP" in page.data
+
+    client.post(f"/target/{target_id}/filter-wheel/switch", data={"wheel_id": seven_id})
+    with app.app_context():
+        assert db.session.get(Target, target_id).filter_wheel_id == eight_id
+
+
+def test_wheel_switch_allowed_and_remaps_sessions(client):
+    with app.app_context():
+        filters = _make_filters()
+        eight = _make_wheel("ZWO 8x1.25", ["L", "R", "G", "B", "S", "H", "O", "LP"], filters, active=True)
+        seven = _make_wheel("Optolong 7x2", ["L", "R", "G", "B", "S", "H", "O"], filters)
+        t = _make_project("SHO Project", SHO_PLAN, wheel=eight)
+        db.session.add(ImagingSession(target_id=t.id, date=date.today(), channel="H",
+                                      sub_exposure_seconds=300, sub_count=5, filter_wheel_id=eight.id))
+        db.session.commit()
+        target_id, seven_id = t.id, seven.id
+
+    resp = client.post(f"/target/{target_id}/filter-wheel/switch",
+                       data={"wheel_id": seven_id, "remap_sessions": "1"})
+    assert resp.status_code == 302
+    with app.app_context():
+        assert db.session.get(Target, target_id).filter_wheel_id == seven_id
+        assert {s.filter_wheel_id for s in ImagingSession.query.filter_by(target_id=target_id)} == {seven_id}
+
+
+def test_wheel_switch_without_remap_keeps_session_wheel(client):
+    with app.app_context():
+        filters = _make_filters()
+        a = _make_wheel("A", ["S", "H", "O"], filters, active=True)
+        b = _make_wheel("B", ["S", "H", "O"], filters)
+        t = _make_project("Keep History", SHO_PLAN, wheel=a)
+        db.session.add(ImagingSession(target_id=t.id, date=date.today(), channel="H",
+                                      sub_exposure_seconds=300, sub_count=5, filter_wheel_id=a.id))
+        db.session.commit()
+        target_id, a_id, b_id = t.id, a.id, b.id
+
+    client.post(f"/target/{target_id}/filter-wheel/switch", data={"wheel_id": b_id})
+    with app.app_context():
+        assert db.session.get(Target, target_id).filter_wheel_id == b_id
+        assert ImagingSession.query.filter_by(target_id=target_id).one().filter_wheel_id == a_id
+
+
+def test_mosaic_wheel_switch_validates_union_of_panels(client):
+    with app.app_context():
+        filters = _make_filters()
+        eight = _make_wheel("ZWO 8", ["L", "R", "G", "B", "S", "H", "O", "LP"], filters, active=True)
+        seven = _make_wheel("Opto 7", ["L", "R", "G", "B", "S", "H", "O"], filters)
+        group = MosaicGroup(name="Mixed")
+        db.session.add(group)
+        db.session.flush()
+        p1 = _make_project("M P1", SHO_PLAN, wheel=eight, mosaic=group, panel=1)
+        p2 = _make_project("M P2", SHO_PLAN, wheel=eight, mosaic=group, panel=2)
+        db.session.commit()
+        group_id, seven_id, eight_id, p1_id, p2_id = group.id, seven.id, eight.id, p1.id, p2.id
+
+    client.post(f"/mosaic/{group_id}/filter-wheel/switch", data={"wheel_id": seven_id})
+    with app.app_context():
+        assert {db.session.get(Target, i).filter_wheel_id for i in (p1_id, p2_id)} == {seven_id}
+
+    with app.app_context():
+        db.session.add(CalibrationCapture(target_id=p2_id, date=date.today(), frame_type="flat",
+                                          channel="LP", frame_count=10, checkpoint="manual"))
+        db.session.commit()
+    client.post(f"/mosaic/{group_id}/filter-wheel/switch", data={"wheel_id": eight_id})
+    client.post(f"/mosaic/{group_id}/filter-wheel/switch", data={"wheel_id": seven_id})
+    with app.app_context():
+        # LP calibration on panel 2 now blocks moving the mosaic back to the 7-slot wheel
+        assert {db.session.get(Target, i).filter_wheel_id for i in (p1_id, p2_id)} == {eight_id}
+
+
+def test_astrobin_export_uses_session_wheel_slot_ids(client):
+    with app.app_context():
+        filters = _make_filters()
+        zwo = _make_wheel("ZWO", ["S", "H", "O"], filters, active=True, astrobin_ids={"H": 1955})
+        opto = _make_wheel("Optolong", ["S", "H", "O"], filters, astrobin_ids={"H": 7777})
+        t = _make_project("Export Project", SHO_PLAN, wheel=opto)
+        db.session.add(ImagingSession(target_id=t.id, date=date(2026, 6, 1), channel="H",
+                                      sub_exposure_seconds=300, sub_count=5, filter_wheel_id=zwo.id))
+        db.session.add(ImagingSession(target_id=t.id, date=date(2026, 6, 2), channel="H",
+                                      sub_exposure_seconds=300, sub_count=5, filter_wheel_id=opto.id))
+        db.session.add(ImagingSession(target_id=t.id, date=date(2026, 6, 3), channel="O",
+                                      sub_exposure_seconds=300, sub_count=5, filter_wheel_id=opto.id))
+        db.session.commit()
+        target_id = t.id
+        global_o = filters["O"].astrobin_id
+
+    resp = client.post(f"/target/{target_id}/export_astrobin", data={"binning": "1"})
+    assert resp.status_code == 200
+    lines = resp.data.decode().strip().splitlines()[1:]
+    by_date = {line.split(",")[0]: line.split(",")[1] for line in lines}
+    assert by_date["2026-06-01"] == "1955"
+    assert by_date["2026-06-02"] == "7777"
+    assert by_date["2026-06-03"] == str(global_o)
+
+
+def test_delete_filter_wheel_refused_when_used_by_project(client):
+    with app.app_context():
+        filters = _make_filters()
+        _make_wheel("Active", ["H"], filters, active=True)
+        used = _make_wheel("Used", ["H"], filters)
+        _make_project("Uses Wheel", SHO_PLAN, wheel=used)
+        db.session.commit()
+        used_id = used.id
+
+    client.post(f"/filter-wheel/{used_id}/delete")
+    with app.app_context():
+        assert db.session.get(FilterWheel, used_id) is not None
+
+
+def test_stamp_unassigned_filter_wheels(client):
+    with app.app_context():
+        filters = _make_filters()
+        wheel = _make_wheel("Active", ["S", "H", "O"], filters, active=True)
+        t = _make_project("Legacy", SHO_PLAN)
+        db.session.add(ImagingSession(target_id=t.id, date=date.today(), channel="H",
+                                      sub_exposure_seconds=300, sub_count=1))
+        db.session.commit()
+        assert stamp_unassigned_filter_wheels() == 2
+        assert db.session.get(Target, t.id).filter_wheel_id == wheel.id
+        assert ImagingSession.query.one().filter_wheel_id == wheel.id
+        assert stamp_unassigned_filter_wheels() == 0
+
+
+def test_latest_plan_prefers_dated_plan_over_null_created_at(client):
+    from datetime import datetime as dt
+
+    with app.app_context():
+        t = Target(name="Plans", ra_hours=1.0, dec_deg=1.0, preferred_palette="SHO")
+        db.session.add(t)
+        db.session.flush()
+        dated = TargetPlan(target_id=t.id, palette_name="SHO", plan_json="{}",
+                           created_at=dt(2026, 1, 1))
+        db.session.add(dated)
+        db.session.flush()
+        undated = TargetPlan(target_id=t.id, palette_name="SHO", plan_json="{}")
+        db.session.add(undated)
+        db.session.flush()
+        undated.created_at = None
+        db.session.commit()
+        assert latest_plan(t.id, "SHO").id == dated.id
+
+
+def test_destructive_cleanup_drops_retired_columns_idempotently(client):
+    from sqlalchemy import inspect, text
+
+    with app.app_context():
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE targets ADD COLUMN override_calibration_two_point BOOLEAN"))
+            conn.commit()
+        assert apply_destructive_schema_cleanup(log=lambda *_: None) == [
+            "targets.override_calibration_two_point"
+        ]
+        cols = {c["name"] for c in inspect(db.engine).get_columns("targets")}
+        assert "override_calibration_two_point" not in cols
+        assert apply_destructive_schema_cleanup(log=lambda *_: None) == []
+
+
+def test_migration_table_order_respects_foreign_keys():
+    from config.migration import DatabaseMigrator, REQUIRED_TABLES
+
+    order = DatabaseMigrator._get_table_export_order(None, db.metadata)
+    assert order.index("mosaic_groups") < order.index("targets")
+    assert order.index("filter_wheels") < order.index("targets")
+    assert order.index("filter_wheels") < order.index("imaging_sessions")
+    assert order.index("targets") < order.index("calibration_captures")
+    assert set(REQUIRED_TABLES) <= set(order)
+
+
+def test_v280_pages_render(client):
+    with app.app_context():
+        filters = _make_filters()
+        wheel = _make_wheel("ZWO", ["S", "H", "O"], filters, active=True, astrobin_ids={"H": 1955})
+        group = MosaicGroup(name="Render Mosaic")
+        db.session.add(group)
+        db.session.flush()
+        t = _make_project("Render Panel", SHO_PLAN, wheel=wheel, mosaic=group, panel=1, tracking=True)
+        db.session.add(ImagingSession(target_id=t.id, date=date.today(), channel="H",
+                                      sub_exposure_seconds=300, sub_count=5, filter_wheel_id=wheel.id))
+        db.session.commit()
+        ids = {"t": t.id, "g": group.id, "w": wheel.id}
+
+    for url in (
+        f"/target/{ids['t']}",
+        f"/target/{ids['t']}/settings",
+        f"/target/{ids['t']}/filter-wheel/switch",
+        f"/mosaic/{ids['g']}",
+        f"/mosaic/{ids['g']}/log",
+        f"/mosaic/{ids['g']}/calibration/backfill",
+        f"/mosaic/{ids['g']}/filter-wheel/switch",
+        f"/filter-wheel/{ids['w']}/edit",
+    ):
+        resp = client.get(url)
+        assert resp.status_code == 200, url
+    detail = client.get(f"/target/{ids['t']}").data
+    assert b'name="log_flats"' in detail
+    assert b"Switch Wheel" in detail
+    assert b'name="slot_0_astrobin_id"' in client.get(f"/filter-wheel/{ids['w']}/edit").data

@@ -58,7 +58,7 @@ from config.flask_process import (
 from cli import register_cli_commands
 
 # Application version
-APP_VERSION = "2.7.4"
+APP_VERSION = "2.8.0"
 APP_NAME = "ArmillaryLab"
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -191,7 +191,6 @@ def apply_additive_schema_migrations(log=print):
         ("default_calibration_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_flats_per_channel INTEGER DEFAULT 0"),
         ("default_calibration_dark_flats_per_channel", "ALTER TABLE global_config ADD COLUMN default_calibration_dark_flats_per_channel INTEGER DEFAULT 0"),
         ("default_calibration_bias", "ALTER TABLE global_config ADD COLUMN default_calibration_bias INTEGER DEFAULT 0"),
-        ("default_calibration_two_point", f"ALTER TABLE global_config ADD COLUMN default_calibration_two_point BOOLEAN {bool_true}"),
         ("max_cloud_cover_pct", "ALTER TABLE global_config ADD COLUMN max_cloud_cover_pct INTEGER DEFAULT 25"),
         # Resolver settings (Phase 8)
         ("resolver_enable_simbad", f"ALTER TABLE global_config ADD COLUMN resolver_enable_simbad BOOLEAN {bool_true}"),
@@ -221,7 +220,6 @@ def apply_additive_schema_migrations(log=print):
         ("override_calibration_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_flats_per_channel INTEGER"),
         ("override_calibration_dark_flats_per_channel", "ALTER TABLE targets ADD COLUMN override_calibration_dark_flats_per_channel INTEGER"),
         ("override_calibration_bias", "ALTER TABLE targets ADD COLUMN override_calibration_bias INTEGER"),
-        ("override_calibration_two_point", "ALTER TABLE targets ADD COLUMN override_calibration_two_point BOOLEAN"),
         # Per-target default camera settings
         ("default_sensor_gain", "ALTER TABLE targets ADD COLUMN default_sensor_gain INTEGER"),
         ("default_sensor_temp", f"ALTER TABLE targets ADD COLUMN default_sensor_temp {float_type}"),
@@ -259,6 +257,31 @@ def apply_additive_schema_migrations(log=print):
         "mosaic_panel_number",
         "ALTER TABLE targets ADD COLUMN mosaic_panel_number INTEGER",
     )
+
+    # Per-project filter wheels (v2.8.0)
+    add_column_if_missing(
+        "filter_wheel_slots",
+        "astrobin_id",
+        "ALTER TABLE filter_wheel_slots ADD COLUMN astrobin_id INTEGER",
+    )
+    add_column_if_missing(
+        "targets",
+        "filter_wheel_id",
+        "ALTER TABLE targets ADD COLUMN filter_wheel_id INTEGER REFERENCES filter_wheels(id)",
+    )
+    add_column_if_missing(
+        "imaging_sessions",
+        "filter_wheel_id",
+        "ALTER TABLE imaging_sessions ADD COLUMN filter_wheel_id INTEGER REFERENCES filter_wheels(id)",
+    )
+    try:
+        stamped = stamp_unassigned_filter_wheels()
+        if stamped:
+            applied.append(f"filter_wheel_id(+{stamped} stamped)")
+            log(f"Stamped {stamped} target/session rows with the active filter wheel.")
+    except Exception as exc:
+        db.session.rollback()
+        log(f"WARNING: filter wheel stamping skipped: {exc}")
 
     # Ensure the 8 canonical TargetType rows exist (idempotent upsert).
     # This is the single source of truth used by detect_target_type(), the
@@ -315,6 +338,33 @@ def apply_additive_schema_migrations(log=print):
     if applied:
         log(f"Schema sync applied: {', '.join(applied)}")
     return applied
+
+
+# Columns retired from the models; dropped only by `flask migrate-db` after a backup.
+RETIRED_COLUMNS = (
+    ("global_config", "default_calibration_two_point"),
+    ("targets", "override_calibration_two_point"),
+)
+
+
+def apply_destructive_schema_cleanup(log=print):
+    """Drop retired columns (idempotent). Call only after a successful backup."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    tables = set(inspector.get_table_names())
+    dropped = []
+    for table, column in RETIRED_COLUMNS:
+        if table not in tables:
+            continue
+        if column not in {c["name"] for c in inspector.get_columns(table)}:
+            continue
+        with db.engine.connect() as conn:
+            conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
+            conn.commit()
+        dropped.append(f"{table}.{column}")
+        log(f"Dropped retired column {table}.{column}.")
+    return dropped
 
 
 _serving_initialized = False
@@ -543,7 +593,6 @@ class GlobalConfig(db.Model):
     default_calibration_flats_per_channel = db.Column(db.Integer, default=0)
     default_calibration_dark_flats_per_channel = db.Column(db.Integer, default=0)
     default_calibration_bias = db.Column(db.Integer, default=0)
-    default_calibration_two_point = db.Column(db.Boolean, default=True)
     
     # Timezone
     timezone_name = db.Column(db.String(64), default="Asia/Riyadh")
@@ -744,6 +793,7 @@ class FilterWheelSlot(db.Model):
     position = db.Column(db.Integer, nullable=False)  # 0-indexed wheel position
     nina_filter_name = db.Column(db.String(64))  # NINA-specific name: "Ha", "OIII", "SII"
     physical_filter_brand = db.Column(db.String(128))  # Optional: "Antlia", "Optolong", "Astronomik"
+    astrobin_id = db.Column(db.Integer, nullable=True)  # Physical filter's AstroBin ID; falls back to Filter.astrobin_id
     notes = db.Column(db.Text)  # Optional notes about this slot
     
     # Relationships
@@ -831,7 +881,6 @@ class Target(db.Model):
     override_calibration_flats_per_channel = db.Column(db.Integer)
     override_calibration_dark_flats_per_channel = db.Column(db.Integer)
     override_calibration_bias = db.Column(db.Integer)
-    override_calibration_two_point = db.Column(db.Boolean)
 
     # Per-target default camera settings (NULL = use global config)
     default_sensor_gain = db.Column(db.Integer, nullable=True)
@@ -851,6 +900,9 @@ class Target(db.Model):
     mosaic_group_id = db.Column(db.Integer, db.ForeignKey("mosaic_groups.id"), nullable=True)
     mosaic_panel_number = db.Column(db.Integer, nullable=True)  # 1-based panel ordering
 
+    # Filter wheel this project is captured with (NULL = follow the globally active wheel)
+    filter_wheel_id = db.Column(db.Integer, db.ForeignKey("filter_wheels.id"), nullable=True)
+
     plans = relationship("TargetPlan", back_populates="target",
                          cascade="all, delete-orphan")
     sessions = relationship("ImagingSession", back_populates="target",
@@ -863,6 +915,7 @@ class Target(db.Model):
     )
     palette = relationship("Palette", back_populates="targets")
     mosaic_group = relationship("MosaicGroup", back_populates="targets")
+    filter_wheel = relationship("FilterWheel")
 
 
 class TargetPlan(db.Model):
@@ -909,7 +962,11 @@ class ImagingSession(db.Model):
     gain = db.Column(db.Integer, nullable=True)
     sensor_cooling = db.Column(db.Float, nullable=True)  # actual achieved °C
 
+    # Wheel the subs were captured with; drives per-physical-filter AstroBin IDs
+    filter_wheel_id = db.Column(db.Integer, db.ForeignKey("filter_wheels.id"), nullable=True)
+
     target = relationship("Target", back_populates="sessions")
+    filter_wheel = relationship("FilterWheel")
 
 
 class CalibrationCapture(db.Model):
@@ -1003,6 +1060,97 @@ def get_global_config():
     return config
 
 
+def get_active_filter_wheel():
+    return FilterWheel.query.filter_by(is_active=True).first()
+
+
+def get_target_wheel(target):
+    """The project's filter wheel, or the globally active wheel when none is assigned."""
+    return target.filter_wheel or get_active_filter_wheel()
+
+
+def stamp_unassigned_filter_wheels():
+    """Assign the active wheel to wheel-less targets, and each target's wheel to its wheel-less sessions."""
+    from sqlalchemy import select, update
+
+    changed = 0
+    active = get_active_filter_wheel()
+    if active:
+        changed += db.session.execute(
+            update(Target)
+            .where(Target.filter_wheel_id.is_(None))
+            .values(filter_wheel_id=active.id)
+            .execution_options(synchronize_session=False)
+        ).rowcount or 0
+    target_wheel = (
+        select(Target.filter_wheel_id)
+        .where(Target.id == ImagingSession.target_id)
+        .scalar_subquery()
+    )
+    changed += db.session.execute(
+        update(ImagingSession)
+        .where(
+            ImagingSession.filter_wheel_id.is_(None),
+            ImagingSession.target_id.in_(
+                select(Target.id).where(Target.filter_wheel_id.is_not(None))
+            ),
+        )
+        .values(filter_wheel_id=target_wheel)
+        .execution_options(synchronize_session=False)
+    ).rowcount or 0
+    db.session.commit()
+    return changed
+
+
+def plan_channel_filter_map(plan_data):
+    """Channel name -> base filter code (custom channels resolve via nina_filter)."""
+    mapping = {}
+    for ch in (plan_data or {}).get("channels", []):
+        name = ch.get("name", "")
+        if name:
+            mapping[name] = (ch.get("nina_filter") or "").strip() or name
+    return mapping
+
+
+def wheel_filter_codes(wheel):
+    return {slot.filter.name for slot in wheel.slots if slot.filter}
+
+
+def project_required_filter_codes(targets):
+    """Base filter codes a project uses: plan channels, logged sessions and calibration channels."""
+    codes = set()
+    for t in targets:
+        plan = latest_plan(t.id, t.preferred_palette)
+        fmap = plan_channel_filter_map(json.loads(plan.plan_json) if plan else None)
+        codes.update(fmap.values())
+        codes.update(fmap.get(s.channel, s.channel) for s in t.sessions)
+        codes.update(fmap.get(c.channel, c.channel) for c in t.calibration_captures if c.channel)
+    return codes
+
+
+def astrobin_id_resolver():
+    """Return resolve(code, wheel_id): the wheel slot's AstroBin ID, else the Filter's global ID."""
+    global_ids = {f.name: f.astrobin_id for f in Filter.query.all() if f.astrobin_id}
+    slot_ids = {}
+    for slot in FilterWheelSlot.query.filter(FilterWheelSlot.astrobin_id.isnot(None)).all():
+        if slot.filter:
+            slot_ids[(slot.filter_wheel_id, slot.filter.name)] = slot.astrobin_id
+
+    def resolve(code, wheel_id=None):
+        return slot_ids.get((wheel_id, code)) or global_ids.get(code)
+
+    return resolve
+
+
+def target_astrobin_filter_map(target):
+    """Effective {filter code: AstroBin ID} for the target's current wheel."""
+    resolve = astrobin_id_resolver()
+    wheel = get_target_wheel(target)
+    wheel_id = wheel.id if wheel else None
+    resolved = {f.name: resolve(f.name, wheel_id) for f in Filter.query.all()}
+    return {code: abid for code, abid in resolved.items() if abid}
+
+
 def get_effective_packup_time(target):
     """Get effective pack-up time for target (override from settings, or target's own time)."""
     # First priority: explicit override from target settings page
@@ -1025,12 +1173,7 @@ def get_effective_min_altitude(target):
 
 
 def get_effective_calibration_config(target):
-    """Resolved calibration settings for a target (global defaults + overrides).
-
-    Note: ``default_calibration_two_point`` / ``override_calibration_two_point``
-    columns are retained this release but no longer read — the two-point flat
-    nudge was dropped in v2.5.0. Columns will be removed in v2.6 (see roadmap).
-    """
+    """Resolved calibration settings for a target (global defaults + overrides)."""
     global_config = get_global_config()
     return {
         "enabled": bool(target.calibration_tracking_enabled),
@@ -1057,13 +1200,19 @@ def get_effective_calibration_config(target):
     }
 
 
+def latest_plan(target_id, palette_name=None):
+    """Newest TargetPlan for a target; NULL created_at sorts last on both SQLite and PostgreSQL."""
+    query = TargetPlan.query.filter_by(target_id=target_id)
+    if palette_name is not None:
+        query = query.filter_by(palette_name=palette_name)
+    return query.order_by(
+        db.nullslast(TargetPlan.created_at.desc()), TargetPlan.id.desc()
+    ).first()
+
+
 def get_target_plan_form_context(target):
     """Channels and sub-exposure options from the target's latest plan."""
-    plan = (
-        TargetPlan.query.filter_by(target_id=target.id)
-        .order_by(TargetPlan.created_at.desc())
-        .first()
-    )
+    plan = latest_plan(target.id)
     if not plan:
         return [], [], None
     plan_data = json.loads(plan.plan_json)
@@ -1199,12 +1348,7 @@ def _build_mosaic_index_summaries():
                 completed_panels += 1
             else:
                 active_panels += 1
-            plan = (
-                TargetPlan.query
-                .filter_by(target_id=t.id, palette_name=t.preferred_palette)
-                .order_by(TargetPlan.created_at.desc())
-                .first()
-            )
+            plan = latest_plan(t.id, t.preferred_palette)
             if plan:
                 pd = json.loads(plan.plan_json)
                 total_planned += float(pd.get("total_planned_minutes", 0) or 0)
@@ -1245,12 +1389,7 @@ def index():
 
     for t in active_targets:
         # Latest plan for current preferred palette
-        plan = (
-            TargetPlan.query
-            .filter_by(target_id=t.id, palette_name=t.preferred_palette)
-            .order_by(TargetPlan.created_at.desc())
-            .first()
-        )
+        plan = latest_plan(t.id, t.preferred_palette)
 
         if plan:
             plan_data = json.loads(plan.plan_json)
@@ -1391,12 +1530,7 @@ def index():
     # Build archived summaries with basic info
     archived_summaries = []
     for t in archived_targets:
-        plan = (
-            TargetPlan.query
-            .filter_by(target_id=t.id, palette_name=t.preferred_palette)
-            .order_by(TargetPlan.created_at.desc())
-            .first()
-        )
+        plan = latest_plan(t.id, t.preferred_palette)
         
         if plan:
             plan_data = json.loads(plan.plan_json)
@@ -1448,6 +1582,7 @@ def new_target():
         global_config = get_global_config()
         packup_time_local = request.form.get("packup_time_local") or global_config.default_packup_time
 
+        active_wheel = get_active_filter_wheel()
         target = Target(
             name=name,
             catalog_id=catalog_id,
@@ -1456,6 +1591,7 @@ def new_target():
             dec_deg=dec_deg,
             preferred_palette=preferred_palette,
             packup_time_local=packup_time_local,
+            filter_wheel_id=active_wheel.id if active_wheel else None,
         )
 
         # Mosaic group assignment
@@ -1502,12 +1638,7 @@ def target_detail(target_id):
     target = Target.query.get_or_404(target_id)
 
     # Latest plan for current preferred palette
-    plan = (
-        TargetPlan.query
-        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-        .order_by(TargetPlan.created_at.desc())
-        .first()
-    )
+    plan = latest_plan(target.id, target.preferred_palette)
     plan_data = json.loads(plan.plan_json) if plan else None
 
     # Observer location and settings from config
@@ -1538,8 +1669,8 @@ def target_detail(target_id):
     # Get active palettes for palette selector
     palettes = Palette.query.filter_by(is_active=True).order_by(Palette.name).all()
 
-    # Get AstroBin ID map for export modal
-    astrobin_filter_map = {f.name: f.astrobin_id for f in Filter.query.all() if f.astrobin_id}
+    # Get AstroBin ID map for export modal (wheel slot IDs override global filter IDs)
+    astrobin_filter_map = target_astrobin_filter_map(target)
 
     calibration_config = get_effective_calibration_config(target)
     calibration_data = None
@@ -1558,18 +1689,14 @@ def target_detail(target_id):
         calibration_export_totals = aggregate_calibration_for_export(target.calibration_captures)
     astrobin_export_preview = None
     if target.sessions:
-        export_filter_map = {}
-        if plan_data:
-            for ch in plan_data.get("channels", []):
-                ch_name = ch.get("name", "")
-                base_filter = (ch.get("nina_filter") or "").strip() or ch_name
-                if ch_name:
-                    export_filter_map[ch_name] = base_filter
+        export_filter_map = plan_channel_filter_map(plan_data)
+        resolve_abid = astrobin_id_resolver()
         astrobin_export_preview = build_astrobin_export_rows(
             target.sessions,
             target.calibration_captures,
             export_filter_map,
             plan_data,
+            astrobin_id_for=lambda s, bf: resolve_abid(bf, s.filter_wheel_id),
         )
     if target.sessions or target.calibration_captures:
         imaging_log_days = build_target_imaging_log_days(
@@ -1623,12 +1750,7 @@ def export_nina_v2(target_id):
     target = Target.query.get_or_404(target_id)
 
     # ── Plan ─────────────────────────────────────────────────────────────────
-    plan = (
-        TargetPlan.query
-        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-        .order_by(TargetPlan.created_at.desc())
-        .first()
-    )
+    plan = latest_plan(target.id, target.preferred_palette)
     if not plan:
         flash("No plan defined for this target.", "warning")
         return redirect(url_for("target_detail", target_id=target.id))
@@ -1669,7 +1791,7 @@ def export_nina_v2(target_id):
 
     # ── Filter wheel config ───────────────────────────────────────────────────
     from nina_integration import get_filter_config
-    filter_cfg = get_filter_config()
+    filter_cfg = get_filter_config(get_target_wheel(target))
 
     # ── Build channel list ────────────────────────────────────────────────────
     channels = []
@@ -1798,43 +1920,26 @@ def export_astrobin_csv(target_id):
         return redirect(url_for("target_detail", target_id=target.id))
     
     # Get filter name mapping from the target's plan
-    filter_name_map = {}  # Maps channel name (e.g., "O_HDR_1") to base filter (e.g., "O")
-    plan = (
-        TargetPlan.query
-        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-        .order_by(TargetPlan.created_at.desc())
-        .first()
-    )
-    if plan:
-        try:
-            plan_data = json.loads(plan.plan_json)
-            for ch in plan_data.get("channels", []):
-                ch_name = ch.get("name", "")
-                # Use nina_filter if available (for custom filters), otherwise use the channel name itself
-                base_filter = (ch.get("nina_filter") or "").strip() or ch_name
-                if ch_name:
-                    filter_name_map[ch_name] = base_filter
-        except (json.JSONDecodeError, KeyError):
-            pass
-    
-    # Build AstroBin ID map from database filters
-    astrobin_id_map = {}  # Maps filter name (e.g., "H") to AstroBin ID (e.g., 1955)
-    for f in Filter.query.all():
-        if f.astrobin_id:
-            astrobin_id_map[f.name] = f.astrobin_id
-    
-    # Get form data with defaults
-    binning = request.form.get("binning", "1")
-    gain = request.form.get("gain", "100")
-    sensor_cooling = request.form.get("sensor_cooling", "-10")
-    bortle = request.form.get("bortle", "")
-    use_tracked = request.form.get("use_tracked_calibration") == "on"
+    plan = latest_plan(target.id, target.preferred_palette)
     plan_data = None
     if plan:
         try:
             plan_data = json.loads(plan.plan_json)
         except json.JSONDecodeError:
             pass
+    filter_name_map = plan_channel_filter_map(plan_data)  # e.g. "O_HDR_1" -> "O"
+
+    # Session wheel slot's AstroBin ID wins; orphan rows use the project's current wheel
+    resolve_abid = astrobin_id_resolver()
+    target_wheel = get_target_wheel(target)
+    target_wheel_id = target_wheel.id if target_wheel else None
+
+    # Get form data with defaults
+    binning = request.form.get("binning", "1")
+    gain = request.form.get("gain", "100")
+    sensor_cooling = request.form.get("sensor_cooling", "-10")
+    bortle = request.form.get("bortle", "")
+    use_tracked = request.form.get("use_tracked_calibration") == "on"
 
     include_darks = include_flats = include_flat_darks = include_bias = False
     uniform_cal = {"darks": "", "flats": "", "flat_darks": "", "bias": ""}
@@ -1845,6 +1950,7 @@ def export_astrobin_csv(target_id):
             target.calibration_captures,
             filter_name_map,
             plan_data,
+            astrobin_id_for=lambda s, bf: resolve_abid(bf, s.filter_wheel_id),
         )
         include_darks = any(r["darks"] for r in export_rows)
         include_flats = any(r["flats"] for r in export_rows)
@@ -1867,12 +1973,14 @@ def export_astrobin_csv(target_id):
         include_flat_darks = bool(cal_cols["flat_darks"])
         include_bias = bool(cal_cols["bias"])
         from collections import defaultdict
-        sessions_grouped = defaultdict(lambda: {"number": 0, "duration": None, "gain": None, "sensor_cooling": None})
+        sessions_grouped = defaultdict(lambda: {"number": 0, "duration": None, "gain": None, "sensor_cooling": None, "astrobin_id": None})
         for session in target.sessions:
             base_filter = filter_name_map.get(session.channel, session.channel)
             key = (session.date.strftime("%Y-%m-%d"), base_filter, session.sub_exposure_seconds)
             sessions_grouped[key]["number"] += session.sub_count
             sessions_grouped[key]["duration"] = session.sub_exposure_seconds
+            if sessions_grouped[key]["astrobin_id"] is None:
+                sessions_grouped[key]["astrobin_id"] = resolve_abid(base_filter, session.filter_wheel_id)
             if sessions_grouped[key]["gain"] is None and session.gain is not None:
                 sessions_grouped[key]["gain"] = session.gain
             if sessions_grouped[key]["sensor_cooling"] is None and session.sensor_cooling is not None:
@@ -1890,6 +1998,7 @@ def export_astrobin_csv(target_id):
                 "bias": int(uniform_cal["bias"]) if uniform_cal["bias"] else 0,
                 "gain": data["gain"],
                 "sensor_cooling": data["sensor_cooling"],
+                "astrobin_id": data["astrobin_id"],
             })
     
     # Build CSV in memory
@@ -1916,8 +2025,9 @@ def export_astrobin_csv(target_id):
     # Write rows
     for row_data in export_rows:
         filter_name = row_data["filter_name"]
-        filter_value = astrobin_id_map.get(filter_name, filter_name)
-        if filter_name not in astrobin_id_map and filter_name not in filters_missing_ids:
+        astrobin_id = row_data.get("astrobin_id") or resolve_abid(filter_name, target_wheel_id)
+        filter_value = astrobin_id or filter_name
+        if not astrobin_id and filter_name not in filters_missing_ids:
             filters_missing_ids.append(filter_name)
         
         row = [
@@ -2047,7 +2157,7 @@ def clone_target(target_id):
         override_calibration_flats_per_channel=original.override_calibration_flats_per_channel,
         override_calibration_dark_flats_per_channel=original.override_calibration_dark_flats_per_channel,
         override_calibration_bias=original.override_calibration_bias,
-        override_calibration_two_point=original.override_calibration_two_point,
+        filter_wheel_id=original.filter_wheel_id,
         # Don't copy: final_image_filename, is_archived, archived_at, completion_notes
         # Don't copy: created_at (will be set to now automatically)
     )
@@ -2154,12 +2264,7 @@ def update_plan(target_id):
     target = Target.query.get_or_404(target_id)
 
     # Get current plan for the preferred palette
-    plan = (
-        TargetPlan.query
-        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-        .order_by(TargetPlan.created_at.desc())
-        .first()
-    )
+    plan = latest_plan(target.id, target.preferred_palette)
     if not plan:
         flash("No plan found to update.", "danger")
         return redirect(url_for("target_detail", target_id=target.id))
@@ -2359,6 +2464,7 @@ def add_progress(target_id):
     else:
         imaging_date = current_session_date()
 
+    wheel = get_target_wheel(target)
     session = ImagingSession(
         target_id=target.id,
         channel=channel,
@@ -2368,17 +2474,32 @@ def add_progress(target_id):
         date=imaging_date,
         gain=gain,
         sensor_cooling=sensor_cooling,
+        filter_wheel_id=wheel.id if wheel else None,
     )
     db.session.add(session)
+
+    flats_message = None
+    if request.form.get("log_flats") == "1":
+        try:
+            flat_count = int(request.form.get("flat_count", 0))
+        except (TypeError, ValueError):
+            flat_count = 0
+        if flat_count > 0:
+            include_dark_flats = request.form.get("log_dark_flats") == "1"
+            create_flat_captures(
+                target.id, imaging_date, channel, flat_count, include_dark_flats
+            )
+            flats_message = f"Logged {flat_count} flats" + (
+                f" and {flat_count} dark flats" if include_dark_flats else ""
+            ) + f" for {channel}."
+        else:
+            flash("Flats not logged: flat count must be greater than zero.", "warning")
     db.session.commit()
+    if flats_message:
+        flash(flats_message, "success")
 
     if target.calibration_tracking_enabled:
-        plan = (
-            TargetPlan.query
-            .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-            .order_by(TargetPlan.created_at.desc())
-            .first()
-        )
+        plan = latest_plan(target.id, target.preferred_palette)
         plan_data = json.loads(plan.plan_json) if plan else None
         from collections import defaultdict
         progress_seconds = defaultdict(float)
@@ -2401,9 +2522,34 @@ def add_progress(target_id):
 
     flash("Progress added.", "success")
     next_url = request.form.get("next", "").strip()
-    if next_url and next_url.startswith("/"):
+    if _is_safe_local_path(next_url):
         return redirect(next_url)
     return redirect(url_for("target_detail", target_id=target.id))
+
+
+def _is_safe_local_path(url):
+    return bool(url) and url.startswith("/") and not url.startswith("//") and "\\" not in url
+
+
+def create_flat_captures(target_id, capture_date, channel, count,
+                         include_dark_flats, checkpoint="manual", notes=None):
+    """Stage flat (and optionally matching dark-flat) captures; caller commits."""
+    captures = []
+    frame_types = ("flat", "dark_flat") if include_dark_flats else ("flat",)
+    for frame_type in frame_types:
+        capture = CalibrationCapture(
+            target_id=target_id,
+            date=capture_date,
+            frame_type=frame_type,
+            channel=channel,
+            sub_exposure_seconds=None,
+            checkpoint=checkpoint,
+            frame_count=count,
+            notes=notes,
+        )
+        db.session.add(capture)
+        captures.append(capture)
+    return captures
 
 
 @app.route("/session/<int:session_id>/edit", methods=["GET", "POST"])
@@ -2438,12 +2584,7 @@ def edit_session(session_id):
     # GET request - show edit form
     # Get all channel names from target plan for dropdown
     channels = []
-    plan = (
-        TargetPlan.query
-        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-        .order_by(TargetPlan.created_at.desc())
-        .first()
-    )
+    plan = latest_plan(target.id, target.preferred_palette)
     if plan:
         plan_data = json.loads(plan.plan_json)
         channels = [
@@ -2480,12 +2621,7 @@ def _build_calibration_api_response(target):
     """Shared calibration payload for JSON API and AJAX actions."""
     from collections import defaultdict
 
-    plan = (
-        TargetPlan.query
-        .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-        .order_by(TargetPlan.created_at.desc())
-        .first()
-    )
+    plan = latest_plan(target.id, target.preferred_palette)
     plan_data = json.loads(plan.plan_json) if plan else None
 
     progress_seconds = defaultdict(float)
@@ -2523,9 +2659,6 @@ def _build_calibration_api_response(target):
 @app.route("/target/<int:target_id>/calibration/log", methods=["POST"])
 def log_calibration_capture(target_id):
     target = Target.query.get_or_404(target_id)
-    if not target.calibration_tracking_enabled:
-        flash("Calibration tracking is not enabled for this target.", "warning")
-        return redirect(url_for("target_detail", target_id=target.id))
 
     frame_type = (request.form.get("frame_type") or "").strip().lower()
     if frame_type not in ("dark", "flat", "dark_flat", "bias"):
@@ -2573,41 +2706,30 @@ def log_calibration_capture(target_id):
     else:
         capture_date = current_session_date()
 
-    capture = CalibrationCapture(
-        target_id=target.id,
-        date=capture_date,
-        frame_type=frame_type,
-        channel=channel,
-        sub_exposure_seconds=sub_exposure_seconds,
-        checkpoint=checkpoint,
-        frame_count=frame_count,
-        notes=request.form.get("notes"),
-    )
-    db.session.add(capture)
-
     also_log_counterpart = request.form.get("also_log_counterpart") == "1"
     if also_log_counterpart and frame_type in ("flat", "dark_flat"):
-        counterpart_type = "dark_flat" if frame_type == "flat" else "flat"
-        counterpart = CalibrationCapture(
-            target_id=target.id,
-            date=capture_date,
-            frame_type=counterpart_type,
-            channel=channel,
-            sub_exposure_seconds=None,
-            checkpoint=checkpoint,
-            frame_count=frame_count,
-            notes=request.form.get("notes"),
+        create_flat_captures(
+            target.id, capture_date, channel, frame_count,
+            include_dark_flats=True, checkpoint=checkpoint, notes=request.form.get("notes"),
         )
-        db.session.add(counterpart)
         db.session.commit()
-        main_label = "flats" if frame_type == "flat" else "dark flats"
-        counter_label = "dark flats" if frame_type == "flat" else "flats"
         flash(
-            f"Logged {frame_count} {main_label} and {frame_count} {counter_label}"
+            f"Logged {frame_count} flats and {frame_count} dark flats"
             + (f" for {channel}" if channel else "") + ".",
             "success",
         )
     else:
+        capture = CalibrationCapture(
+            target_id=target.id,
+            date=capture_date,
+            frame_type=frame_type,
+            channel=channel,
+            sub_exposure_seconds=sub_exposure_seconds,
+            checkpoint=checkpoint,
+            frame_count=frame_count,
+            notes=request.form.get("notes"),
+        )
+        db.session.add(capture)
         db.session.commit()
         flash("Calibration capture logged.", "success")
 
@@ -2818,12 +2940,7 @@ def mosaic_detail(group_id):
 
     # First pass: compute per-panel progress
     for t in panels:
-        plan = (
-            TargetPlan.query
-            .filter_by(target_id=t.id, palette_name=t.preferred_palette)
-            .order_by(TargetPlan.created_at.desc())
-            .first()
-        )
+        plan = latest_plan(t.id, t.preferred_palette)
         plan_data = json.loads(plan.plan_json) if plan else None
         planned_channels = plan_data.get("channels", []) if plan_data else []
         planned_total = float(plan_data.get("total_planned_minutes", 0) or 0) if plan_data else 0.0
@@ -3027,6 +3144,116 @@ def mosaic_log(group_id):
         group=group,
         grouped_log_days=grouped_log_days,
         stats=stats,
+    )
+
+
+def _mosaic_panels(group_id):
+    return (
+        Target.query
+        .filter_by(mosaic_group_id=group_id)
+        .order_by(
+            Target.mosaic_panel_number.is_(None),
+            Target.mosaic_panel_number,
+            Target.name,
+        )
+        .all()
+    )
+
+
+def _build_flat_backfill_rows(panels):
+    """One row per (night, panel, channel) with light sessions, plus existing flat/dark-flat counts."""
+    rows = {}
+    for t in panels:
+        for s in t.sessions:
+            key = (s.date, t.id, s.channel)
+            row = rows.setdefault(key, {
+                "date": s.date,
+                "target": t,
+                "channel": s.channel,
+                "subs": 0,
+                "light_min": 0.0,
+                "flats": 0,
+                "dark_flats": 0,
+            })
+            row["subs"] += s.sub_count
+            row["light_min"] += s.sub_exposure_seconds * s.sub_count / 60.0
+        for c in t.calibration_captures:
+            key = (c.date, t.id, c.channel)
+            if key not in rows:
+                continue
+            if c.frame_type == "flat":
+                rows[key]["flats"] += c.frame_count
+            elif c.frame_type == "dark_flat":
+                rows[key]["dark_flats"] += c.frame_count
+    for row in rows.values():
+        row["key"] = f"{row['date'].isoformat()}|{row['target'].id}|{row['channel']}"
+        row["light_min"] = round(row["light_min"], 1)
+    return sorted(
+        rows.values(),
+        key=lambda r: (
+            -r["date"].toordinal(),
+            r["target"].mosaic_panel_number or 0,
+            r["target"].name,
+            r["channel"],
+        ),
+    )
+
+
+@app.route("/mosaic/<int:group_id>/calibration/backfill", methods=["GET", "POST"])
+def mosaic_calibration_backfill(group_id):
+    """Log missing flats (and matching dark flats) for every panel/night/filter in one go."""
+    group = MosaicGroup.query.get_or_404(group_id)
+    panels = _mosaic_panels(group_id)
+    rows = _build_flat_backfill_rows(panels)
+
+    if request.method == "POST":
+        try:
+            flat_count = int(request.form.get("flat_count", 0))
+        except (TypeError, ValueError):
+            flat_count = 0
+        if flat_count <= 0:
+            flash("Flat count must be greater than zero.", "danger")
+            return redirect(url_for("mosaic_calibration_backfill", group_id=group_id))
+        include_dark_flats = request.form.get("log_dark_flats") == "1"
+
+        rows_by_key = {r["key"]: r for r in rows}
+        selected = [rows_by_key[k] for k in request.form.getlist("rows") if k in rows_by_key]
+        logged = skipped = 0
+        for row in selected:
+            need_flats = row["flats"] == 0
+            need_dark_flats = include_dark_flats and row["dark_flats"] == 0
+            if not need_flats and not need_dark_flats:
+                skipped += 1
+                continue
+            if need_flats:
+                create_flat_captures(
+                    row["target"].id, row["date"], row["channel"], flat_count,
+                    include_dark_flats=False, notes="Backfilled",
+                )
+            if need_dark_flats:
+                db.session.add(CalibrationCapture(
+                    target_id=row["target"].id,
+                    date=row["date"],
+                    frame_type="dark_flat",
+                    channel=row["channel"],
+                    checkpoint="manual",
+                    frame_count=flat_count,
+                    notes="Backfilled",
+                ))
+            logged += 1
+        db.session.commit()
+        msg = f"Backfilled calibration for {logged} night/panel/filter row(s)."
+        if skipped:
+            msg += f" Skipped {skipped} row(s) that already had flats logged."
+        flash(msg, "success" if logged else "info")
+        return redirect(url_for("mosaic_log", group_id=group_id))
+
+    default_count = get_global_config().default_calibration_flats_per_channel or ""
+    return render_template(
+        "mosaic_calibration_backfill.html",
+        group=group,
+        rows=rows,
+        default_count=default_count,
     )
 
 
@@ -3251,12 +3478,7 @@ def api_conditions(target_id):
     if target_id > 0:
         target = Target.query.get(target_id)
         if target:
-            plan = (
-                TargetPlan.query
-                .filter_by(target_id=target.id, palette_name=target.preferred_palette)
-                .order_by(TargetPlan.created_at.desc())
-                .first()
-            )
+            plan = latest_plan(target.id, target.preferred_palette)
             plan_data = json.loads(plan.plan_json) if plan else None
 
             progress_by_channel = defaultdict(float)
@@ -3401,6 +3623,75 @@ def global_settings():
     return render_template("settings.html", config=config, presets=presets)
 
 
+def _export_filter_wheels():
+    wheels_out = []
+    for wheel in FilterWheel.query.all():
+        wheels_out.append({
+            "name": wheel.name,
+            "slot_count": wheel.slot_count,
+            "filter_size": wheel.filter_size,
+            "is_default": wheel.is_default,
+            "slots": [
+                {
+                    "position": slot.position,
+                    "filter_code": slot.filter.name if slot.filter else None,
+                    "nina_name": slot.nina_filter_name,
+                    "brand": slot.physical_filter_brand,
+                    "astrobin_id": slot.astrobin_id,
+                }
+                for slot in wheel.slots
+            ],
+        })
+    return wheels_out
+
+
+def _import_filter_wheels(wheels_data, replace):
+    """Import wheels from preset data. Returns (imported_count, kept_wheel_names).
+
+    Replace mode keeps wheels still referenced by projects or logged sessions.
+    """
+    kept = []
+    if replace:
+        for wheel in FilterWheel.query.all():
+            in_use = (
+                Target.query.filter_by(filter_wheel_id=wheel.id).first()
+                or ImagingSession.query.filter_by(filter_wheel_id=wheel.id).first()
+            )
+            if in_use:
+                kept.append(wheel.name)
+            else:
+                db.session.delete(wheel)
+        db.session.commit()
+
+    has_active = FilterWheel.query.filter_by(is_active=True).first() is not None
+    count = 0
+    for wheel_data in wheels_data:
+        wheel = FilterWheel(
+            name=wheel_data['name'],
+            slot_count=wheel_data.get('slot_count', 8),
+            filter_size=wheel_data.get('filter_size', '1.25"'),
+            is_active=not has_active,
+            is_default=wheel_data.get('is_default', False),
+        )
+        has_active = True
+        db.session.add(wheel)
+        db.session.flush()
+        for slot_data in wheel_data.get('slots', []):
+            code = slot_data.get('filter_code')
+            filter_obj = Filter.query.filter_by(name=code).first() if code else None
+            db.session.add(FilterWheelSlot(
+                filter_wheel_id=wheel.id,
+                filter_id=filter_obj.id if filter_obj else None,
+                position=slot_data['position'],
+                nina_filter_name=slot_data.get('nina_name'),
+                physical_filter_brand=slot_data.get('brand'),
+                astrobin_id=slot_data.get('astrobin_id'),
+            ))
+        db.session.commit()
+        count += 1
+    return count, kept
+
+
 @app.route("/settings/export-preset", methods=["POST"])
 def export_preset_web():
     """Export current filters and optionally filter wheels as JSON."""
@@ -3429,24 +3720,7 @@ def export_preset_web():
         export_data["filters"].append(filter_data)
     
     if include_wheels:
-        wheels = FilterWheel.query.all()
-        export_data["filter_wheels"] = []
-        for wheel in wheels:
-            wheel_data = {
-                "name": wheel.name,
-                "slot_count": wheel.slot_count,
-                "filter_size": wheel.filter_size,
-                "is_default": wheel.is_default,
-                "slots": []
-            }
-            for slot in wheel.slots:
-                slot_data = {
-                    "position": slot.position,
-                    "filter_code": slot.filter.name if slot.filter else None,
-                    "nina_name": slot.nina_filter_name
-                }
-                wheel_data["slots"].append(slot_data)
-            export_data["filter_wheels"].append(wheel_data)
+        export_data["filter_wheels"] = _export_filter_wheels()
     
     # Create file for download
     output = io.BytesIO()
@@ -3521,34 +3795,13 @@ def import_preset_web():
     
     # Import filter wheels if requested
     wheel_count = 0
+    kept_wheels = []
     if include_wheels and 'filter_wheels' in import_data:
-        if import_mode == "replace":
-            FilterWheel.query.delete()
-            db.session.commit()
-        
-        wheels_data = import_data.get('filter_wheels', [])
-        for wheel_data in wheels_data:
-            wheel = FilterWheel(
-                name=wheel_data['name'],
-                slot_count=wheel_data.get('slot_count', 8),
-                filter_size=wheel_data.get('filter_size', '1.25"'),
-                is_active=True,
-                is_default=wheel_data.get('is_default', False)
-            )
-            db.session.add(wheel)
-            db.session.commit()
-            
-            for slot_data in wheel_data.get('slots', []):
-                filter_obj = Filter.query.filter_by(name=slot_data.get('filter_code')).first() if slot_data.get('filter_code') else None
-                slot = FilterWheelSlot(
-                    filter_wheel_id=wheel.id,
-                    filter_id=filter_obj.id if filter_obj else None,
-                    position=slot_data['position'],
-                    nina_filter_name=slot_data.get('nina_name')
-                )
-                db.session.add(slot)
-            db.session.commit()
-            wheel_count += 1
+        wheel_count, kept_wheels = _import_filter_wheels(
+            import_data.get('filter_wheels', []), replace=(import_mode == "replace")
+        )
+    if kept_wheels:
+        flash(f"Kept filter wheel(s) still used by projects: {', '.join(kept_wheels)}.", "info")
     
     if import_mode == "merge":
         flash(f"Import complete: {imported_count} new filters, {updated_count} updated, {wheel_count} filter wheel(s).", "success")
@@ -3603,9 +3856,6 @@ def target_settings(target_id):
             int(override_dark_flats) if override_dark_flats else None
         )
         target.override_calibration_bias = int(override_bias) if override_bias else None
-        # Note: override_calibration_two_point column is retained but no longer
-        # written from the UI (two-point nudge removed in v2.5.0). Column will
-        # be dropped in v2.6.
 
         # Per-target default camera settings
         tgt_gain_raw = request.form.get("default_sensor_gain", "").strip()
@@ -4058,6 +4308,8 @@ def edit_filter_wheel(wheel_id):
             slot.filter_id = filter_id
             slot.nina_filter_name = request.form.get(f"slot_{slot.position}_nina_name", "").strip() or None
             slot.physical_filter_brand = request.form.get(f"slot_{slot.position}_brand", "").strip() or None
+            astrobin_raw = request.form.get(f"slot_{slot.position}_astrobin_id", "").strip()
+            slot.astrobin_id = int(astrobin_raw) if astrobin_raw.isdigit() else None
             slot.notes = request.form.get(f"slot_{slot.position}_notes", "").strip() or None
         
         try:
@@ -4081,6 +4333,18 @@ def delete_filter_wheel(wheel_id):
     if wheel.is_active:
         flash("Cannot delete the active filter wheel. Activate another wheel first.", "error")
         return redirect(url_for("filter_wheel_list"))
+
+    project_names = [t.name for t in Target.query.filter_by(filter_wheel_id=wheel.id).order_by(Target.name)]
+    session_refs = ImagingSession.query.filter_by(filter_wheel_id=wheel.id).count()
+    if project_names or session_refs:
+        detail = ", ".join(project_names[:5]) + ("…" if len(project_names) > 5 else "")
+        flash(
+            f"Cannot delete '{wheel.name}': it is used by {len(project_names)} project(s)"
+            + (f" ({detail})" if detail else "")
+            + f" and {session_refs} logged session(s). Switch those projects to another wheel first.",
+            "error",
+        )
+        return redirect(url_for("filter_wheel_list"))
     
     try:
         db.session.delete(wheel)
@@ -4095,49 +4359,16 @@ def delete_filter_wheel(wheel_id):
 
 @app.route("/filter-wheel/<int:wheel_id>/activate", methods=["POST"])
 def activate_filter_wheel(wheel_id):
-    """Activate a filter wheel with validation against active target plans."""
+    """Make a wheel the default for new projects (and for projects with no wheel assigned)."""
     wheel = FilterWheel.query.get_or_404(wheel_id)
-    
-    # Get all filter codes available on this wheel
-    wheel_filter_codes = set()
-    for slot in wheel.slots:
-        if slot.filter:
-            wheel_filter_codes.add(slot.filter.name)
-    
-    # Check active target plans for filter compatibility
+    available = wheel_filter_codes(wheel)
+
+    # Projects with an assigned wheel are unaffected; only wheel-less ones follow the active wheel
     affected_targets = []
-    targets = Target.query.all()
-    
-    for target in targets:
-        # Get the latest plan for this target
-        plan = TargetPlan.query.filter_by(target_id=target.id).order_by(TargetPlan.created_at.desc()).first()
-        if plan:
-            try:
-                plan_data = json.loads(plan.plan_json)
-                channels = plan_data.get("channels", [])
-                
-                # Check each channel's filter
-                missing_filters = []
-                for ch in channels:
-                    filter_name = ch.get("name", "")
-                    # For custom filters, check mapped_filter_id or nina_filter
-                    mapped_filter = ch.get("mapped_filter_id")
-                    if mapped_filter:
-                        mapped = Filter.query.get(mapped_filter)
-                        if mapped and mapped.name not in wheel_filter_codes:
-                            missing_filters.append(mapped.name)
-                    elif filter_name not in wheel_filter_codes:
-                        # Check if it's a standard filter
-                        if Filter.query.filter_by(name=filter_name).first():
-                            missing_filters.append(filter_name)
-                
-                if missing_filters:
-                    affected_targets.append({
-                        "target": target,
-                        "missing_filters": list(set(missing_filters))
-                    })
-            except (json.JSONDecodeError, KeyError):
-                pass
+    for target in Target.query.filter(Target.filter_wheel_id.is_(None)).all():
+        missing = project_required_filter_codes([target]) - available
+        if missing:
+            affected_targets.append({"target": target, "missing_filters": sorted(missing)})
     
     # If there are affected targets and user hasn't confirmed, show warning
     if affected_targets and request.form.get("confirm") != "yes":
@@ -4154,12 +4385,100 @@ def activate_filter_wheel(wheel_id):
         wheel.is_active = True
         db.session.commit()
         
-        flash(f"Filter wheel '{wheel.name}' is now active!", "success")
+        flash(f"Filter wheel '{wheel.name}' is now the default for new projects.", "success")
     except Exception as e:
         db.session.rollback()
         flash(f"Error activating filter wheel: {e}", "error")
     
     return redirect(url_for("filter_wheel_list"))
+
+
+def _handle_filter_wheel_switch(targets, title, back_url, action_url):
+    """Shared GET/POST flow for switching one project (or all mosaic panels) to another wheel."""
+    from collections import Counter
+
+    required = project_required_filter_codes(targets)
+    current_ids = {t.filter_wheel_id for t in targets}
+    current_wheel_id = next(iter(current_ids)) if len(current_ids) == 1 else None
+    options = []
+    for w in FilterWheel.query.order_by(FilterWheel.name).all():
+        missing = sorted(required - wheel_filter_codes(w))
+        options.append({
+            "wheel": w,
+            "missing": missing,
+            "compatible": not missing,
+            "current": w.id == current_wheel_id,
+        })
+
+    if request.method == "POST":
+        wheel_id = request.form.get("wheel_id", type=int)
+        option = next((o for o in options if o["wheel"].id == wheel_id), None)
+        if option is None:
+            flash("Select a filter wheel.", "danger")
+            return redirect(action_url)
+        if not option["compatible"]:
+            flash(
+                f"Cannot switch to '{option['wheel'].name}': it has no slot for "
+                f"{', '.join(option['missing'])}.",
+                "danger",
+            )
+            return redirect(action_url)
+
+        new_wheel = option["wheel"]
+        for t in targets:
+            t.filter_wheel_id = new_wheel.id
+        remapped = 0
+        if request.form.get("remap_sessions") == "1":
+            remapped = ImagingSession.query.filter(
+                ImagingSession.target_id.in_([t.id for t in targets])
+            ).update({ImagingSession.filter_wheel_id: new_wheel.id}, synchronize_session=False)
+        db.session.commit()
+
+        msg = f"Switched to filter wheel '{new_wheel.name}'."
+        if remapped:
+            msg += f" {remapped} previously logged session(s) now use its filters."
+        flash(msg, "success")
+        return redirect(back_url)
+
+    session_wheel_counts = Counter(
+        (s.filter_wheel.name if s.filter_wheel else "Unassigned")
+        for t in targets for s in t.sessions
+    )
+    return render_template(
+        "filter_wheel_switch.html",
+        title=title,
+        targets=targets,
+        required=sorted(required),
+        options=options,
+        session_wheel_counts=dict(session_wheel_counts),
+        back_url=back_url,
+    )
+
+
+@app.route("/target/<int:target_id>/filter-wheel/switch", methods=["GET", "POST"])
+def switch_target_filter_wheel(target_id):
+    target = Target.query.get_or_404(target_id)
+    return _handle_filter_wheel_switch(
+        [target],
+        title=target.name,
+        back_url=url_for("target_detail", target_id=target.id),
+        action_url=url_for("switch_target_filter_wheel", target_id=target.id),
+    )
+
+
+@app.route("/mosaic/<int:group_id>/filter-wheel/switch", methods=["GET", "POST"])
+def switch_mosaic_filter_wheel(group_id):
+    group = MosaicGroup.query.get_or_404(group_id)
+    panels = _mosaic_panels(group_id)
+    if not panels:
+        flash("This mosaic has no panels yet.", "info")
+        return redirect(url_for("mosaic_detail", group_id=group_id))
+    return _handle_filter_wheel_switch(
+        panels,
+        title=f"{group.name} (all {len(panels)} panels)",
+        back_url=url_for("mosaic_detail", group_id=group_id),
+        action_url=url_for("switch_mosaic_filter_wheel", group_id=group_id),
+    )
 
 
 @app.route("/api/active-wheel")
@@ -4215,22 +4534,25 @@ def list_filter_presets():
 
 
 @app.cli.command("migrate-db")
-def migrate_db():
-    """Run additive schema migrations (never deletes rows).
+@click.option("--no-backup", is_flag=True, help="Skip the pre-migration backup (you have your own snapshot).")
+def migrate_db(no_backup):
+    """Run schema migrations: add missing columns/tables, then drop retired columns.
 
     Run after upgrading ArmillaryLab when models gain columns/tables, or when
     the UI or SQL mentions missing tables/columns. Not required on every Flask
     start or after every backup restore; a DB that already matches this checkout
-    is typically a no-op.
+    is typically a no-op. A backup is taken first on both SQLite and PostgreSQL;
+    retired columns are only dropped once that backup exists.
 
     Safe workflow:
       1. flask db info          # confirm which database file/server is active
-      2. flask db backup        # snapshot before schema changes
-      3. flask migrate-db       # add missing columns/tables only
+      2. flask migrate-db       # backup, add missing columns/tables, drop retired columns
     """
     import shutil
+    import sys
     from sqlalchemy import inspect, text
     from config.database import get_database_config
+    from config.migration import PgDumpUnavailableError, create_postgresql_backup
     from config.sqlite_health import check_sqlite_database, sqlite_has_core_schema, sqlite_db_info
 
     local_db_config = get_database_config(BASE_DIR)
@@ -4266,10 +4588,11 @@ def migrate_db():
             return
 
         if info and info.get("valid") and info.get("imaging_sessions", 0) >= 0:
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = source_path.parent / f"{source_path.name}.backup_{stamp}"
-            shutil.copy2(source_path, backup_path)
-            print(f"Auto-backup created: {backup_path}")
+            if not no_backup:
+                stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_path = source_path.parent / f"{source_path.name}.backup_{stamp}"
+                shutil.copy2(source_path, backup_path)
+                print(f"Auto-backup created: {backup_path}")
         else:
             info = sqlite_db_info(source_path)
             print(f"ERROR: Database still invalid after repair attempt: {info}")
@@ -4281,6 +4604,23 @@ def migrate_db():
             print(f"ERROR: Cannot connect to PostgreSQL: {errors}")
             return
         print("PostgreSQL connection verified.")
+        if not no_backup:
+            try:
+                backup_path = create_postgresql_backup(
+                    local_db_config, datetime.now().strftime("%Y%m%d_%H%M%S")
+                )
+                print(f"Auto-backup created: {backup_path}")
+            except PgDumpUnavailableError as exc:
+                print(f"WARNING: {exc}")
+                if not sys.stdin.isatty() or not click.confirm(
+                    "No backup can be taken — continue anyway?", default=False
+                ):
+                    print("Migration aborted: no backup was taken.")
+                    return
+            except Exception as exc:
+                print(f"ERROR: PostgreSQL backup failed: {exc}")
+                print("Migration aborted: no backup was taken.")
+                return
 
     before_counts = row_counts()
     if any(v is not None for v in before_counts.values()):
@@ -4297,6 +4637,7 @@ def migrate_db():
         return
 
     apply_additive_schema_migrations()
+    apply_destructive_schema_cleanup()
 
     after_counts = row_counts()
     if any(v is not None for v in after_counts.values()):
@@ -4311,7 +4652,7 @@ def migrate_db():
                         f"{restore_hint}"
                     )
 
-    print("Database migration complete (additive only — no rows deleted).")
+    print("Database migration complete (no rows deleted).")
 
 
 @app.cli.command("init-db")
@@ -4584,24 +4925,7 @@ def export_preset(output_file, include_wheels):
         export_data["filters"].append(filter_data)
     
     if include_wheels:
-        wheels = FilterWheel.query.all()
-        export_data["filter_wheels"] = []
-        for wheel in wheels:
-            wheel_data = {
-                "name": wheel.name,
-                "slot_count": wheel.slot_count,
-                "filter_size": wheel.filter_size,
-                "is_default": wheel.is_default,
-                "slots": []
-            }
-            for slot in wheel.slots:
-                slot_data = {
-                    "position": slot.position,
-                    "filter_code": slot.filter.name if slot.filter else None,
-                    "nina_name": slot.nina_filter_name
-                }
-                wheel_data["slots"].append(slot_data)
-            export_data["filter_wheels"].append(wheel_data)
+        export_data["filter_wheels"] = _export_filter_wheels()
     
     # Ensure output directory exists
     output_dir = os.path.dirname(output_file)
@@ -4613,7 +4937,7 @@ def export_preset(output_file, include_wheels):
     
     print(f"Exported {len(filters)} filters to {output_file}")
     if include_wheels:
-        print(f"  (including {len(wheels)} filter wheel(s))")
+        print(f"  (including {len(export_data['filter_wheels'])} filter wheel(s))")
 
 
 @app.cli.command("import-preset")
@@ -4686,35 +5010,12 @@ def import_preset(input_file, merge, include_wheels):
     
     # Import filter wheels if requested
     if include_wheels and 'filter_wheels' in import_data:
-        if not merge:
-            FilterWheel.query.delete()
-            db.session.commit()
-        
-        wheels_data = import_data.get('filter_wheels', [])
-        for wheel_data in wheels_data:
-            wheel = FilterWheel(
-                name=wheel_data['name'],
-                slot_count=wheel_data.get('slot_count', 8),
-                filter_size=wheel_data.get('filter_size', '1.25"'),
-                is_active=True,
-                is_default=wheel_data.get('is_default', False)
-            )
-            db.session.add(wheel)
-            db.session.commit()
-            
-            for slot_data in wheel_data.get('slots', []):
-                filter_obj = Filter.query.filter_by(name=slot_data.get('filter_code')).first() if slot_data.get('filter_code') else None
-                slot = FilterWheelSlot(
-                    filter_wheel_id=wheel.id,
-                    filter_id=filter_obj.id if filter_obj else None,
-                    position=slot_data['position'],
-                    nina_filter_name=slot_data.get('nina_name')
-                )
-                db.session.add(slot)
-            db.session.commit()
-            print(f"  Imported filter wheel: {wheel.name}")
-        
-        print(f"Imported {len(wheels_data)} filter wheel(s)")
+        wheel_count, kept_wheels = _import_filter_wheels(
+            import_data.get('filter_wheels', []), replace=not merge
+        )
+        if kept_wheels:
+            print(f"  Kept filter wheel(s) still used by projects: {', '.join(kept_wheels)}")
+        print(f"Imported {wheel_count} filter wheel(s)")
 
 
 if __name__ == "__main__":

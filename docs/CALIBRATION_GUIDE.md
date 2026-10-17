@@ -8,15 +8,16 @@ end of each channel if you still owe frames. *When* and *how* you capture
 > **v2.5.0 change:** the old "two-point" mid-channel nudge was dropped. Since
 > ArmillaryLab never applies or averages flats, forcing a capture rhythm gained
 > nothing. You now get one suggestion per channel — at the end — and the
-> `checkpoint` field on each capture is free-form metadata. See the
-> [features roadmap](FEATURES_ROADMAP.md) for the v2.6 column cleanup that
-> follows.
+> `checkpoint` field on each capture is free-form metadata. The retired
+> `two_point` columns are dropped by `flask migrate-db` as of v2.8.0.
 
 ---
 
 ## Overview
 
-Calibration tracking is **opt-in per target**. When enabled:
+Calibration tracking is **opt-in per target**. It controls planned counts,
+progress and reminders; logging captures works on every target (v2.8.0). When
+enabled:
 
 | Frame type | Scope | Suggestion |
 |------------|-------|------------|
@@ -56,8 +57,9 @@ channel plan is **20×300s** light frames.
 | End of channel (20/20 frames logged) | One suggestion: *log remaining flats/dark flats for R* |
 
 The banner shows **X / 100 captured** so totals never look additive. The
-`checkpoint` tag you pick when logging (`midpoint`, `end`, `manual`, or any
-text via the API) is preserved as-is — it's metadata, not workflow state.
+`checkpoint` tag you pick when logging (`end`, `manual`, or any text via the
+API; older `midpoint` rows stay editable) is preserved as-is — it's metadata,
+not workflow state.
 
 ### Skip for now
 
@@ -69,6 +71,23 @@ Suggestions** and click **Restore**.
 ---
 
 ## Logging captures
+
+### With the light session (v2.8.0)
+
+In **Add Imaging Progress** (target page) or **Log Session to Panel** (mosaic
+page), tick **Also log flats**, set the count (prefilled from flats per
+channel) and keep **+ matching dark flats** ticked to log the same number of
+dark flats. Both use the session's date and filter, so they pair with that
+night's lights in the imaging log and AstroBin export.
+
+### Backfilling a mosaic
+
+**Mosaic → Session Log → Backfill Flats** lists every night × panel × filter
+with light frames. Rows with no flats are pre-selected; enter a count, keep or
+clear the dark-flats checkbox, and submit. Rows that already have flats (and
+dark flats, if requested) are skipped, so re-submitting is safe.
+
+### From the Calibration Frames card
 
 On the target detail page, use the **Calibration Frames** card:
 

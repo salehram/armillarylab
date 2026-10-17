@@ -75,6 +75,7 @@
                   <th>Filter</th>
                   <th>NINA Name</th>
                   <th>Brand</th>
+                  <th style="width: 130px;">AstroBin ID</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,6 +107,12 @@
                            value="{{ slot.physical_filter_brand or '' }}"
                            placeholder="e.g., Antlia">
                   </td>
+                  <td>
+                    <input class="form-control form-control-sm" type="number" min="1" step="1"
+                           name="slot_{{ slot.position }}_astrobin_id"
+                           value="{{ slot.astrobin_id or '' }}"
+                           placeholder="{{ slot.filter.astrobin_id if slot.filter and slot.filter.astrobin_id else 'e.g., 1955' }}">
+                  </td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -116,6 +123,7 @@
           <i class="bi bi-info-circle"></i> 
           <strong>NINA Name</strong> is what appears in NINA sequences (e.g., "Ha" instead of "H").
           <strong>Brand</strong> is optional for tracking your physical filters.
+          <strong>AstroBin ID</strong> identifies this physical filter in AstroBin exports; leave blank to use the filter's global ID (shown as placeholder).
         </div>
       </div>
       {% else %}

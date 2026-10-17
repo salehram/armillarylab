@@ -1,0 +1,40 @@
+{% macro session_flats_fields(default_count='') %}
+<div class="border rounded p-2 mb-2 session-flats" data-session-flats>
+  <div class="form-check mb-1">
+    <input class="form-check-input" type="checkbox" name="log_flats" value="1" id="session_log_flats" data-flats-toggle>
+    <label class="form-check-label" for="session_log_flats">
+      <i class="bi bi-lightbulb me-1"></i>Also log flats for this filter &amp; date
+    </label>
+  </div>
+  <div class="row g-2 align-items-end d-none" data-flats-fields>
+    <div class="col-md-4">
+      <label class="form-label small mb-0" for="session_flat_count">Flat count</label>
+      <input class="form-control form-control-sm" type="number" name="flat_count" id="session_flat_count"
+             min="1" step="1" value="{{ default_count }}" data-flats-count>
+    </div>
+    <div class="col-md-8">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="log_dark_flats" value="1" id="session_log_dark_flats" checked>
+        <label class="form-check-label" for="session_log_dark_flats">+ matching dark flats (same count)</label>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  document.querySelectorAll('[data-session-flats]').forEach(function (box) {
+    const toggle = box.querySelector('[data-flats-toggle]');
+    const fields = box.querySelector('[data-flats-fields]');
+    const count = box.querySelector('[data-flats-count]');
+    if (!toggle || toggle.dataset.bound) return;
+    toggle.dataset.bound = '1';
+    function sync() {
+      fields.classList.toggle('d-none', !toggle.checked);
+      count.required = toggle.checked;
+    }
+    toggle.addEventListener('change', sync);
+    sync();
+  });
+})();
+</script>
+{% endmacro %}

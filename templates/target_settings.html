@@ -141,6 +141,14 @@
         </p>
 
         <hr class="border-secondary">
+        <p><strong>Filter wheel:</strong><br>
+          {{ target.filter_wheel.name if target.filter_wheel else 'Active wheel (unassigned)' }}
+          <a href="{{ url_for('switch_target_filter_wheel', target_id=target.id) }}" class="btn btn-sm btn-outline-warning ms-2 py-0">
+            <i class="bi bi-arrow-left-right me-1"></i>Switch
+          </a>
+        </p>
+
+        <hr class="border-secondary">
         <p><strong>Calibration tracking:</strong><br>
         {% if target.calibration_tracking_enabled %}
           <span class="badge bg-success">Enabled</span>
@@ -155,7 +163,6 @@
           <li>Flats / channel: {{ effective_calibration.flats_per_channel }}</li>
           <li>Dark flats / channel: {{ effective_calibration.dark_flats_per_channel }}</li>
           <li>Bias: {{ effective_calibration.bias }}</li>
-          <li>Two-point: {{ 'Yes' if effective_calibration.two_point else 'No' }}</li>
         </ul>
         {% endif %}
 

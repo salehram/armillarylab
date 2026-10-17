@@ -49,9 +49,8 @@ def restore():
                 calibration_tracking_enabled,
                 override_calibration_darks, override_calibration_flats_per_channel,
                 override_calibration_dark_flats_per_channel, override_calibration_bias,
-                override_calibration_two_point,
                 final_image_filename, created_at, is_archived, archived_at, completion_notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row["id"],
@@ -69,7 +68,6 @@ def restore():
                 None,
                 None,
                 0,
-                None,
                 None,
                 None,
                 None,

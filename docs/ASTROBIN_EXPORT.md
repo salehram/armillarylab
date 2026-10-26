@@ -139,6 +139,18 @@ exports with the new wheel's IDs.
 
 ## Exporting Sessions
 
+### Mosaics: panel vs whole-mosaic export
+
+Panels of a mosaic are separate targets, so a night where you shot R on two
+panels has two light sessions and, if you logged them on both panels, two
+identical flat sets.
+
+- **Mosaic page → Export to AstroBin** (or **Whole mosaic** in a panel's
+  export modal) writes one CSV for all panels: lights are summed per
+  night/filter/exposure, and flats, dark flats, darks and bias count **once per
+  night and filter** (the largest set logged on any panel, never the sum).
+- **This panel only** exports just that panel's entries, unchanged.
+
 ### Prerequisites
 
 - Target must have recorded imaging sessions

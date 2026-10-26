@@ -78,6 +78,27 @@
           Example: For <code>app.astrobin.com/equipment/explorer/filter/<strong>1955</strong>/zwo-h-alpha</code>, enter <code>1955</code>.
         </div>
       </div>
+
+      <!-- Moon limits for duration prediction -->
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <label class="form-label">Max Moon Illumination (%)</label>
+          <input class="form-control" name="moon_max_illumination_pct" type="number" min="0" max="100" step="1"
+                 value="{{ filter.moon_max_illumination_pct if filter and filter.moon_max_illumination_pct is not none else '' }}"
+                 placeholder="{{ 'Default: %s' % moon_defaults.illum if moon_defaults else 'Default by filter type' }}">
+        </div>
+        <div class="col-6">
+          <label class="form-label">Min Moon Separation (&deg;)</label>
+          <input class="form-control" name="moon_min_separation_deg" type="number" min="0" max="180" step="1"
+                 value="{{ filter.moon_min_separation_deg if filter and filter.moon_min_separation_deg is not none else '' }}"
+                 placeholder="{{ 'Default: %s' % moon_defaults.sep if moon_defaults else 'Default by filter type' }}">
+        </div>
+        <div class="form-text">
+          Used by Plan Duration Prediction: while the moon is above the horizon this filter is only scheduled
+          if illumination is at or below the limit and the moon is at least this far from the target.
+          Leave blank for the default.
+        </div>
+      </div>
       
     </div>
     

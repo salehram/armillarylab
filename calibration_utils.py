@@ -507,6 +507,45 @@ def build_astrobin_export_rows(
     return sorted(rows.values(), key=lambda r: (r["date"], r["filter_name"], r["duration"]))
 
 
+def consolidate_mosaic_calibration(panel_captures) -> list:
+    """Collapse per-panel calibration into one set per night for a mosaic export.
+
+    ``panel_captures`` is one list of captures per panel, with ``channel`` already
+    mapped to the base filter. Panels shot the same night with the same filter
+    share one calibration set, so each (night, frame type, filter / dark
+    exposure) keeps the largest per-panel total instead of summing panels.
+    """
+    from collections import defaultdict
+    from types import SimpleNamespace
+
+    best: dict[tuple, int] = {}
+    for captures in panel_captures:
+        totals: dict[tuple, int] = defaultdict(int)
+        for c in captures:
+            sub = getattr(c, "sub_exposure_seconds", None)
+            if c.frame_type in ("flat", "dark_flat"):
+                if not c.channel:
+                    continue
+                key = (c.date, c.frame_type, c.channel, None)
+            elif c.frame_type == "dark":
+                key = (c.date, "dark", None, round(float(sub), 2) if sub is not None else None)
+            else:
+                key = (c.date, c.frame_type, None, None)
+            totals[key] += c.frame_count
+        for key, count in totals.items():
+            best[key] = max(best.get(key, 0), count)
+
+    return [
+        SimpleNamespace(
+            date=date_, frame_type=frame_type, channel=channel,
+            sub_exposure_seconds=sub, frame_count=count,
+        )
+        for (date_, frame_type, channel, sub), count in sorted(
+            best.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2] or "", kv[0][3] or 0)
+        )
+    ]
+
+
 def _calibration_log_entry(capture) -> dict:
     label = capture.frame_type.replace("_", " ")
     sub = getattr(capture, "sub_exposure_seconds", None)

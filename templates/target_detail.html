@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% from "_session_flats.html" import session_flats_fields %}
+{% from "_astrobin_export.html" import astrobin_export_body, astrobin_export_script %}
+{% from "_duration_prediction.html" import duration_prediction_card %}
 {% block content %}
 
 {% macro notes_and_pixi_cards() %}
@@ -497,6 +499,17 @@
     </div>
   </div>
 </div>
+
+{% if plan_data %}
+<!-- PLAN DURATION PREDICTION -->
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    {{ duration_prediction_card(
+         url_for('api_target_duration_prediction', target_id=target.id),
+         url_for('save_target_prediction_settings', target_id=target.id)) }}
+  </div>
+</div>
+{% endif %}
 
 <!-- ROW 2: TONIGHT'S WINDOW (LEFT) + RIGHT COLUMN STACK (PROGRESS + NOTES + PIXINSIGHT) -->
 <div class="row g-4 mb-4">
@@ -1050,6 +1063,7 @@
 
 <!-- Chart.js for altitude plot -->
 <script src="{{ url_for('static', filename='js/chart.umd.js') }}"></script>
+<script src="{{ url_for('static', filename='js/duration_prediction.js') }}"></script>
 
 <!-- JS: Progress calculations + status badges + altitude chart -->
 <script>
@@ -2851,21 +2865,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
   bindCalibrationInteractions();
 });
-
-// AstroBin export modal: toggle tracked preview vs manual override fields
-document.addEventListener('DOMContentLoaded', function() {
-  const trackedBox = document.getElementById('use_tracked_calibration');
-  const trackedPreview = document.getElementById('astrobin_tracked_preview');
-  const manualCal = document.getElementById('astrobin_manual_cal');
-  if (!trackedBox || !trackedPreview || !manualCal) return;
-  function syncAstrobinCalMode() {
-    const tracked = trackedBox.checked;
-    trackedPreview.classList.toggle('d-none', !tracked);
-    manualCal.classList.toggle('d-none', tracked);
-  }
-  trackedBox.addEventListener('change', syncAstrobinCalMode);
-  syncAstrobinCalMode();
-});
 </script>
 
 <!-- NINA V2 Export Modal -->
@@ -3117,146 +3116,32 @@ document.addEventListener('DOMContentLoaded', function() {
           <h5 class="modal-title mb-0" id="astroBinExportModalLabel">
             <i class="bi bi-cloud-upload me-2"></i>Export to AstroBin
           </h5>
-          <div class="small text-muted mt-1">
-            {{ target.sessions|length }} session(s)
-            {% set filter_map = {} %}
-            {% if plan_data and plan_data.channels %}
-              {% for ch in plan_data.channels %}
-                {% set _ = filter_map.update({ch.name: ch.nina_filter if ch.nina_filter else ch.name}) %}
-              {% endfor %}
-            {% endif %}
-            {% set base_filters = [] %}
-            {% for session in target.sessions %}
-              {% set base = filter_map.get(session.channel, session.channel) %}
-              {% if base not in base_filters %}
-                {% set _ = base_filters.append(base) %}
-              {% endif %}
-            {% endfor %}
-            · {{ base_filters | join(', ') }}
-          </div>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form method="post" action="{{ url_for('export_astrobin_csv', target_id=target.id) }}">
         <div class="modal-body py-2">
-          <div class="row g-2 mb-2">
-            <div class="col-6 col-md-3">
-              <label class="form-label small mb-0">Binning</label>
-              <select class="form-control form-control-sm" name="binning">
-                <option value="1" selected>1×1</option>
-                <option value="2">2×2</option>
-                <option value="3">3×3</option>
-                <option value="4">4×4</option>
-              </select>
-            </div>
-            <div class="col-6 col-md-2">
-              <label class="form-label small mb-0">Gain</label>
-              <input class="form-control form-control-sm" type="number" name="gain"
-                     value="{{ latest_session_gain if latest_session_gain is not none else 100 }}" step="1" min="0">
-              {% if latest_session_gain is not none %}<div class="form-text text-info" style="font-size:0.7em">from last session</div>{% endif %}
-            </div>
-            <div class="col-6 col-md-3">
-              <label class="form-label small mb-0">Cooling (°C)</label>
-              <input class="form-control form-control-sm" type="number" name="sensor_cooling"
-                     value="{{ latest_session_cooling if latest_session_cooling is not none else -10 }}" step="1" min="-274" max="100">
-              {% if latest_session_cooling is not none %}<div class="form-text text-info" style="font-size:0.7em">from last session</div>{% endif %}
-            </div>
-            <div class="col-6 col-md-4">
-              <label class="form-label small mb-0">Bortle <span class="text-muted">(opt.)</span></label>
-              <select class="form-control form-control-sm" name="bortle">
-                <option value="">—</option>
-                <option value="1">1 - Excellent</option>
-                <option value="2">2 - Dark site</option>
-                <option value="3">3 - Rural</option>
-                <option value="4">4 - Rural/suburban</option>
-                <option value="5">5 - Suburban</option>
-                <option value="6">6 - Bright suburban</option>
-                <option value="7">7 - Suburban/urban</option>
-                <option value="8">8 - City</option>
-                <option value="9">9 - Inner-city</option>
-              </select>
-            </div>
-          </div>
-
-          {% if target.calibration_captures %}
+          {% if astrobin_mosaic %}
           <div class="border rounded p-2 mb-2">
-            <div class="form-check mb-1">
-              <input class="form-check-input" type="checkbox" name="use_tracked_calibration" id="use_tracked_calibration" checked>
-              <label class="form-check-label small" for="use_tracked_calibration">
-                Per-session calibration from logs
-                {% if calibration_export_totals %}
-                <span class="text-muted">(darks {{ calibration_export_totals.darks }}, flats {{ calibration_export_totals.flats }}, flat darks {{ calibration_export_totals.flat_darks }})</span>
-                {% endif %}
+            <div class="small fw-bold text-info mb-1">
+              <i class="bi bi-grid-3x3-gap me-1"></i>This target is part of the mosaic "{{ target.mosaic_group.name }}"
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="scope" value="panel" id="ab_scope_panel" data-ab-scope-radio checked>
+              <label class="form-check-label small" for="ab_scope_panel">This panel only</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="scope" value="mosaic" id="ab_scope_mosaic" data-ab-scope-radio>
+              <label class="form-check-label small" for="ab_scope_mosaic">
+                Whole mosaic ({{ astrobin_mosaic.panel_count }} panels, consolidated)
               </label>
-            </div>
-            <div id="astrobin_tracked_preview">
-              {% if astrobin_export_preview %}
-              <div class="table-responsive" style="max-height: 220px;">
-                <table class="table table-sm table-dark table-bordered mb-0 small">
-                  <thead class="sticky-top bg-dark">
-                    <tr>
-                      <th>Date</th>
-                      <th>Filt</th>
-                      <th>#</th>
-                      <th>s</th>
-                      <th>D</th>
-                      <th>F</th>
-                      <th>FD</th>
-                      <th>B</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in astrobin_export_preview %}
-                    <tr>
-                      <td>{{ row.date[5:] }}</td>
-                      <td>{{ row.filter_name }}</td>
-                      <td>{{ row.number if row.number else '—' }}</td>
-                      <td>{{ row.duration | int if row.duration == (row.duration | int) else row.duration }}</td>
-                      <td>{{ row.darks or '—' }}</td>
-                      <td>{{ row.flats or '—' }}</td>
-                      <td>{{ row.flat_darks or '—' }}</td>
-                      <td>{{ row.bias or '—' }}</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-              {% endif %}
-            </div>
-            <div id="astrobin_manual_cal" class="d-none mt-2">
-              <p class="text-muted small mb-1">Same count on every row:</p>
-              <div class="row g-2">
-                <div class="col-3"><input class="form-control form-control-sm" type="number" name="darks" placeholder="Darks" min="0"></div>
-                <div class="col-3"><input class="form-control form-control-sm" type="number" name="flats" placeholder="Flats" min="0"></div>
-                <div class="col-3"><input class="form-control form-control-sm" type="number" name="flat_darks" placeholder="Flat darks" min="0"></div>
-                <div class="col-3"><input class="form-control form-control-sm" type="number" name="bias" placeholder="Bias" min="0"></div>
-              </div>
-            </div>
-          </div>
-          {% else %}
-          <div class="border rounded p-2 mb-2">
-            <div class="small text-muted mb-1">Calibration counts (optional, applied to every row):</div>
-            <div class="row g-2">
-              <div class="col-3"><input class="form-control form-control-sm" type="number" name="darks" placeholder="Darks" min="0"></div>
-              <div class="col-3"><input class="form-control form-control-sm" type="number" name="flats" placeholder="Flats" min="0"></div>
-              <div class="col-3"><input class="form-control form-control-sm" type="number" name="flat_darks" placeholder="Flat darks" min="0"></div>
-              <div class="col-3"><input class="form-control form-control-sm" type="number" name="bias" placeholder="Bias" min="0"></div>
             </div>
           </div>
           {% endif %}
 
-          {% set missing_astrobin = [] %}
-          {% for f in base_filters %}
-            {% if f not in astrobin_filter_map %}
-              {% set _ = missing_astrobin.append(f) %}
-            {% endif %}
-          {% endfor %}
-          {% if missing_astrobin %}
-          <div class="alert alert-warning small py-2 mb-0">
-            <i class="bi bi-exclamation-triangle me-1"></i>
-            Missing AstroBin IDs: <strong>{{ missing_astrobin | join(', ') }}</strong>.
-            <a href="{{ url_for('filter_list') }}" class="alert-link">Filter Settings</a>
-          </div>
+          {{ astrobin_export_body(astrobin_panel, 'panel') }}
+          {% if astrobin_mosaic %}
+            {{ astrobin_export_body(astrobin_mosaic, 'mosaic', disabled=true, consolidated=true) }}
           {% endif %}
         </div>
         <div class="modal-footer py-2">
@@ -3269,5 +3154,6 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
+{{ astrobin_export_script() }}
 
 {% endblock %}

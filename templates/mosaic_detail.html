@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% from "_session_flats.html" import session_flats_fields %}
+{% from "_astrobin_export.html" import astrobin_export_body, astrobin_export_script %}
+{% from "_duration_prediction.html" import duration_prediction_card %}
 {% block content %}
 {% macro to_hms(minutes) -%}
 {%- set total_s = (minutes * 60) | round | int -%}
@@ -43,6 +45,11 @@
        class="btn btn-outline-warning btn-sm">
       <i class="bi bi-arrow-left-right me-1"></i>Switch Wheel
     </a>
+    {% if astrobin_mosaic.session_count %}
+    <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#mosaicAstroBinModal">
+      <i class="bi bi-cloud-upload me-1"></i>Export to AstroBin
+    </button>
+    {% endif %}
     <a href="{{ url_for('edit_mosaic', group_id=group.id) }}"
        class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-pencil me-1"></i>Edit
@@ -226,6 +233,13 @@
 </div>
 
 <!-- Panel Grid -->
+{% if channel_totals %}
+<div class="mb-4">
+  {{ duration_prediction_card(
+       url_for('api_mosaic_duration_prediction', group_id=group.id),
+       title="Mosaic Duration Prediction (panels in order, shared nightly time)") }}
+</div>
+{% endif %}
 <div class="card bg-secondary text-light" id="panelsCard">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span><i class="bi bi-grid me-2"></i>Panels</span>
@@ -639,5 +653,37 @@
   });
 })();
 </script>
+
+{% if astrobin_mosaic.session_count %}
+<div class="modal fade" id="mosaicAstroBinModal" tabindex="-1" aria-labelledby="mosaicAstroBinModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header py-2">
+        <h5 class="modal-title mb-0" id="mosaicAstroBinModalLabel">
+          <i class="bi bi-cloud-upload me-2"></i>Export Mosaic to AstroBin
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{{ url_for('export_mosaic_astrobin_csv', group_id=group.id) }}">
+        <div class="modal-body py-2">
+          {{ astrobin_export_body(astrobin_mosaic, 'mosaic', consolidated=true) }}
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning btn-sm">
+            <i class="bi bi-download me-1"></i>Download CSV
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{{ astrobin_export_script() }}
+{% endif %}
+
+{% if channel_totals %}
+<script src="{{ url_for('static', filename='js/chart.umd.js') }}"></script>
+<script src="{{ url_for('static', filename='js/duration_prediction.js') }}"></script>
+{% endif %}
 
 {% endblock %}

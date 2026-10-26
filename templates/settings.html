@@ -106,6 +106,59 @@
         </div>
       </div>
 
+      <!-- Plan Duration Prediction -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-hourglass-split me-1"></i>Plan Duration Prediction</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="prediction_minutes_per_night" class="form-label">Imaging Time per Night (min)</label>
+              <input type="number" class="form-control" id="prediction_minutes_per_night" name="prediction_minutes_per_night"
+                     min="10" max="1440" step="10" placeholder="Full window"
+                     value="{{ config.prediction_minutes_per_night if config.prediction_minutes_per_night is not none else '' }}">
+              <div class="form-text">Maximum time you want to image per night; blank uses the whole window</div>
+            </div>
+            <div class="col-md-4">
+              <label for="prediction_efficiency_pct" class="form-label">Imaging Efficiency (%)</label>
+              <input type="number" class="form-control" id="prediction_efficiency_pct" name="prediction_efficiency_pct"
+                     min="10" max="100" step="1" value="{{ config.prediction_efficiency_pct | default(85, true) }}">
+              <div class="form-text">Share of imaging time that becomes subs (dither, download, autofocus, flips)</div>
+            </div>
+            <div class="col-md-4">
+              <label for="prediction_default_usable_night_pct" class="form-label">Fallback Usable Nights (%)</label>
+              <input type="number" class="form-control" id="prediction_default_usable_night_pct" name="prediction_default_usable_night_pct"
+                     min="0" max="100" step="1"
+                     value="{{ config.prediction_default_usable_night_pct if config.prediction_default_usable_night_pct is not none else 50 }}">
+              <div class="form-text">Used beyond the forecast when no historical climate data is available</div>
+            </div>
+          </div>
+          <div class="row mt-3">
+            <div class="col-md-4">
+              <label for="prediction_max_gust_kmh" class="form-label">Max Wind Gust (km/h)</label>
+              <input type="number" class="form-control" id="prediction_max_gust_kmh" name="prediction_max_gust_kmh"
+                     min="5" max="200" step="1"
+                     value="{{ (config.prediction_max_gust_kmh if config.prediction_max_gust_kmh is not none else 35) | int }}">
+              <div class="form-text">Forecast hours with stronger gusts are treated as unusable</div>
+            </div>
+            <div class="col-md-4">
+              <label for="prediction_max_seeing_raw" class="form-label">Worst Acceptable Seeing</label>
+              <select class="form-select" id="prediction_max_seeing_raw" name="prediction_max_seeing_raw">
+                {% set seeing_opts = [(1, '&lt;0.5"'), (2, '0.5-0.75"'), (3, '0.75-1"'), (4, '1-1.25"'), (5, '1.25-1.5"'), (6, '1.5-2"'), (7, '2-2.5"'), (8, '&gt;2.5" (ignore seeing)')] %}
+                {% for val, lbl in seeing_opts %}
+                  <option value="{{ val }}" {% if (config.prediction_max_seeing_raw or 6) == val %}selected{% endif %}>{{ val }} — {{ lbl | safe }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">7Timer seeing scale; only applied where 7Timer has data (~3 days)</div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-text mt-4">Cloud limit uses <strong>Max Cloud Cover Tolerance</strong> above.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Default Calibration Frames -->
       <div class="card mb-4">
         <div class="card-header">

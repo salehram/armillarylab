@@ -9,7 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Plan Duration Prediction** — new card on the target page (and mosaic page) estimating imaging nights, calendar nights, finish date and time per night for four scenarios: Baseline, Moon, Weather and Moon + Weather. Shows integration to schedule per filter, rise/set/transit and tonight's window. Hours per night and efficiency can be adjusted live and saved per target. Weather uses the 16-day forecast and 7Timer seeing, then monthly historical usable-night rates for your location.
+- Settings: imaging time per night, efficiency %, max gust, worst acceptable seeing and fallback usable-night % (global); per-target overrides for time per night and efficiency.
+- Filters: optional max moon illumination % and min moon separation used by the prediction (also in preset export/import).
+- **Mosaic AstroBin export** — "Export to AstroBin" on the mosaic page (`POST /mosaic/<id>/export_astrobin`) produces one CSV for all panels. Lights are pooled per night/filter/exposure, and calibration counts once per night and filter (largest per-panel set, not the sum), so two panels shot on the same night with one 30/30 flat set export as a single row with 30 flats / 30 dark flats.
+- Panel export modal: when the target belongs to a mosaic, choose **This panel only** or **Whole mosaic (consolidated)**.
+
+### Changed
+
+- AstroBin export modal markup moved to `templates/_astrobin_export.html` (shared by target and mosaic pages).
+- A calibration column is now omitted from the CSV when every row's count is 0.
 
 ---
 

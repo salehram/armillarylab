@@ -1,0 +1,82 @@
+{# Plan Duration Prediction card; behaviour in static/js/duration_prediction.js #}
+{% macro duration_prediction_card(api_url, save_url=None, title="Plan Duration Prediction") %}
+<div class="card bg-secondary text-light" id="duration-prediction"
+     data-api-url="{{ api_url }}" {% if save_url %}data-save-url="{{ save_url }}"{% endif %}>
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="bi bi-hourglass-split me-1"></i>{{ title }}</span>
+    <small class="text-light opacity-75 dp-sources"></small>
+  </div>
+  <div class="card-body">
+    <form class="row g-2 align-items-end dp-controls" onsubmit="return false;">
+      <div class="col-sm-6 col-lg-2">
+        <label class="form-label small mb-1">Basis</label>
+        <select class="form-select form-select-sm dp-basis">
+          <option value="remaining" selected>Remaining time</option>
+          <option value="full">Full plan</option>
+        </select>
+      </div>
+      <div class="col-sm-6 col-lg-2">
+        <label class="form-label small mb-1">Hours per night</label>
+        <input type="number" class="form-control form-control-sm dp-hours" min="0.5" max="24" step="0.5"
+               placeholder="Full window" title="Imaging time you want to spend per night; blank = whole window">
+      </div>
+      <div class="col-sm-6 col-lg-2">
+        <label class="form-label small mb-1">Efficiency %</label>
+        <input type="number" class="form-control form-control-sm dp-efficiency" min="10" max="100" step="1"
+               title="Share of imaging time that becomes subs (dither, download, autofocus, flips)">
+      </div>
+      <div class="col-sm-6 col-lg-6 d-flex gap-2 flex-wrap">
+        <button type="button" class="btn btn-sm btn-outline-light dp-recalc">
+          <i class="bi bi-arrow-repeat me-1"></i>Recalculate
+        </button>
+        {% if save_url %}
+        <button type="button" class="btn btn-sm btn-outline-warning dp-save" title="Save hours per night and efficiency for this target">
+          <i class="bi bi-floppy me-1"></i>Save for this target
+        </button>
+        {% endif %}
+        <span class="small align-self-center dp-save-status"></span>
+      </div>
+    </form>
+
+    <div class="small mt-2 dp-status">
+      <span class="spinner-border spinner-border-sm me-1" role="status"></span>Calculating prediction&hellip;
+    </div>
+
+    <div class="dp-content d-none">
+      <div class="row g-3 mt-1">
+        <div class="col-lg-5">
+          <h6 class="small text-uppercase opacity-75 mb-1">Visibility</h6>
+          <div class="small dp-visibility"></div>
+        </div>
+        <div class="col-lg-7">
+          <h6 class="small text-uppercase opacity-75 mb-1">Integration per filter</h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-dark mb-0 small dp-channels"></table>
+          </div>
+        </div>
+      </div>
+
+      <ul class="nav nav-tabs mt-3 dp-tabs" role="tablist">
+        <li class="nav-item"><button type="button" class="nav-link active" data-scenario="baseline">Baseline</button></li>
+        <li class="nav-item"><button type="button" class="nav-link" data-scenario="moon">Moon</button></li>
+        <li class="nav-item"><button type="button" class="nav-link" data-scenario="weather">Weather</button></li>
+        <li class="nav-item"><button type="button" class="nav-link" data-scenario="combined">Moon + Weather</button></li>
+      </ul>
+      <div class="border border-top-0 border-dark rounded-bottom p-3 bg-dark bg-opacity-25">
+        <div class="small opacity-75 mb-2 dp-scenario-desc"></div>
+        <div class="row g-2 mb-3 dp-tiles"></div>
+        <div class="row g-3">
+          <div class="col-lg-5">
+            <div class="table-responsive">
+              <table class="table table-sm table-dark mb-0 small dp-scenario-channels"></table>
+            </div>
+          </div>
+          <div class="col-lg-7">
+            <canvas class="dp-chart" height="170"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}

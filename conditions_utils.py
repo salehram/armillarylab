@@ -148,14 +148,15 @@ def _find_next_full_moon(now_time) -> tuple[str, int]:
 # 2. Open-Meteo  (weather: temp, humidity, clouds, wind)
 # ---------------------------------------------------------------------------
 
-def fetch_openmeteo(lat: float, lon: float) -> dict | None:
-    """Fetch 5-day hourly forecast from Open-Meteo (no API key)."""
+def fetch_openmeteo(lat: float, lon: float, forecast_days: int = 5) -> dict | None:
+    """Fetch hourly forecast from Open-Meteo (no API key); up to 16 days."""
+    forecast_days = max(1, min(16, int(forecast_days)))
     url = (
         f"https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}"
         f"&hourly=temperature_2m,relative_humidity_2m,cloud_cover,"
         f"wind_speed_10m,wind_gusts_10m"
-        f"&forecast_days=5&timezone=auto"
+        f"&forecast_days={forecast_days}&timezone=auto"
     )
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "ArmillaryLab/2.0"})

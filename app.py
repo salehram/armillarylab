@@ -34,6 +34,7 @@ from calibration_utils import (
     aggregate_calibration_for_export,
     resolve_astrobin_calibration_columns,
     build_astrobin_export_rows,
+    consolidate_mosaic_calibration,
     build_target_imaging_log_days,
     build_global_imaging_log_days,
     calibration_log_stats,
@@ -204,6 +205,12 @@ def apply_additive_schema_migrations(log=print):
         ("default_sensor_temp", f"ALTER TABLE global_config ADD COLUMN default_sensor_temp {float_type}"),
         # Session logging behaviour
         ("use_nina_date", f"ALTER TABLE global_config ADD COLUMN use_nina_date BOOLEAN {bool_false}"),
+        # Plan duration prediction
+        ("prediction_minutes_per_night", "ALTER TABLE global_config ADD COLUMN prediction_minutes_per_night INTEGER"),
+        ("prediction_efficiency_pct", "ALTER TABLE global_config ADD COLUMN prediction_efficiency_pct INTEGER DEFAULT 85"),
+        ("prediction_max_gust_kmh", f"ALTER TABLE global_config ADD COLUMN prediction_max_gust_kmh {float_type} DEFAULT 35"),
+        ("prediction_max_seeing_raw", "ALTER TABLE global_config ADD COLUMN prediction_max_seeing_raw INTEGER DEFAULT 6"),
+        ("prediction_default_usable_night_pct", "ALTER TABLE global_config ADD COLUMN prediction_default_usable_night_pct INTEGER DEFAULT 50"),
     ):
         add_column_if_missing("global_config", col, ddl)
 
@@ -223,8 +230,22 @@ def apply_additive_schema_migrations(log=print):
         # Per-target default camera settings
         ("default_sensor_gain", "ALTER TABLE targets ADD COLUMN default_sensor_gain INTEGER"),
         ("default_sensor_temp", f"ALTER TABLE targets ADD COLUMN default_sensor_temp {float_type}"),
+        # Plan duration prediction overrides
+        ("override_prediction_minutes_per_night", "ALTER TABLE targets ADD COLUMN override_prediction_minutes_per_night INTEGER"),
+        ("override_prediction_efficiency_pct", "ALTER TABLE targets ADD COLUMN override_prediction_efficiency_pct INTEGER"),
     ):
         add_column_if_missing("targets", col, ddl)
+
+    add_column_if_missing(
+        "filters",
+        "moon_max_illumination_pct",
+        "ALTER TABLE filters ADD COLUMN moon_max_illumination_pct INTEGER",
+    )
+    add_column_if_missing(
+        "filters",
+        "moon_min_separation_deg",
+        f"ALTER TABLE filters ADD COLUMN moon_min_separation_deg {float_type}",
+    )
 
     add_column_if_missing(
         "calibration_captures",
@@ -612,6 +633,13 @@ class GlobalConfig(db.Model):
     # Session logging behaviour
     use_nina_date = db.Column(db.Boolean, default=False)
 
+    # Plan duration prediction (NULL minutes = use the full window)
+    prediction_minutes_per_night = db.Column(db.Integer, nullable=True)
+    prediction_efficiency_pct = db.Column(db.Integer, default=85)
+    prediction_max_gust_kmh = db.Column(db.Float, default=35.0)
+    prediction_max_seeing_raw = db.Column(db.Integer, default=6)  # 7Timer scale 1-8
+    prediction_default_usable_night_pct = db.Column(db.Integer, default=50)
+
     # Tracking
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -736,6 +764,9 @@ class Filter(db.Model):
     filter_type = db.Column(db.String(32), default="narrowband")  # narrowband, broadband, other
     default_exposure = db.Column(db.Integer, default=300)  # Default sub exposure in seconds
     astrobin_id = db.Column(db.Integer, nullable=True)  # AstroBin equipment database ID for CSV export
+    # Moon limits for duration prediction (NULL = derived default)
+    moon_max_illumination_pct = db.Column(db.Integer, nullable=True)
+    moon_min_separation_deg = db.Column(db.Float, nullable=True)
     is_system = db.Column(db.Boolean, default=False)  # True for built-in filters
     is_active = db.Column(db.Boolean, default=True)  # Can be deactivated (not deleted) for system
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -885,6 +916,10 @@ class Target(db.Model):
     # Per-target default camera settings (NULL = use global config)
     default_sensor_gain = db.Column(db.Integer, nullable=True)
     default_sensor_temp = db.Column(db.Float, nullable=True)
+
+    # Duration prediction overrides (NULL = global; minutes 0 = full window)
+    override_prediction_minutes_per_night = db.Column(db.Integer, nullable=True)
+    override_prediction_efficiency_pct = db.Column(db.Integer, nullable=True)
 
     final_image_filename = db.Column(db.String(255))
 
@@ -1142,15 +1177,6 @@ def astrobin_id_resolver():
     return resolve
 
 
-def target_astrobin_filter_map(target):
-    """Effective {filter code: AstroBin ID} for the target's current wheel."""
-    resolve = astrobin_id_resolver()
-    wheel = get_target_wheel(target)
-    wheel_id = wheel.id if wheel else None
-    resolved = {f.name: resolve(f.name, wheel_id) for f in Filter.query.all()}
-    return {code: abid for code, abid in resolved.items() if abid}
-
-
 def get_effective_packup_time(target):
     """Get effective pack-up time for target (override from settings, or target's own time)."""
     # First priority: explicit override from target settings page
@@ -1170,6 +1196,36 @@ def get_effective_min_altitude(target):
     if target.override_min_altitude is not None:
         return target.override_min_altitude
     return get_global_config().default_min_altitude
+
+
+def get_effective_prediction_minutes_per_night(target):
+    """Nightly imaging cap in minutes, or None for the full window."""
+    if target is not None and target.override_prediction_minutes_per_night is not None:
+        return target.override_prediction_minutes_per_night or None
+    return get_global_config().prediction_minutes_per_night or None
+
+
+def get_effective_prediction_efficiency(target):
+    if target is not None and target.override_prediction_efficiency_pct is not None:
+        return target.override_prediction_efficiency_pct
+    return get_global_config().prediction_efficiency_pct or 85
+
+
+def get_filter_moon_limits(codes):
+    """Filter code -> (max moon illumination %, min moon separation deg)."""
+    from prediction_utils import default_moon_limits
+
+    by_name = {f.name: f for f in Filter.query.filter(Filter.name.in_(list(codes))).all()} if codes else {}
+    limits = {}
+    for code in codes:
+        f = by_name.get(code)
+        illum, sep = default_moon_limits(code, f.filter_type if f else None)
+        if f is not None and f.moon_max_illumination_pct is not None:
+            illum = f.moon_max_illumination_pct
+        if f is not None and f.moon_min_separation_deg is not None:
+            sep = f.moon_min_separation_deg
+        limits[code] = (illum, sep)
+    return limits
 
 
 def get_effective_calibration_config(target):
@@ -1669,13 +1725,9 @@ def target_detail(target_id):
     # Get active palettes for palette selector
     palettes = Palette.query.filter_by(is_active=True).order_by(Palette.name).all()
 
-    # Get AstroBin ID map for export modal (wheel slot IDs override global filter IDs)
-    astrobin_filter_map = target_astrobin_filter_map(target)
-
     calibration_config = get_effective_calibration_config(target)
     calibration_data = None
     calibration_badges = {}
-    calibration_export_totals = None
     calibration_api = None
     imaging_log_days = []
     if calibration_config["enabled"]:
@@ -1685,19 +1737,13 @@ def target_detail(target_id):
             "suggestions": calibration_api["suggestions"],
         }
         calibration_badges = calibration_api["badges"]
-    if target.calibration_captures:
-        calibration_export_totals = aggregate_calibration_for_export(target.calibration_captures)
-    astrobin_export_preview = None
-    if target.sessions:
-        export_filter_map = plan_channel_filter_map(plan_data)
-        resolve_abid = astrobin_id_resolver()
-        astrobin_export_preview = build_astrobin_export_rows(
-            target.sessions,
-            target.calibration_captures,
-            export_filter_map,
-            plan_data,
-            astrobin_id_for=lambda s, bf: resolve_abid(bf, s.filter_wheel_id),
-        )
+
+    astrobin_panel = _astrobin_modal_context([target], consolidate=False)
+    astrobin_mosaic = None
+    if target.mosaic_group:
+        mosaic_panels = _mosaic_panels(target.mosaic_group_id)
+        astrobin_mosaic = _astrobin_modal_context(mosaic_panels, consolidate=True)
+        astrobin_mosaic["panel_count"] = len(mosaic_panels)
     if target.sessions or target.calibration_captures:
         imaging_log_days = build_target_imaging_log_days(
             target.sessions, target.calibration_captures
@@ -1730,13 +1776,12 @@ def target_detail(target_id):
         progress_minutes=progress_minutes,
         progress_seconds=progress_seconds,
         palettes=palettes,
-        astrobin_filter_map=astrobin_filter_map,
         calibration_config=calibration_config,
         calibration_data=calibration_data,
         calibration_api=calibration_api,
         calibration_badges=calibration_badges,
-        calibration_export_totals=calibration_export_totals,
-        astrobin_export_preview=astrobin_export_preview,
+        astrobin_panel=astrobin_panel,
+        astrobin_mosaic=astrobin_mosaic,
         imaging_log_days=imaging_log_days,
         latest_session_gain=latest_session_gain,
         latest_session_cooling=latest_session_cooling,
@@ -1912,83 +1957,139 @@ def export_nina_v2(target_id):
 
 @app.post("/target/<int:target_id>/export_astrobin")
 def export_astrobin_csv(target_id):
-    """Export imaging sessions for a target as AstroBin-compatible CSV."""
+    """Export a target's sessions as AstroBin CSV, or its whole mosaic when scope=mosaic."""
     target = Target.query.get_or_404(target_id)
-    
+
+    if request.form.get("scope") == "mosaic" and target.mosaic_group:
+        return _mosaic_astrobin_csv(target.mosaic_group, url_for("target_detail", target_id=target.id))
+
     if not target.sessions:
         flash("No imaging sessions to export for this target.", "warning")
         return redirect(url_for("target_detail", target_id=target.id))
-    
-    # Get filter name mapping from the target's plan
-    plan = latest_plan(target.id, target.preferred_palette)
-    plan_data = None
-    if plan:
-        try:
-            plan_data = json.loads(plan.plan_json)
-        except json.JSONDecodeError:
-            pass
-    filter_name_map = plan_channel_filter_map(plan_data)  # e.g. "O_HDR_1" -> "O"
+
+    sessions, captures, plan_data = _astrobin_export_inputs([target], consolidate=False)
+    return _astrobin_csv_response(
+        sessions, captures, plan_data, get_target_wheel(target),
+        f"AstroBin_{target.name.replace(' ', '_')}.csv",
+    )
+
+
+@app.post("/mosaic/<int:group_id>/export_astrobin")
+def export_mosaic_astrobin_csv(group_id):
+    """Export all panels of a mosaic as one AstroBin CSV with one calibration set per night/filter."""
+    group = MosaicGroup.query.get_or_404(group_id)
+    return _mosaic_astrobin_csv(group, url_for("mosaic_detail", group_id=group.id))
+
+
+def _mosaic_astrobin_csv(group, back_url):
+    panels = _mosaic_panels(group.id)
+    if not any(p.sessions for p in panels):
+        flash("No imaging sessions to export for this mosaic.", "warning")
+        return redirect(back_url)
+    sessions, captures, plan_data = _astrobin_export_inputs(panels, consolidate=True)
+    return _astrobin_csv_response(
+        sessions, captures, plan_data, get_target_wheel(panels[0]),
+        f"AstroBin_{group.name.replace(' ', '_')}_mosaic.csv",
+    )
+
+
+def _astrobin_export_inputs(targets, consolidate):
+    """Sessions/captures with channels mapped to base filters, plus a merged plan.
+
+    With ``consolidate`` (mosaic export) light frames are pooled across panels and
+    calibration keeps one set per night/filter instead of one per panel.
+    """
+    from types import SimpleNamespace
+
+    sessions, panel_captures, channels = [], [], []
+    dominant = None
+    for t in targets:
+        plan = latest_plan(t.id, t.preferred_palette)
+        plan_data = None
+        if plan:
+            try:
+                plan_data = json.loads(plan.plan_json)
+            except json.JSONDecodeError:
+                pass
+        if plan_data:
+            channels.extend(plan_data.get("channels", []))
+            dominant = dominant or plan_data.get("dominant_channel")
+        fmap = plan_channel_filter_map(plan_data)  # e.g. "O_HDR_1" -> "O"
+        for s in t.sessions:
+            sessions.append(SimpleNamespace(
+                date=s.date,
+                channel=fmap.get(s.channel, s.channel),
+                sub_exposure_seconds=s.sub_exposure_seconds,
+                sub_count=s.sub_count,
+                gain=s.gain,
+                sensor_cooling=s.sensor_cooling,
+                filter_wheel_id=s.filter_wheel_id,
+            ))
+        panel_captures.append([
+            SimpleNamespace(
+                date=c.date,
+                frame_type=c.frame_type,
+                channel=fmap.get(c.channel, c.channel) if c.channel else None,
+                sub_exposure_seconds=c.sub_exposure_seconds,
+                frame_count=c.frame_count,
+            )
+            for c in t.calibration_captures
+        ])
+    if consolidate:
+        captures = consolidate_mosaic_calibration(panel_captures)
+    else:
+        captures = [c for caps in panel_captures for c in caps]
+    return sessions, captures, {"channels": channels, "dominant_channel": dominant}
+
+
+def _astrobin_tracked_rows(sessions, captures, plan_data, resolve_abid):
+    return build_astrobin_export_rows(
+        sessions, captures, {}, plan_data,
+        astrobin_id_for=lambda s, bf: resolve_abid(bf, s.filter_wheel_id),
+    )
+
+
+def _astrobin_csv_response(sessions, captures, plan_data, fallback_wheel, filename):
+    """Build the AstroBin CSV download from normalized export inputs and the modal's form."""
+    from collections import defaultdict
 
     # Session wheel slot's AstroBin ID wins; orphan rows use the project's current wheel
     resolve_abid = astrobin_id_resolver()
-    target_wheel = get_target_wheel(target)
-    target_wheel_id = target_wheel.id if target_wheel else None
+    fallback_wheel_id = fallback_wheel.id if fallback_wheel else None
 
-    # Get form data with defaults
     binning = request.form.get("binning", "1")
     gain = request.form.get("gain", "100")
     sensor_cooling = request.form.get("sensor_cooling", "-10")
     bortle = request.form.get("bortle", "")
     use_tracked = request.form.get("use_tracked_calibration") == "on"
 
-    include_darks = include_flats = include_flat_darks = include_bias = False
-    uniform_cal = {"darks": "", "flats": "", "flat_darks": "", "bias": ""}
-
-    if use_tracked and target.calibration_captures:
-        export_rows = build_astrobin_export_rows(
-            target.sessions,
-            target.calibration_captures,
-            filter_name_map,
-            plan_data,
-            astrobin_id_for=lambda s, bf: resolve_abid(bf, s.filter_wheel_id),
-        )
-        include_darks = any(r["darks"] for r in export_rows)
-        include_flats = any(r["flats"] for r in export_rows)
-        include_flat_darks = any(r["flat_darks"] for r in export_rows)
-        include_bias = any(r["bias"] for r in export_rows)
+    if use_tracked and captures:
+        export_rows = _astrobin_tracked_rows(sessions, captures, plan_data, resolve_abid)
     else:
-        cal_cols = resolve_astrobin_calibration_columns(
+        uniform_cal = resolve_astrobin_calibration_columns(
             {
                 "darks": request.form.get("darks", ""),
                 "flats": request.form.get("flats", ""),
                 "flat_darks": request.form.get("flat_darks", ""),
                 "bias": request.form.get("bias", ""),
             },
-            target.calibration_captures,
+            captures,
             use_tracked=use_tracked,
         )
-        uniform_cal = cal_cols
-        include_darks = bool(cal_cols["darks"])
-        include_flats = bool(cal_cols["flats"])
-        include_flat_darks = bool(cal_cols["flat_darks"])
-        include_bias = bool(cal_cols["bias"])
-        from collections import defaultdict
-        sessions_grouped = defaultdict(lambda: {"number": 0, "duration": None, "gain": None, "sensor_cooling": None, "astrobin_id": None})
-        for session in target.sessions:
-            base_filter = filter_name_map.get(session.channel, session.channel)
-            key = (session.date.strftime("%Y-%m-%d"), base_filter, session.sub_exposure_seconds)
-            sessions_grouped[key]["number"] += session.sub_count
-            sessions_grouped[key]["duration"] = session.sub_exposure_seconds
-            if sessions_grouped[key]["astrobin_id"] is None:
-                sessions_grouped[key]["astrobin_id"] = resolve_abid(base_filter, session.filter_wheel_id)
-            if sessions_grouped[key]["gain"] is None and session.gain is not None:
-                sessions_grouped[key]["gain"] = session.gain
-            if sessions_grouped[key]["sensor_cooling"] is None and session.sensor_cooling is not None:
-                sessions_grouped[key]["sensor_cooling"] = session.sensor_cooling
-        export_rows = []
-        for (date, filter_name, duration), data in sorted(sessions_grouped.items()):
-            export_rows.append({
-                "date": date,
+        sessions_grouped = defaultdict(lambda: {"number": 0, "gain": None, "sensor_cooling": None, "astrobin_id": None})
+        for session in sessions:
+            key = (session.date.strftime("%Y-%m-%d"), session.channel, session.sub_exposure_seconds)
+            group = sessions_grouped[key]
+            group["number"] += session.sub_count
+            if group["astrobin_id"] is None:
+                group["astrobin_id"] = resolve_abid(session.channel, session.filter_wheel_id)
+            if group["gain"] is None and session.gain is not None:
+                group["gain"] = session.gain
+            if group["sensor_cooling"] is None and session.sensor_cooling is not None:
+                group["sensor_cooling"] = session.sensor_cooling
+        export_rows = [
+            {
+                "date": date_str,
                 "filter_name": filter_name,
                 "number": data["number"],
                 "duration": duration,
@@ -1999,13 +2100,18 @@ def export_astrobin_csv(target_id):
                 "gain": data["gain"],
                 "sensor_cooling": data["sensor_cooling"],
                 "astrobin_id": data["astrobin_id"],
-            })
-    
-    # Build CSV in memory
+            }
+            for (date_str, filter_name, duration), data in sorted(sessions_grouped.items())
+        ]
+
+    include_darks = any(r["darks"] for r in export_rows)
+    include_flats = any(r["flats"] for r in export_rows)
+    include_flat_darks = any(r["flat_darks"] for r in export_rows)
+    include_bias = any(r["bias"] for r in export_rows)
+
     output = io.StringIO()
     writer = csv.writer(output)
-    
-    # Write header
+
     header = ["date", "filter", "number", "duration", "binning", "gain", "sensorCooling"]
     if include_darks:
         header.append("darks")
@@ -2018,18 +2124,15 @@ def export_astrobin_csv(target_id):
     if bortle:
         header.append("bortle")
     writer.writerow(header)
-    
-    # Track filters missing AstroBin IDs
+
     filters_missing_ids = []
-    
-    # Write rows
     for row_data in export_rows:
         filter_name = row_data["filter_name"]
-        astrobin_id = row_data.get("astrobin_id") or resolve_abid(filter_name, target_wheel_id)
+        astrobin_id = row_data.get("astrobin_id") or resolve_abid(filter_name, fallback_wheel_id)
         filter_value = astrobin_id or filter_name
         if not astrobin_id and filter_name not in filters_missing_ids:
             filters_missing_ids.append(filter_name)
-        
+
         row = [
             row_data["date"],
             filter_value,
@@ -2050,24 +2153,47 @@ def export_astrobin_csv(target_id):
         if bortle:
             row.append(bortle)
         writer.writerow(row)
-    
-    # Flash warning if some filters are missing AstroBin IDs
+
     if filters_missing_ids:
         flash(f"Warning: The following filters are missing AstroBin IDs and will need manual editing: {', '.join(filters_missing_ids)}. "
               f"Go to Filter Settings to add AstroBin IDs for proper import.", "warning")
-    
-    # Prepare file for download
-    output.seek(0)
+
     buf = io.BytesIO(output.getvalue().encode("utf-8"))
-    
-    filename = f"AstroBin_{target.name.replace(' ', '_')}.csv"
-    
     return send_file(
         buf,
         mimetype="text/csv",
         as_attachment=True,
         download_name=filename,
     )
+
+
+def _astrobin_modal_context(targets, consolidate):
+    """Preview rows, totals and modal defaults for an AstroBin export of these targets."""
+    sessions, captures, plan_data = _astrobin_export_inputs(targets, consolidate)
+    resolve_abid = astrobin_id_resolver()
+    fallback_wheel = get_target_wheel(targets[0]) if targets else None
+    fallback_wheel_id = fallback_wheel.id if fallback_wheel else None
+    preview = _astrobin_tracked_rows(sessions, captures, plan_data, resolve_abid) if sessions else []
+    missing = sorted({
+        r["filter_name"] for r in preview
+        if not (r.get("astrobin_id") or resolve_abid(r["filter_name"], fallback_wheel_id))
+    })
+    latest_gain = latest_cooling = None
+    for s in sorted(sessions, key=lambda s: s.date, reverse=True):
+        if latest_gain is None and s.gain is not None:
+            latest_gain = s.gain
+        if latest_cooling is None and s.sensor_cooling is not None:
+            latest_cooling = s.sensor_cooling
+    return {
+        "session_count": len(sessions),
+        "base_filters": sorted({s.channel for s in sessions}),
+        "has_captures": bool(captures),
+        "totals": aggregate_calibration_for_export(captures) if captures else None,
+        "preview": preview,
+        "missing_ids": missing,
+        "latest_gain": latest_gain,
+        "latest_cooling": latest_cooling,
+    }
 
 
 @app.route("/target/<int:target_id>/delete", methods=["POST"])
@@ -2157,6 +2283,8 @@ def clone_target(target_id):
         override_calibration_flats_per_channel=original.override_calibration_flats_per_channel,
         override_calibration_dark_flats_per_channel=original.override_calibration_dark_flats_per_channel,
         override_calibration_bias=original.override_calibration_bias,
+        override_prediction_minutes_per_night=original.override_prediction_minutes_per_night,
+        override_prediction_efficiency_pct=original.override_prediction_efficiency_pct,
         filter_wheel_id=original.filter_wheel_id,
         # Don't copy: final_image_filename, is_archived, archived_at, completion_notes
         # Don't copy: created_at (will be set to now automatically)
@@ -3044,6 +3172,7 @@ def mosaic_detail(group_id):
         panel_data=panel_data,
         channel_totals=channel_totals,
         tonight_panel=tonight_panel,
+        astrobin_mosaic=_astrobin_modal_context(panels, consolidate=True),
         global_config=get_global_config(),
     )
 
@@ -3533,6 +3662,187 @@ def api_conditions(target_id):
     return jsonify(result)
 
 
+def _clamped_int(raw, lo, hi):
+    """Optional integer form/query value; blank or invalid -> None."""
+    if raw is None:
+        return None
+    raw = str(raw).strip()
+    if not raw:
+        return None
+    try:
+        return max(lo, min(hi, int(round(float(raw)))))
+    except (ValueError, OverflowError):
+        return None
+
+
+def _prediction_panel(target, basis, key_prefix=""):
+    """Simulator panel spec for one target's latest plan."""
+    from collections import defaultdict
+
+    plan = latest_plan(target.id, target.preferred_palette)
+    plan_data = json.loads(plan.plan_json) if plan else None
+    fmap = plan_channel_filter_map(plan_data)
+    done = defaultdict(float)
+    for s in target.sessions:
+        done[s.channel] += (s.sub_exposure_seconds * s.sub_count) / 60.0
+
+    channels = []
+    for ch in (plan_data or {}).get("channels", []):
+        name = ch.get("name")
+        if not name:
+            continue
+        planned = float(ch.get("planned_minutes") or 0.0)
+        done_min = done.get(name, 0.0)
+        channels.append({
+            "key": f"{key_prefix}{name}",
+            "name": name,
+            "label": ch.get("label") or name,
+            "filter_code": fmap.get(name, name),
+            "planned_minutes": round(planned, 1),
+            "done_minutes": round(done_min, 1),
+            "minutes": planned if basis == "full" else max(planned - done_min, 0.0),
+            "sub_exposure_seconds": ch.get("sub_exposure_seconds"),
+        })
+    return {
+        "name": target.name,
+        "target_id": target.id,
+        "ra_hours": target.ra_hours,
+        "dec_deg": target.dec_deg,
+        "min_alt_deg": get_effective_min_altitude(target),
+        "packup_time": parse_time_str(get_effective_packup_time(target)),
+        "channels": channels,
+    }
+
+
+def _prediction_response(targets, settings_target, key_prefixes=None):
+    """Run all four duration scenarios for ordered targets sharing one nightly budget."""
+    from prediction_utils import compute_rise_set, run_prediction
+
+    basis = request.args.get("basis", "remaining")
+    if basis not in ("remaining", "full"):
+        basis = "remaining"
+    if "minutes_per_night" in request.args:
+        minutes_per_night = _clamped_int(request.args.get("minutes_per_night"), 0, 1440) or None
+    else:
+        minutes_per_night = get_effective_prediction_minutes_per_night(settings_target)
+    efficiency = (
+        _clamped_int(request.args.get("efficiency_pct"), 10, 100)
+        or get_effective_prediction_efficiency(settings_target)
+    )
+
+    key_prefixes = key_prefixes or [""] * len(targets)
+    panels = [
+        p for p in (_prediction_panel(t, basis, prefix) for t, prefix in zip(targets, key_prefixes))
+        if p["channels"]
+    ]
+    config = get_global_config()
+    inputs = {
+        "basis": basis,
+        "minutes_per_night": minutes_per_night,
+        "efficiency_pct": efficiency,
+        "saved_minutes_per_night": get_effective_prediction_minutes_per_night(settings_target),
+        "saved_efficiency_pct": get_effective_prediction_efficiency(settings_target),
+        "max_cloud_pct": config.max_cloud_cover_pct or 25,
+        "max_gust_kmh": config.prediction_max_gust_kmh if config.prediction_max_gust_kmh is not None else 35.0,
+        "max_seeing_raw": config.prediction_max_seeing_raw or 6,
+        "default_usable_night_pct": (
+            config.prediction_default_usable_night_pct
+            if config.prediction_default_usable_night_pct is not None else 50
+        ),
+    }
+    if not panels:
+        return jsonify({"deps_available": True, "has_plan": False, "inputs": inputs})
+
+    codes = {ch["filter_code"] for p in panels for ch in p["channels"]}
+    limits = get_filter_moon_limits(codes)
+    lat, lon, elev = get_observer_location()
+    tz_name = config.timezone_name or os.environ.get("OBSERVER_TZ", "Asia/Riyadh")
+    try:
+        result = run_prediction(
+            panels,
+            lat=lat, lon=lon, elev=elev, tz_name=tz_name,
+            minutes_per_night=minutes_per_night,
+            efficiency_pct=efficiency,
+            filter_limits=limits,
+            max_cloud_pct=inputs["max_cloud_pct"],
+            max_gust_kmh=inputs["max_gust_kmh"],
+            max_seeing_raw=inputs["max_seeing_raw"],
+            default_usable_pct=inputs["default_usable_night_pct"],
+        )
+    except Exception:
+        app.logger.exception("Duration prediction failed")
+        return jsonify({"error": "Prediction failed; see server log."}), 500
+
+    result["has_plan"] = True
+    result["inputs"] = inputs
+    result["timezone_name"] = tz_name
+    result["panels"] = [
+        {
+            "name": p["name"],
+            "target_id": p["target_id"],
+            "min_alt_deg": p["min_alt_deg"],
+            "channels": [
+                dict(
+                    {k: v for k, v in ch.items() if k != "minutes"},
+                    minutes=round(ch["minutes"], 1),
+                    moon_max_illumination_pct=limits[ch["filter_code"]][0],
+                    moon_min_separation_deg=limits[ch["filter_code"]][1],
+                )
+                for ch in p["channels"]
+            ],
+        }
+        for p in panels
+    ]
+    if result.get("deps_available"):
+        first = panels[0]
+        try:
+            result["rise_set"] = compute_rise_set(
+                first["ra_hours"], first["dec_deg"], lat, lon, elev, tz_name, first["min_alt_deg"]
+            )
+        except Exception:
+            result["rise_set"] = None
+    return jsonify(result)
+
+
+@app.route("/api/target/<int:target_id>/duration-prediction")
+def api_target_duration_prediction(target_id):
+    target = Target.query.get_or_404(target_id)
+    return _prediction_response([target], target)
+
+
+@app.route("/api/mosaic/<int:group_id>/duration-prediction")
+def api_mosaic_duration_prediction(group_id):
+    MosaicGroup.query.get_or_404(group_id)
+    panels = [t for t in _mosaic_panels(group_id) if not t.is_archived]
+    prefixes = [
+        f"P{t.mosaic_panel_number if t.mosaic_panel_number is not None else i + 1} "
+        for i, t in enumerate(panels)
+    ]
+    return _prediction_response(panels, None, prefixes)
+
+
+@app.route("/target/<int:target_id>/prediction-settings", methods=["POST"])
+def save_target_prediction_settings(target_id):
+    """Save per-target nightly cap / efficiency overrides (blank clears an override)."""
+    target = Target.query.get_or_404(target_id)
+    payload = request.get_json(silent=True) or request.form
+    target.override_prediction_minutes_per_night = _clamped_int(
+        payload.get("minutes_per_night"), 0, 1440
+    )
+    target.override_prediction_efficiency_pct = _clamped_int(payload.get("efficiency_pct"), 10, 100)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Saving prediction settings failed")
+        return jsonify({"ok": False, "error": "Could not save settings."}), 500
+    return jsonify({
+        "ok": True,
+        "minutes_per_night": target.override_prediction_minutes_per_night,
+        "efficiency_pct": target.override_prediction_efficiency_pct,
+    })
+
+
 @app.route("/settings", methods=["GET", "POST"])
 def global_settings():
     """Manage global configuration settings."""
@@ -3587,6 +3897,21 @@ def global_settings():
         # Session logging behaviour
         config.use_nina_date = bool(request.form.get("use_nina_date"))
 
+        # Plan duration prediction
+        config.prediction_minutes_per_night = _clamped_int(
+            request.form.get("prediction_minutes_per_night"), 10, 1440
+        )
+        config.prediction_efficiency_pct = _clamped_int(
+            request.form.get("prediction_efficiency_pct"), 10, 100
+        ) or 85
+        gust = _clamped_int(request.form.get("prediction_max_gust_kmh"), 5, 200)
+        config.prediction_max_gust_kmh = float(gust) if gust is not None else 35.0
+        config.prediction_max_seeing_raw = _clamped_int(
+            request.form.get("prediction_max_seeing_raw"), 1, 8
+        ) or 6
+        usable = _clamped_int(request.form.get("prediction_default_usable_night_pct"), 0, 100)
+        config.prediction_default_usable_night_pct = usable if usable is not None else 50
+
         config.updated_at = datetime.utcnow()
         
         try:
@@ -3621,6 +3946,20 @@ def global_settings():
                     pass
     
     return render_template("settings.html", config=config, presets=presets)
+
+
+def _export_filter_moon_limits(f, filter_data):
+    if f.moon_max_illumination_pct is not None:
+        filter_data["moon_max_illumination_pct"] = f.moon_max_illumination_pct
+    if f.moon_min_separation_deg is not None:
+        filter_data["moon_min_separation_deg"] = f.moon_min_separation_deg
+
+
+def _import_filter_moon_limits(filter_obj, f_data):
+    if "moon_max_illumination_pct" in f_data:
+        filter_obj.moon_max_illumination_pct = f_data["moon_max_illumination_pct"]
+    if "moon_min_separation_deg" in f_data:
+        filter_obj.moon_min_separation_deg = f_data["moon_min_separation_deg"]
 
 
 def _export_filter_wheels():
@@ -3717,6 +4056,7 @@ def export_preset_web():
         }
         if f.astrobin_id:
             filter_data["astrobin_id"] = f.astrobin_id
+        _export_filter_moon_limits(f, filter_data)
         export_data["filters"].append(filter_data)
     
     if include_wheels:
@@ -3776,6 +4116,7 @@ def import_preset_web():
             existing.default_exposure = f_data.get('default_exposure', existing.default_exposure)
             if 'astrobin_id' in f_data:
                 existing.astrobin_id = f_data['astrobin_id']
+            _import_filter_moon_limits(existing, f_data)
             updated_count += 1
         elif not existing:
             # Create new filter
@@ -3788,6 +4129,7 @@ def import_preset_web():
                 is_system=False,
                 is_active=True
             )
+            _import_filter_moon_limits(filter_obj, f_data)
             db.session.add(filter_obj)
             imported_count += 1
     
@@ -3862,6 +4204,13 @@ def target_settings(target_id):
         target.default_sensor_gain = int(tgt_gain_raw) if tgt_gain_raw else None
         tgt_temp_raw = request.form.get("default_sensor_temp", "").strip()
         target.default_sensor_temp = float(tgt_temp_raw) if tgt_temp_raw else None
+
+        target.override_prediction_minutes_per_night = _clamped_int(
+            request.form.get("override_prediction_minutes_per_night"), 0, 1440
+        )
+        target.override_prediction_efficiency_pct = _clamped_int(
+            request.form.get("override_prediction_efficiency_pct"), 10, 100
+        )
         
         try:
             db.session.commit()
@@ -4119,6 +4468,7 @@ def new_filter():
         default_exposure = int(request.form.get("default_exposure", 300))
         astrobin_id_str = request.form.get("astrobin_id", "").strip()
         astrobin_id = int(astrobin_id_str) if astrobin_id_str else None
+        moon_illum, moon_sep = _parse_filter_moon_limits(request.form)
         
         if name and display_name:
             # Check for duplicate name
@@ -4133,6 +4483,8 @@ def new_filter():
                         filter_type=filter_type,
                         default_exposure=default_exposure,
                         astrobin_id=astrobin_id,
+                        moon_max_illumination_pct=moon_illum,
+                        moon_min_separation_deg=moon_sep,
                         is_system=False,
                         is_active=True
                     )
@@ -4147,6 +4499,30 @@ def new_filter():
             flash("Please fill in all required fields (name and display name).", "error")
     
     return render_template("filter_form.html", filter=None)
+
+
+def _parse_filter_moon_limits(form):
+    """Blank = derived default; values are clamped to valid ranges."""
+    illum_raw = form.get("moon_max_illumination_pct", "").strip()
+    sep_raw = form.get("moon_min_separation_deg", "").strip()
+    try:
+        illum = max(0, min(100, int(float(illum_raw)))) if illum_raw else None
+    except ValueError:
+        illum = None
+    try:
+        sep = max(0.0, min(180.0, float(sep_raw))) if sep_raw else None
+    except ValueError:
+        sep = None
+    return illum, sep
+
+
+def _filter_moon_defaults_context(filter_obj):
+    from prediction_utils import default_moon_limits
+
+    if filter_obj is None:
+        return None
+    illum, sep = default_moon_limits(filter_obj.name, filter_obj.filter_type)
+    return {"illum": illum, "sep": sep}
 
 
 @app.route("/filter/<int:filter_id>/edit", methods=["GET", "POST"])
@@ -4173,6 +4549,9 @@ def edit_filter(filter_id):
         # AstroBin ID can always be updated (even for system filters)
         astrobin_id_str = request.form.get("astrobin_id", "").strip()
         filter_obj.astrobin_id = int(astrobin_id_str) if astrobin_id_str else None
+        filter_obj.moon_max_illumination_pct, filter_obj.moon_min_separation_deg = (
+            _parse_filter_moon_limits(request.form)
+        )
         
         if filter_obj.display_name:
             try:
@@ -4185,7 +4564,9 @@ def edit_filter(filter_id):
         else:
             flash("Display name is required.", "error")
     
-    return render_template("filter_form.html", filter=filter_obj)
+    return render_template(
+        "filter_form.html", filter=filter_obj, moon_defaults=_filter_moon_defaults_context(filter_obj)
+    )
 
 
 @app.route("/filter/<int:filter_id>/delete", methods=["POST"])
@@ -4232,6 +4613,8 @@ def api_filters():
         "display_name": f.display_name,
         "filter_type": f.filter_type,
         "default_exposure": f.default_exposure,
+        "moon_max_illumination_pct": f.moon_max_illumination_pct,
+        "moon_min_separation_deg": f.moon_min_separation_deg,
         "is_system": f.is_system
     } for f in filters])
 
@@ -4732,6 +5115,8 @@ def init_db(mode, filter_preset, force):
                 filter_type=f_data["filter_type"],
                 default_exposure=f_data.get("default_exposure", 300),
                 astrobin_id=f_data.get("astrobin_id"),
+                moon_max_illumination_pct=f_data.get("moon_max_illumination_pct"),
+                moon_min_separation_deg=f_data.get("moon_min_separation_deg"),
                 is_system=True,
                 is_active=True
             )
@@ -4854,6 +5239,78 @@ def resolver_test(name):
         print(f"Aliases:      {', '.join(obj.common_names[:5])}")
 
 
+@app.cli.command("validate-prediction")
+@click.argument("target_id", type=int)
+@click.option("--nights", default=365, show_default=True, help="Nights to compare.")
+@click.option("--every", default=7, show_default=True, help="Compare every Nth night.")
+@click.option("--tolerance", default=5, show_default=True, help="Max allowed window difference (minutes).")
+def validate_prediction(target_id, nights, every, tolerance):
+    """Check a target's duration prediction against an exact astroplan reference."""
+    import warnings
+    from prediction_utils import (
+        check_simulation_invariants, current_night_date, run_prediction, validate_target_windows,
+    )
+
+    warnings.filterwarnings("ignore")
+    target = db.session.get(Target, target_id)
+    if target is None:
+        raise click.ClickException(f"Target {target_id} not found.")
+    lat, lon, elev = get_observer_location()
+    config = get_global_config()
+    tz_name = config.timezone_name or os.environ.get("OBSERVER_TZ", "Asia/Riyadh")
+    min_alt = get_effective_min_altitude(target)
+    packup = parse_time_str(get_effective_packup_time(target))
+    print(f"{target.name}: RA {target.ra_hours:.4f} h, Dec {target.dec_deg:+.4f}, "
+          f"min alt {min_alt}°, pack-up {packup}, observer {lat}, {lon}, {tz_name}")
+
+    report = validate_target_windows(lat, lon, elev, tz_name, target.ra_hours, target.dec_deg,
+                                     min_alt, packup, current_night_date(tz_name), nights, every)
+    print("\nNight        Engine  Reference  Diff   Engine span     Reference span")
+    for row in report["nights"]:
+        es, ee = (s[11:] if s else "--:--" for s in row["engine_span"])
+        rs, re_ = (s[11:] if s else "--:--" for s in row["reference_span"])
+        print(f"{row['date']}  {row['engine_minutes']:6d}  {row['reference_minutes']:9d}  "
+              f"{row['diff_minutes']:+4d}   {es}-{ee}     {rs}-{re_}")
+    moon = report["moon"]
+    print(f"\nWindow: max |diff| {report['max_abs_diff_minutes']} min, mean {report['mean_abs_diff_minutes']} min")
+    print(f"Moon ({moon['samples']} samples): altitude err {moon['max_alt_err_deg']}°, "
+          f"separation err {moon['max_sep_err_deg']}°, illumination err {moon['max_illum_err_pct']}%")
+
+    failures = []
+    if report["max_abs_diff_minutes"] > tolerance:
+        failures.append(f"window difference above {tolerance} min")
+
+    panel = _prediction_panel(target, "remaining")
+    if panel["channels"]:
+        minutes_per_night = get_effective_prediction_minutes_per_night(target)
+        efficiency = get_effective_prediction_efficiency(target)
+        result = run_prediction(
+            [panel], lat=lat, lon=lon, elev=elev, tz_name=tz_name,
+            minutes_per_night=minutes_per_night, efficiency_pct=efficiency,
+            filter_limits=get_filter_moon_limits({c["filter_code"] for c in panel["channels"]}),
+            max_cloud_pct=config.max_cloud_cover_pct or 25,
+            max_gust_kmh=config.prediction_max_gust_kmh or 35.0,
+            max_seeing_raw=config.prediction_max_seeing_raw or 6,
+            default_usable_pct=config.prediction_default_usable_night_pct or 50,
+        )
+        print(f"\nSimulation (cap {minutes_per_night or 'full window'} min, efficiency {efficiency}%):")
+        for name, sc in result["scenarios"].items():
+            problems = check_simulation_invariants(sc, minutes_per_night, efficiency)
+            status = "ok" if not problems else f"{len(problems)} problem(s)"
+            print(f"  {name:9s} imaging nights {sc['imaging_nights']:3d}, calendar {sc['calendar_nights']:3d}, "
+                  f"finish {sc['finish_date'] or '-'}: invariants {status}")
+            for p in problems[:5]:
+                print(f"      - {p}")
+            if problems:
+                failures.append(f"{name} invariants")
+    else:
+        print("\nNo plan channels; simulation checks skipped.")
+
+    if failures:
+        raise click.ClickException("Validation failed: " + "; ".join(failures))
+    print("\nValidation passed.")
+
+
 @app.cli.command("list-presets")
 def list_presets():
     """List available filter presets."""
@@ -4922,6 +5379,7 @@ def export_preset(output_file, include_wheels):
         }
         if f.astrobin_id:
             filter_data["astrobin_id"] = f.astrobin_id
+        _export_filter_moon_limits(f, filter_data)
         export_data["filters"].append(filter_data)
     
     if include_wheels:
@@ -4986,6 +5444,7 @@ def import_preset(input_file, merge, include_wheels):
             existing.default_exposure = f_data.get('default_exposure', existing.default_exposure)
             if 'astrobin_id' in f_data:
                 existing.astrobin_id = f_data['astrobin_id']
+            _import_filter_moon_limits(existing, f_data)
             updated_count += 1
         elif not existing:
             # Create new filter
@@ -4998,6 +5457,7 @@ def import_preset(input_file, merge, include_wheels):
                 is_system=False,
                 is_active=True
             )
+            _import_filter_moon_limits(filter_obj, f_data)
             db.session.add(filter_obj)
             imported_count += 1
     

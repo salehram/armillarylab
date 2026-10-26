@@ -1247,3 +1247,388 @@ def test_v280_pages_render(client):
     assert b'name="log_flats"' in detail
     assert b"Switch Wheel" in detail
     assert b'name="slot_0_astrobin_id"' in client.get(f"/filter-wheel/{ids['w']}/edit").data
+
+
+def _seed_two_panel_night():
+    """Two panels shot the same night with R; each panel logged the same 30/30 flat set."""
+    lrgb_plan = {
+        "palette": "LRGB",
+        "total_planned_minutes": 100,
+        "channels": [{"name": "R", "label": "Red", "planned_minutes": 100, "sub_exposure_seconds": 120}],
+    }
+    group = MosaicGroup(name="Two Panel")
+    db.session.add(group)
+    db.session.flush()
+    night = date(2026, 9, 1)
+    panels = []
+    for n in (1, 2):
+        t = _make_project(f"TP P{n}", lrgb_plan, mosaic=group, panel=n)
+        db.session.add(ImagingSession(target_id=t.id, date=night, channel="R",
+                                      sub_exposure_seconds=120, sub_count=10))
+        for ft in ("flat", "dark_flat"):
+            db.session.add(CalibrationCapture(target_id=t.id, date=night, frame_type=ft,
+                                              channel="R", frame_count=30, checkpoint="manual"))
+        db.session.add(CalibrationCapture(target_id=t.id, date=night, frame_type="dark",
+                                          sub_exposure_seconds=120, frame_count=20, checkpoint="manual"))
+        panels.append(t)
+    db.session.commit()
+    return group, panels
+
+
+def _csv_rows(resp):
+    import csv as _csv
+    import io as _io
+    return list(_csv.DictReader(_io.StringIO(resp.data.decode())))
+
+
+def test_consolidate_mosaic_calibration_keeps_one_set_per_night_filter():
+    from types import SimpleNamespace
+    from calibration_utils import consolidate_mosaic_calibration
+
+    night = date(2026, 9, 1)
+
+    def cap(ft, count, ch=None, sub=None):
+        return SimpleNamespace(date=night, frame_type=ft, channel=ch,
+                               sub_exposure_seconds=sub, frame_count=count)
+
+    merged = consolidate_mosaic_calibration([
+        [cap("flat", 15, "R"), cap("flat", 15, "R"), cap("dark", 20, sub=120)],
+        [cap("flat", 25, "R"), cap("dark_flat", 30, "R"), cap("bias", 50)],
+        [cap("flat", 10, "G")],
+    ])
+    got = {(c.frame_type, c.channel, c.sub_exposure_seconds): c.frame_count for c in merged}
+    assert got == {
+        ("flat", "R", None): 30,
+        ("dark_flat", "R", None): 30,
+        ("dark", None, 120.0): 20,
+        ("bias", None, None): 50,
+        ("flat", "G", None): 10,
+    }
+
+
+def test_mosaic_astrobin_export_consolidates_night(client):
+    with app.app_context():
+        group, panels = _seed_two_panel_night()
+        group_id, panel_id = group.id, panels[0].id
+
+    resp = client.post(f"/mosaic/{group_id}/export_astrobin",
+                       data={"binning": "1", "use_tracked_calibration": "on"})
+    assert resp.status_code == 200
+    rows = _csv_rows(resp)
+    assert len(rows) == 1
+    assert rows[0]["number"] == "20"
+    assert rows[0]["flats"] == "30"
+    assert rows[0]["flatDarks"] == "30"
+    assert rows[0]["darks"] == "20"
+
+    # Same result when chosen from a panel's export modal
+    resp = client.post(f"/target/{panel_id}/export_astrobin",
+                       data={"binning": "1", "use_tracked_calibration": "on", "scope": "mosaic"})
+    assert _csv_rows(resp) == rows
+
+
+def test_panel_astrobin_export_keeps_only_panel_entries(client):
+    with app.app_context():
+        _group, panels = _seed_two_panel_night()
+        panel_id = panels[0].id
+
+    resp = client.post(f"/target/{panel_id}/export_astrobin",
+                       data={"binning": "1", "use_tracked_calibration": "on", "scope": "panel"})
+    rows = _csv_rows(resp)
+    assert len(rows) == 1
+    assert rows[0]["number"] == "10"
+    assert rows[0]["flats"] == "30"
+
+
+def test_astrobin_modal_offers_mosaic_scope(client):
+    with app.app_context():
+        group, panels = _seed_two_panel_night()
+        group_id, panel_id = group.id, panels[0].id
+
+    detail = client.get(f"/target/{panel_id}").data
+    assert b'name="scope" value="mosaic"' in detail
+    assert b"Whole mosaic (2 panels, consolidated)" in detail
+    mosaic_page = client.get(f"/mosaic/{group_id}").data
+    assert b"mosaicAstroBinModal" in mosaic_page
+    assert f"/mosaic/{group_id}/export_astrobin".encode() in mosaic_page
+
+
+# ---------------------------------------------------------------------------
+# Plan duration prediction
+# ---------------------------------------------------------------------------
+
+PREDICTION_COLUMNS = {
+    "global_config": [
+        "prediction_minutes_per_night", "prediction_efficiency_pct", "prediction_max_gust_kmh",
+        "prediction_max_seeing_raw", "prediction_default_usable_night_pct",
+    ],
+    "targets": ["override_prediction_minutes_per_night", "override_prediction_efficiency_pct"],
+    "filters": ["moon_max_illumination_pct", "moon_min_separation_deg"],
+}
+
+
+@pytest.fixture
+def fake_prediction(monkeypatch):
+    import prediction_utils
+
+    calls = []
+
+    def fake_run(panels, **kwargs):
+        calls.append(dict(kwargs, panels=panels))
+        return {"deps_available": True,
+                "scenarios": {s: {"scenario": s} for s in prediction_utils.SCENARIOS}}
+
+    monkeypatch.setattr(prediction_utils, "run_prediction", fake_run)
+    monkeypatch.setattr(prediction_utils, "compute_rise_set", lambda *a, **k: {"rise_local": "x"})
+    return calls
+
+
+def _drop_prediction_columns():
+    from sqlalchemy import text
+
+    with db.engine.connect() as conn:
+        for table, cols in PREDICTION_COLUMNS.items():
+            for col in cols:
+                conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {col}"))
+        conn.commit()
+
+
+def test_prediction_api_remaining_full_and_overrides(client, fake_prediction):
+    with app.app_context():
+        filters = _make_filters()
+        filters["O"].moon_max_illumination_pct = 40
+        t = _make_project("Predict", SHO_PLAN)
+        db.session.add(ImagingSession(target_id=t.id, date=date.today(), channel="H",
+                                      sub_exposure_seconds=300, sub_count=6))
+        db.session.commit()
+        tid = t.id
+
+    body = client.get(f"/api/target/{tid}/duration-prediction").get_json()
+    assert body["has_plan"] is True
+    assert set(body["scenarios"]) == {"baseline", "moon", "weather", "combined"}
+    assert body["inputs"]["basis"] == "remaining"
+    assert body["rise_set"] == {"rise_local": "x"}
+    call = fake_prediction[-1]
+    assert {c["name"]: c["minutes"] for c in call["panels"][0]["channels"]} == {"H": 70.0, "O": 100.0, "S": 100.0}
+    assert call["minutes_per_night"] is None and call["efficiency_pct"] == 85
+    assert call["filter_limits"]["O"] == (40, 35.0)
+    assert call["filter_limits"]["H"] == (100, 25.0)
+    channels = {c["name"]: c for c in body["panels"][0]["channels"]}
+    assert channels["H"]["done_minutes"] == 30.0 and channels["O"]["moon_max_illumination_pct"] == 40
+
+    client.get(f"/api/target/{tid}/duration-prediction?basis=full&minutes_per_night=240&efficiency_pct=70")
+    call = fake_prediction[-1]
+    assert {c["minutes"] for c in call["panels"][0]["channels"]} == {100.0}
+    assert call["minutes_per_night"] == 240 and call["efficiency_pct"] == 70
+
+    with app.app_context():
+        Target.query.get(tid).override_prediction_minutes_per_night = 180
+        db.session.commit()
+    client.get(f"/api/target/{tid}/duration-prediction")
+    assert fake_prediction[-1]["minutes_per_night"] == 180
+    client.get(f"/api/target/{tid}/duration-prediction?minutes_per_night=")
+    assert fake_prediction[-1]["minutes_per_night"] is None
+
+
+def test_prediction_api_without_plan(client, fake_prediction):
+    with app.app_context():
+        t = Target(name="Bare", ra_hours=1.0, dec_deg=2.0)
+        db.session.add(t)
+        db.session.commit()
+        tid = t.id
+    body = client.get(f"/api/target/{tid}/duration-prediction").get_json()
+    assert body["has_plan"] is False and fake_prediction == []
+    assert client.get("/api/target/9999/duration-prediction").status_code == 404
+
+
+def test_save_prediction_settings(client):
+    from app import get_effective_prediction_minutes_per_night, get_effective_prediction_efficiency
+
+    with app.app_context():
+        tid = _make_project("Save", SHO_PLAN).id
+        db.session.commit()
+
+    body = client.post(f"/target/{tid}/prediction-settings",
+                       json={"minutes_per_night": 240, "efficiency_pct": 500}).get_json()
+    assert body == {"ok": True, "minutes_per_night": 240, "efficiency_pct": 100}
+    with app.app_context():
+        t = Target.query.get(tid)
+        assert get_effective_prediction_minutes_per_night(t) == 240
+        assert get_effective_prediction_efficiency(t) == 100
+
+    client.post(f"/target/{tid}/prediction-settings", json={"minutes_per_night": 0, "efficiency_pct": ""})
+    with app.app_context():
+        t = Target.query.get(tid)
+        GlobalConfig.query.first().prediction_minutes_per_night = 300
+        db.session.commit()
+        assert t.override_prediction_minutes_per_night == 0
+        assert get_effective_prediction_minutes_per_night(t) is None
+        assert get_effective_prediction_efficiency(t) == 85
+
+    client.post(f"/target/{tid}/prediction-settings", json={"minutes_per_night": "abc"})
+    with app.app_context():
+        assert get_effective_prediction_minutes_per_night(Target.query.get(tid)) == 300
+    assert client.post("/target/9999/prediction-settings", json={}).status_code == 404
+
+
+def test_mosaic_prediction_orders_panels_and_skips_archived(client, fake_prediction):
+    with app.app_context():
+        group = MosaicGroup(name="Predict Mosaic")
+        db.session.add(group)
+        db.session.flush()
+        _make_project("Panel B", SHO_PLAN, mosaic=group, panel=2)
+        _make_project("Panel A", SHO_PLAN, mosaic=group, panel=1)
+        done = _make_project("Panel C", SHO_PLAN, mosaic=group, panel=3)
+        done.is_archived = True
+        db.session.commit()
+        gid = group.id
+
+    body = client.get(f"/api/mosaic/{gid}/duration-prediction").get_json()
+    assert body["has_plan"] is True
+    panels = fake_prediction[-1]["panels"]
+    assert [p["name"] for p in panels] == ["Panel A", "Panel B"]
+    assert panels[0]["channels"][0]["key"] == "P1 H"
+    assert client.get("/api/mosaic/9999/duration-prediction").status_code == 404
+    assert b'id="duration-prediction"' in client.get(f"/mosaic/{gid}").data
+
+
+def test_prediction_settings_forms_and_filter_moon_limits(client):
+    with app.app_context():
+        tid = _make_project("Forms", SHO_PLAN).id
+        db.session.commit()
+
+    client.post(f"/target/{tid}/settings", data={
+        "override_prediction_minutes_per_night": "200", "override_prediction_efficiency_pct": "5",
+    })
+    client.post("/settings", data={
+        "prediction_minutes_per_night": "240", "prediction_efficiency_pct": "90",
+        "prediction_max_gust_kmh": "30", "prediction_max_seeing_raw": "5",
+        "prediction_default_usable_night_pct": "40",
+    })
+    client.post("/filter/new", data={
+        "name": "HA7", "display_name": "Ha 7nm", "filter_type": "narrowband",
+        "default_exposure": "300", "moon_max_illumination_pct": "150", "moon_min_separation_deg": "20",
+    })
+    with app.app_context():
+        t = Target.query.get(tid)
+        assert t.override_prediction_minutes_per_night == 200
+        assert t.override_prediction_efficiency_pct == 10
+        cfg = GlobalConfig.query.first()
+        assert (cfg.prediction_minutes_per_night, cfg.prediction_efficiency_pct, cfg.prediction_max_gust_kmh,
+                cfg.prediction_max_seeing_raw, cfg.prediction_default_usable_night_pct) == (240, 90, 30.0, 5, 40)
+        f = Filter.query.filter_by(name="HA7").one()
+        assert (f.moon_max_illumination_pct, f.moon_min_separation_deg) == (100, 20.0)
+        fid = f.id
+
+    client.post(f"/filter/{fid}/edit", data={
+        "name": "HA7", "display_name": "Ha 7nm", "filter_type": "narrowband", "default_exposure": "300",
+        "moon_max_illumination_pct": "", "moon_min_separation_deg": "",
+    })
+    with app.app_context():
+        f = Filter.query.get(fid)
+        assert f.moon_max_illumination_pct is None and f.moon_min_separation_deg is None
+    page = client.get(f"/filter/{fid}/edit").data
+    assert b'name="moon_max_illumination_pct"' in page and b"Default: 75" in page
+
+
+def test_prediction_fields_survive_preset_roundtrip_and_clone(client):
+    import io
+
+    with app.app_context():
+        db.session.add(Filter(name="O", display_name="OIII", filter_type="narrowband",
+                              moon_max_illumination_pct=30, moon_min_separation_deg=50.0))
+        t = _make_project("Clone Me", SHO_PLAN)
+        t.override_prediction_minutes_per_night = 150
+        t.override_prediction_efficiency_pct = 70
+        db.session.commit()
+        tid = t.id
+
+    exported = client.post("/settings/export-preset", data={}).data
+    preset = json.loads(exported)
+    o = next(f for f in preset["filters"] if f["name"] == "O")
+    assert o["moon_max_illumination_pct"] == 30 and o["moon_min_separation_deg"] == 50.0
+
+    with app.app_context():
+        f = Filter.query.filter_by(name="O").one()
+        f.moon_max_illumination_pct = None
+        f.moon_min_separation_deg = None
+        db.session.commit()
+    client.post("/settings/import-preset", data={
+        "import_mode": "merge", "preset_file": (io.BytesIO(exported), "preset.json"),
+    }, content_type="multipart/form-data")
+    with app.app_context():
+        f = Filter.query.filter_by(name="O").one()
+        assert (f.moon_max_illumination_pct, f.moon_min_separation_deg) == (30, 50.0)
+
+    client.post(f"/target/{tid}/clone")
+    with app.app_context():
+        clone = Target.query.filter_by(name="Clone Me (Copy)").one()
+        assert clone.override_prediction_minutes_per_night == 150
+        assert clone.override_prediction_efficiency_pct == 70
+
+
+def test_target_detail_renders_prediction_card(client):
+    with app.app_context():
+        tid = _make_project("Card", SHO_PLAN).id
+        db.session.commit()
+    page = client.get(f"/target/{tid}").data
+    assert b'id="duration-prediction"' in page
+    assert f"/api/target/{tid}/duration-prediction".encode() in page
+    assert b"duration_prediction.js" in page
+
+
+def test_prediction_columns_added_by_additive_migration(client):
+    from sqlalchemy import inspect, text
+    from app import apply_additive_schema_migrations
+
+    with app.app_context():
+        _drop_prediction_columns()
+        applied = apply_additive_schema_migrations(log=lambda *_a, **_k: None)
+        inspector = inspect(db.engine)
+        for table, cols in PREDICTION_COLUMNS.items():
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            for col in cols:
+                assert f"{table}.{col}" in applied
+                assert col in existing
+        with db.engine.connect() as conn:
+            row = conn.execute(text(
+                "SELECT prediction_efficiency_pct, prediction_max_gust_kmh, prediction_max_seeing_raw, "
+                "prediction_default_usable_night_pct, prediction_minutes_per_night FROM global_config"
+            )).one()
+        assert tuple(row) == (85, 35.0, 6, 50, None)
+        again = apply_additive_schema_migrations(log=lambda *_a, **_k: None)
+        assert not any(a.split(".")[-1] in sum(PREDICTION_COLUMNS.values(), []) for a in again)
+
+
+def test_prediction_migration_ddl_is_postgres_compatible(client, monkeypatch):
+    """Exercise the PostgreSQL branch of the additive migration and the model DDL."""
+    import app as app_module
+    from sqlalchemy import event
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.schema import CreateTable
+
+    all_cols = sum(PREDICTION_COLUMNS.values(), [])
+    statements = []
+
+    def capture(conn, cursor, statement, *args):
+        statements.append(statement)
+
+    with app.app_context():
+        _drop_prediction_columns()
+        event.listen(db.engine, "before_cursor_execute", capture)
+        monkeypatch.setattr(app_module.db_config, "db_type", "postgresql")
+        try:
+            app_module.apply_additive_schema_migrations(log=lambda *_a, **_k: None)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
+
+    ddl = [s for s in statements if "ADD COLUMN" in s and any(f" {c} " in s + " " for c in all_cols)]
+    assert len(ddl) == len(all_cols)
+    assert not any(" REAL" in s for s in ddl)
+    assert any("prediction_max_gust_kmh DOUBLE PRECISION DEFAULT 35" in s for s in ddl)
+    assert any("moon_min_separation_deg DOUBLE PRECISION" in s for s in ddl)
+
+    for model, table in ((GlobalConfig, "global_config"), (Target, "targets"), (Filter, "filters")):
+        sql = str(CreateTable(model.__table__).compile(dialect=postgresql.dialect()))
+        for col in PREDICTION_COLUMNS[table]:
+            assert col in sql

@@ -1009,6 +1009,24 @@ The "latest plan" lookup `order_by(TargetPlan.created_at.desc()).first()` appear
 
 ---
 
+## ✅ 22. Plan Duration Prediction
+
+Estimates how many nights a plan needs from its per-filter integration, the target's nightly window, the moon and the weather.
+
+### Completed
+- `prediction_utils.py`: 365-night grid of 10-minute slots (nautical darkness, minimum altitude, pack-up time, moon altitude/illumination/separation), cached per process; deterministic simulator that fills slots night by night.
+- Four scenarios: **Baseline**, **Moon** (per-filter max illumination / min separation, only while the moon is up; dark time goes to the most moon-sensitive filter first), **Weather** (Open-Meteo 16-day cloud/gusts + 7Timer seeing, then monthly usable-night rates from the Open-Meteo historical archive, then a configured fallback %) and **Moon + Weather**.
+- Remaining vs full-plan basis, hours-per-night cap and efficiency %; saved per target (`targets.override_prediction_*`) with global defaults (`global_config.prediction_*`).
+- Filter moon limits: `filters.moon_max_illumination_pct`, `filters.moon_min_separation_deg` (blank = defaults by filter code/type), included in preset export/import.
+- Card on target detail and mosaic detail (panels completed in order, shared nightly time); APIs `/api/target/<id>/duration-prediction`, `/api/mosaic/<id>/duration-prediction`.
+- New columns added via `apply_additive_schema_migrations` with SQLite/PostgreSQL-matched DDL; tests cover the PostgreSQL DDL branch.
+
+### Remaining
+- Option to place a capped nightly session around transit instead of the start of the window.
+- Seeing has no climatology, so seeing is only applied while 7Timer has data (~3 days).
+
+---
+
 # Next Recommended Focus
 **11. Session Recommendation Engine** - AI-driven session optimization  
 Now that the core planning features are complete (time formatting, palette management, altitude visualization, imaging logs, enhanced custom filter system, Night Conditions, calibration frame tracking, and NINA V2 export), the next major enhancement is implementing an intelligent session recommendation engine. Note that weather integration and moon phase awareness are now partially delivered through the Night Conditions popup (feature 16), which provides real-time weather data, seeing conditions, and moon-aware channel suggestions. Calibration tracking (feature 17) covers flat/dark-flat workflow suggestions per channel. The remaining scope for this feature includes:

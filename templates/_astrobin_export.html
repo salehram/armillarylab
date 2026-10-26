@@ -1,0 +1,148 @@
+{# AstroBin export form body shared by the target and mosaic export modals. #}
+{% macro astrobin_export_body(ctx, scope, disabled=false, consolidated=false) %}
+<fieldset data-ab-body="{{ scope }}" {% if disabled %}disabled class="d-none"{% endif %}>
+  <div class="small text-muted mb-2">
+    {{ ctx.session_count }} session(s){% if ctx.base_filters %} · {{ ctx.base_filters | join(', ') }}{% endif %}
+    {% if consolidated %}
+      <span class="d-block text-info mt-1">
+        <i class="bi bi-intersect me-1"></i>Lights from all panels are pooled per night/filter/exposure;
+        calibration counts once per night and filter (not once per panel).
+      </span>
+    {% endif %}
+  </div>
+
+  <div class="row g-2 mb-2">
+    <div class="col-6 col-md-3">
+      <label class="form-label small mb-0">Binning</label>
+      <select class="form-control form-control-sm" name="binning">
+        <option value="1" selected>1×1</option>
+        <option value="2">2×2</option>
+        <option value="3">3×3</option>
+        <option value="4">4×4</option>
+      </select>
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label small mb-0">Gain</label>
+      <input class="form-control form-control-sm" type="number" name="gain"
+             value="{{ ctx.latest_gain if ctx.latest_gain is not none else 100 }}" step="1" min="0">
+      {% if ctx.latest_gain is not none %}<div class="form-text text-info" style="font-size:0.7em">from last session</div>{% endif %}
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label small mb-0">Cooling (°C)</label>
+      <input class="form-control form-control-sm" type="number" name="sensor_cooling"
+             value="{{ ctx.latest_cooling if ctx.latest_cooling is not none else -10 }}" step="1" min="-274" max="100">
+      {% if ctx.latest_cooling is not none %}<div class="form-text text-info" style="font-size:0.7em">from last session</div>{% endif %}
+    </div>
+    <div class="col-6 col-md-4">
+      <label class="form-label small mb-0">Bortle <span class="text-muted">(opt.)</span></label>
+      <select class="form-control form-control-sm" name="bortle">
+        <option value="">—</option>
+        <option value="1">1 - Excellent</option>
+        <option value="2">2 - Dark site</option>
+        <option value="3">3 - Rural</option>
+        <option value="4">4 - Rural/suburban</option>
+        <option value="5">5 - Suburban</option>
+        <option value="6">6 - Bright suburban</option>
+        <option value="7">7 - Suburban/urban</option>
+        <option value="8">8 - City</option>
+        <option value="9">9 - Inner-city</option>
+      </select>
+    </div>
+  </div>
+
+  {% if ctx.has_captures %}
+  <div class="border rounded p-2 mb-2">
+    <div class="form-check mb-1">
+      <input class="form-check-input ab-tracked-toggle" type="checkbox" name="use_tracked_calibration"
+             id="use_tracked_calibration_{{ scope }}" checked>
+      <label class="form-check-label small" for="use_tracked_calibration_{{ scope }}">
+        Per-session calibration from logs
+        {% if ctx.totals %}
+        <span class="text-muted">(darks {{ ctx.totals.darks }}, flats {{ ctx.totals.flats }}, flat darks {{ ctx.totals.flat_darks }})</span>
+        {% endif %}
+      </label>
+    </div>
+    <div class="ab-tracked-preview">
+      {% if ctx.preview %}
+      <div class="table-responsive" style="max-height: 220px;">
+        <table class="table table-sm table-dark table-bordered mb-0 small">
+          <thead class="sticky-top bg-dark">
+            <tr><th>Date</th><th>Filt</th><th>#</th><th>s</th><th>D</th><th>F</th><th>FD</th><th>B</th></tr>
+          </thead>
+          <tbody>
+            {% for row in ctx.preview %}
+            <tr>
+              <td>{{ row.date[5:] }}</td>
+              <td>{{ row.filter_name }}</td>
+              <td>{{ row.number if row.number else '—' }}</td>
+              <td>{{ row.duration | int if row.duration == (row.duration | int) else row.duration }}</td>
+              <td>{{ row.darks or '—' }}</td>
+              <td>{{ row.flats or '—' }}</td>
+              <td>{{ row.flat_darks or '—' }}</td>
+              <td>{{ row.bias or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+    <div class="ab-manual-cal d-none mt-2">
+      <p class="text-muted small mb-1">Same count on every row:</p>
+      {{ _manual_cal_inputs() }}
+    </div>
+  </div>
+  {% else %}
+  <div class="border rounded p-2 mb-2">
+    <div class="small text-muted mb-1">Calibration counts (optional, applied to every row):</div>
+    {{ _manual_cal_inputs() }}
+  </div>
+  {% endif %}
+
+  {% if ctx.missing_ids %}
+  <div class="alert alert-warning small py-2 mb-0">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    Missing AstroBin IDs: <strong>{{ ctx.missing_ids | join(', ') }}</strong>.
+    <a href="{{ url_for('filter_list') }}" class="alert-link">Filter Settings</a>
+  </div>
+  {% endif %}
+</fieldset>
+{% endmacro %}
+
+{% macro _manual_cal_inputs() %}
+<div class="row g-2">
+  <div class="col-3"><input class="form-control form-control-sm" type="number" name="darks" placeholder="Darks" min="0"></div>
+  <div class="col-3"><input class="form-control form-control-sm" type="number" name="flats" placeholder="Flats" min="0"></div>
+  <div class="col-3"><input class="form-control form-control-sm" type="number" name="flat_darks" placeholder="Flat darks" min="0"></div>
+  <div class="col-3"><input class="form-control form-control-sm" type="number" name="bias" placeholder="Bias" min="0"></div>
+</div>
+{% endmacro %}
+
+{% macro astrobin_export_script() %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('[data-ab-body]').forEach(function (body) {
+    const toggle = body.querySelector('.ab-tracked-toggle');
+    if (!toggle) return;
+    const preview = body.querySelector('.ab-tracked-preview');
+    const manual = body.querySelector('.ab-manual-cal');
+    function sync() {
+      preview.classList.toggle('d-none', !toggle.checked);
+      manual.classList.toggle('d-none', toggle.checked);
+    }
+    toggle.addEventListener('change', sync);
+    sync();
+  });
+  document.querySelectorAll('[data-ab-scope-radio]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      const form = radio.closest('form');
+      form.querySelectorAll('[data-ab-body]').forEach(function (body) {
+        const active = body.dataset.abBody === radio.value;
+        body.disabled = !active;
+        body.classList.toggle('d-none', !active);
+      });
+    });
+  });
+});
+</script>
+{% endmacro %}

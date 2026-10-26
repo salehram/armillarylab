@@ -105,6 +105,33 @@
         </div>
       </div>
 
+      <!-- Plan Duration Prediction -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Plan Duration Prediction</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">
+              <label for="override_prediction_minutes_per_night" class="form-label">Imaging Time per Night (min)</label>
+              <input type="number" class="form-control" id="override_prediction_minutes_per_night" name="override_prediction_minutes_per_night"
+                     min="0" max="1440" step="10"
+                     value="{{ target.override_prediction_minutes_per_night if target.override_prediction_minutes_per_night is not none else '' }}"
+                     placeholder="Global: {{ global_config.prediction_minutes_per_night or 'full window' }}">
+              <div class="form-text">Blank = global default, 0 = full window</div>
+            </div>
+            <div class="col-md-6">
+              <label for="override_prediction_efficiency_pct" class="form-label">Imaging Efficiency (%)</label>
+              <input type="number" class="form-control" id="override_prediction_efficiency_pct" name="override_prediction_efficiency_pct"
+                     min="10" max="100" step="1"
+                     value="{{ target.override_prediction_efficiency_pct if target.override_prediction_efficiency_pct is not none else '' }}"
+                     placeholder="Global: {{ global_config.prediction_efficiency_pct or 85 }}">
+              <div class="form-text">Leave blank to fall back to global default</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">
           <i class="bi bi-floppy me-1"></i>Save Target Settings

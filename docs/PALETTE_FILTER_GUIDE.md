@@ -200,6 +200,8 @@ Each filter in ArmillaryLab has:
 | `filter_type` | Classification | `narrowband` |
 | `default_exposure` | Suggested sub length | `300` (seconds) |
 | `astrobin_id` | Equipment database ID | `1955` |
+| `moon_max_illumination_pct` | Max moon illumination for the duration prediction (blank = default) | `100` |
+| `moon_min_separation_deg` | Min moon–target separation for the duration prediction (blank = default) | `25` |
 | `is_system` | Built-in vs custom | `true` |
 | `is_active` | Currently usable | `true` |
 
@@ -228,6 +230,7 @@ ArmillaryLab includes these default filters:
    - **Filter Type**: narrowband/broadband/other
    - **Default Exposure**: Suggested sub length
    - **AstroBin ID**: (optional) for export tracking
+   - **Max Moon Illumination / Min Moon Separation**: (optional) moon limits used by the [Plan Duration Prediction](DURATION_PREDICTION.md#moon-limits-per-filter); blank uses the default for the filter code or type
 4. Save
 
 ### When to Create Custom Filters

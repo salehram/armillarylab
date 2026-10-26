@@ -8,7 +8,12 @@ A comprehensive web-based tool for planning astrophotography sessions and managi
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 
-## 🎉 Current release: v2.7.0 — Mosaic Groups & Dashboard Performance
+## � New on `main` (unreleased)
+
+- **Plan Duration Prediction** — a card on every target (and mosaic) page that estimates how many nights the plan needs, how long you will image each night and when you will finish. It shows four views (Baseline, Moon, Weather, Moon + Weather), lets you set the hours you want to spend per night and your efficiency, and highlights nights lost to the moon. Calculations are checked against an exact astroplan reference with `flask validate-prediction <id>`. See the [Plan Duration Prediction Guide](docs/DURATION_PREDICTION.md).
+- **Mosaic AstroBin export** — one consolidated CSV for all panels of a mosaic, counting calibration once per night and filter. See the [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md#mosaics-panel-vs-whole-mosaic-export).
+
+## �🎉 Current release: v2.7.0 — Mosaic Groups & Dashboard Performance
 
 **ArmillaryLab v2.7.0** introduces **Mosaic Groups**: label any set of panel targets as one named mosaic, track per-channel aggregate progress across all panels (total Ha/OIII/SII done vs. planned), get a nightly “Tonight’s Panel” recommendation, and navigate directly from each panel’s dashboard badge to the mosaic overview. The `mosaic_groups` table and two new nullable columns on `targets` (`mosaic_group_id`, `mosaic_panel_number`) are added automatically on startup — no manual migration needed. The mosaic group dropdown appears on the New/Edit Target form; a “Mosaics” nav link and a compact dashboard summary section keep everything one click away.
 
@@ -50,6 +55,17 @@ v2.7.0 also fixes a significant **dashboard performance regression** (present si
 - **Multi-format Time Display**: Times shown in both minutes and H:M:S format throughout the interface
 - **Custom Filter Addition**: On-the-fly custom filter addition with auto-save and NINA compatibility
 
+### ⏳ Plan Duration Prediction
+- **Nights to completion**: Imaging nights, calendar nights, finish date and average time per night for the remaining (or full) plan
+- **Four views**: Baseline (darkness, altitude, pack-up), Moon (per-filter moon limits), Weather (forecast + historical climate) and Moon + Weather
+- **Your schedule**: Set the hours you want to spend per night and an efficiency %, try values live, and save them per target
+- **Visibility**: Rise/set, time above minimum altitude, transit and tonight's usable window; integration and frames left per filter
+- **Moon-aware scheduling**: Dark time goes to moon-sensitive filters first; nights lost to the moon are shaded in the chart
+- **Weather**: Open-Meteo 16-day cloud/gust forecast and 7Timer seeing, then monthly usable-night rates from 3 years of history
+- **Mosaics**: Panels completed in order with one shared nightly budget
+- **Verified**: `flask validate-prediction <id>` compares every window with an exact astroplan reference (typically within 1–2 minutes)
+- **📚 Documentation**: See [Plan Duration Prediction Guide](docs/DURATION_PREDICTION.md)
+
 ### 🔧 NINA Integration & Export
 - **V2 Advanced Sequencer Export**: Full-session sequence with `CoolCamera` (−10 °C), `StartGuider`, `CenterAndRotate`, `AutofocusAfterSetTime`, `TimeCondition` stop guard, and one `SequentialContainer` per filter channel
 - **Export Dialog**: Customise sequence name, container name, position angle, cooldown duration, force-guider-calibration, dither cadence, and per-channel gain before downloading
@@ -60,6 +76,7 @@ v2.7.0 also fixes a significant **dashboard performance regression** (present si
 
 ### 📤 AstroBin Integration
 - **Per-Target CSV Export**: Export acquisition data in AstroBin-compatible CSV format
+- **Mosaic CSV Export**: One CSV for all panels of a mosaic; lights pooled per night/filter/exposure and calibration counted once per night and filter
 - **Per-Session Gain & Cooling**: Gain and sensor temperature logged per session are written per-row in the CSV; a uniform fallback is used when not available
 - **Filter ID Mapping**: Store AstroBin equipment database IDs for accurate data import
 - **Configurable Export Settings**: Binning, gain, sensor cooling (pre-populated from the last session), and Bortle scale
@@ -93,6 +110,8 @@ v2.7.0 also fixes a significant **dashboard performance regression** (present si
 - **Observer Location**: Configurable latitude, longitude, and elevation with global defaults
 - **Timezone Support**: Robust timezone handling with Windows compatibility and UTC conversion
 - **Default Settings**: Global defaults for pack-up time and minimum altitude with per-target overrides
+- **Prediction Defaults**: Imaging time per night, efficiency, max wind gust, worst acceptable seeing and fallback usable-night % (per-target overrides for time per night and efficiency)
+- **Filter Moon Limits**: Optional max moon illumination and min moon separation per filter
 - **Settings Management**: Dedicated configuration interface for both global and per-target settings
 
 ### 📊 Data Management & Analytics
@@ -111,6 +130,7 @@ Detailed documentation is available in the [docs/](docs/) folder:
 | [Equipment Presets Guide](docs/PRESETS_GUIDE.md) | Configure and share filter setups using JSON presets |
 | [NINA Integration Guide](docs/NINA_INTEGRATION.md) | Export imaging sequences to N.I.N.A. (V2 Advanced Sequencer) |
 | [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md) | Export sessions as AstroBin-compatible CSV with per-session gain/cooling |
+| [Plan Duration Prediction Guide](docs/DURATION_PREDICTION.md) | Estimate nights to completion with moon and weather; validate the calculations |
 | [Database Guide](docs/DATABASE_GUIDE.md) | SQLite/PostgreSQL setup and migration |
 | [Calibration Guide](docs/CALIBRATION_GUIDE.md) | Track darks, flats, dark flats, and bias with end-of-channel reminders |
 | [Features Roadmap](docs/FEATURES_ROADMAP.md) | Completed features and future plans |
@@ -294,6 +314,22 @@ Reset the database for development (use with caution).
 flask db reset
 ```
 
+### Planning Commands
+
+#### `flask validate-prediction`
+Check a target's duration prediction against an exact astroplan reference (usable window per night, moon geometry) and verify the simulator's bookkeeping for all four views. Exits with an error if a check fails.
+
+```bash
+flask validate-prediction 22
+flask validate-prediction 22 --nights 120 --every 3 --tolerance 3
+```
+
+| Option | Description |
+|--------|-------------|
+| `--nights` | Nights to compare (default 365) |
+| `--every` | Compare every Nth night (default 7) |
+| `--tolerance` | Max allowed window difference in minutes (default 5) |
+
 ### Running the Application
 
 #### Development Server
@@ -348,6 +384,7 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
    - Set total planned exposure time (in minutes or H:M:S format)
    - Configure channel-specific exposure plans
    - Use bidirectional frame/time inputs for precise planning
+   - Check the **Plan Duration Prediction** card for how many nights the plan needs; set the hours you want to image per night
 
 ### Daily Workflow
 
@@ -371,6 +408,8 @@ armillarylab/
 ├── app.py                 # Main Flask application
 ├── astro_utils.py         # Astronomical calculations
 ├── conditions_utils.py    # Night conditions: moon, weather, seeing, channel suggestion
+├── prediction_utils.py    # Plan duration prediction: night grid, weather/climatology, simulator, validation
+├── calibration_utils.py   # Calibration tracking, imaging-log and AstroBin export helpers
 ├── cli.py                 # CLI command definitions
 ├── nina_integration.py    # N.I.N.A. export functionality
 ├── time_utils.py          # Time formatting and parsing utilities
@@ -392,6 +431,8 @@ armillarylab/
 │   ├── base.html
 │   ├── index.html
 │   ├── target_detail.html
+│   ├── _duration_prediction.html  # Prediction card (target + mosaic pages)
+│   ├── _astrobin_export.html      # AstroBin export modal (target + mosaic pages)
 │   ├── target_form.html
 │   ├── settings.html
 │   ├── filter_form.html
@@ -400,10 +441,10 @@ armillarylab/
 │   ├── filter_wheel_list.html
 │   ├── palette_list.html
 │   └── imaging_logs.html
-├── static/                # Static assets (CSS, JS, fonts)
+├── static/                # Static assets (CSS, JS incl. duration_prediction.js, fonts)
 ├── dev/                   # Virtual environment
 ├── uploads/               # Final images saved via UI (personal — contents gitignored; keep `.gitkeep`)
-├── cache/                 # Weather/seeing forecast cache (gitignored)
+├── cache/                 # Weather/seeing forecast and climatology cache (gitignored)
 └── armillarylab.db        # Bundled sample SQLite (`migrate-db`), or recreate with `init-db`
 ```
 
@@ -500,13 +541,13 @@ Find your filter IDs from AstroBin equipment URLs:
 
 The application uses SQLAlchemy ORM with support for SQLite and PostgreSQL:
 
-- **GlobalConfig**: Observer location, default settings, timezone
+- **GlobalConfig**: Observer location, default settings, timezone, prediction defaults
 - **TargetType**: Target classification system
 - **Palette**: Custom filter palette definitions
-- **Target**: Individual imaging targets
+- **Target**: Individual imaging targets (with per-target overrides, incl. prediction time per night/efficiency)
 - **TargetPlan**: Exposure plans and channel definitions
 - **ImagingSession**: Session tracking and progress data
-- **Filter**: Filter definitions with AstroBin IDs
+- **Filter**: Filter definitions with AstroBin IDs and optional moon limits
 - **FilterWheel**: Filter wheel hardware profiles
 - **FilterWheelSlot**: Filter-to-slot position mappings
 - **ObjectMapping**: Catalog cross-references
@@ -541,6 +582,12 @@ docker-compose up --build
 ## 📊 Current Status
 
 **Shipping version:** **2.7.0** (`APP_VERSION` in `app.py`). Install from `main` for the latest. v2.7.0 adds Mosaic Groups (multi-panel mosaic project grouping with aggregate progress and tonight’s panel recommendation) and a ~10× dashboard window-calculation speedup. v2.6.0 added the NINA V2 Advanced Sequencer export and per-session gain/cooling tracking. v2.5.0 dropped the two-point flat nudge in favour of a single end-of-channel reminder. See [CHANGELOG.md](CHANGELOG.md) for the full history.
+
+### ✅ New on `main` (unreleased)
+
+- ⏳ **Plan Duration Prediction**: nights to completion in four views (Baseline / Moon / Weather / Moon + Weather), adjustable hours per night and efficiency, moon-skipped nights shaded, mosaic support — see the [guide](docs/DURATION_PREDICTION.md)
+- ✅ **`flask validate-prediction <id>`**: verifies windows and moon geometry against astroplan and checks simulator invariants
+- 📤 **Mosaic AstroBin export**: one consolidated CSV per mosaic
 
 ### ✅ New in v2.4.0 (Comprehensive Object Resolver)
 
@@ -579,7 +626,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release-by-release notes.
 
 ### 🚧 Roadmap
 
-- **Session Recommendation Engine**: AI-driven session optimization (moon phase and weather integration now partially delivered via Night Conditions popup)
+- **Session Recommendation Engine**: AI-driven session optimization (moon phase and weather integration now partially delivered via Night Conditions popup and Plan Duration Prediction)
 - **Automatic Recomputation**: Dynamic updates after configuration changes
 - **Advanced Export Options**: Additional template formats and customization
 - **Comprehensive User Guide**: Documentation and tutorials

@@ -15,12 +15,15 @@ Welcome to the ArmillaryLab documentation. This folder contains detailed guides 
 
 **Current release:** **v2.7.0** — Mosaic Groups: label any set of panel targets as one mosaic, track per-channel aggregate progress across all panels, and get a "Tonight's Panel" recommendation. Dashboard performance significantly improved (10× faster window calculations). See [CHANGELOG.md](../CHANGELOG.md) for full history.
 
+**New on `main` (unreleased):** **Plan Duration Prediction** (nights to completion with moon and weather, adjustable hours per night, `flask validate-prediction`) and **Mosaic AstroBin export**.
+
 ### User Guides
 
 | Document | Description |
 |----------|-------------|
 | [Palette & Filter Guide](PALETTE_FILTER_GUIDE.md) | **Start here!** Understand palettes, filters, and target plans |
 | [Equipment Presets Guide](PRESETS_GUIDE.md) | Configure and share filter setups using JSON presets |
+| [Plan Duration Prediction Guide](DURATION_PREDICTION.md) | **Nights to completion** — Baseline / Moon / Weather views, hours per night, filter moon limits, validation |
 | [Features Roadmap §17](FEATURES_ROADMAP.md) | **Calibration Frames** — tracking, end-of-channel reminder, skip/defer |
 | [Calibration Guide](CALIBRATION_GUIDE.md) | Enable tracking, log captures, read suggestions |
 | [Features Roadmap §16](FEATURES_ROADMAP.md) | **Night Conditions** — moon phase, weather, seeing, channel suggestion (built into the app UI) |
@@ -54,6 +57,7 @@ Welcome to the ArmillaryLab documentation. This folder contains detailed guides 
 - **Initial Setup**: Start with the [README](../README.md), then [Database Guide](DATABASE_GUIDE.md)
 - **Docker Deployment**: See [Docker Guide](DOCKER_GUIDE.md) for containerized setup
 - **Configure Filters**: See [Equipment Presets Guide](PRESETS_GUIDE.md)
+- **Estimate Nights to Finish a Plan**: See [Plan Duration Prediction Guide](DURATION_PREDICTION.md)
 - **Export to NINA**: See [NINA Integration Guide](NINA_INTEGRATION.md)
 - **Upload to AstroBin**: See [AstroBin Export Guide](ASTROBIN_EXPORT.md)
 - **Deploy to Cloud**: See [PostgreSQL Deployment](POSTGRESQL_DEPLOYMENT.md)
@@ -74,6 +78,9 @@ flask import-preset input.json             # Import preset
 
 # Filters
 flask init-db --filter-preset zwo          # Init with ZWO filters
+
+# Planning
+flask validate-prediction <target_id>      # Check duration prediction vs astroplan reference
 ```
 
 ---

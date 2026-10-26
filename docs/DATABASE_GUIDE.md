@@ -372,6 +372,18 @@ This adds columns to `global_config` and `targets`, and creates:
 
 These tables are included in `config/migration.py` export/import ordering (level 3, after `targets`).
 
+### Plan duration prediction columns (unreleased)
+
+Added automatically on startup by the additive migration (also by `flask migrate-db`); no manual steps:
+
+| Table | Columns |
+|-------|---------|
+| `global_config` | `prediction_minutes_per_night`, `prediction_efficiency_pct` (85), `prediction_max_gust_kmh` (35), `prediction_max_seeing_raw` (6), `prediction_default_usable_night_pct` (50) |
+| `targets` | `override_prediction_minutes_per_night`, `override_prediction_efficiency_pct` |
+| `filters` | `moon_max_illumination_pct`, `moon_min_separation_deg` |
+
+Float columns use `REAL` on SQLite and `DOUBLE PRECISION` on PostgreSQL; all other types and defaults are identical, so `flask db migrate` copies them in both directions. Predictions are computed on demand and not stored. See the [Plan Duration Prediction Guide](DURATION_PREDICTION.md#database-fields).
+
 ---
 
 ### SQLite → PostgreSQL Migration

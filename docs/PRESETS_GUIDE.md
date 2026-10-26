@@ -74,7 +74,9 @@ The foundational preset loaded during database initialization. Contains:
       "display_name": "Hydrogen Alpha 7nm",
       "filter_type": "narrowband",
       "default_exposure": 300,
-      "astrobin_id": 1955
+      "astrobin_id": 1955,
+      "moon_max_illumination_pct": 100,
+      "moon_min_separation_deg": 25
     }
   ]
 }
@@ -99,6 +101,8 @@ The foundational preset loaded during database initialization. Contains:
 | `filter_type` | Yes | String | `narrowband`, `broadband`, or `other` |
 | `default_exposure` | Yes | Integer | Default exposure time in seconds |
 | `astrobin_id` | No | Integer | AstroBin equipment database ID |
+| `moon_max_illumination_pct` | No | Integer | Max moon illumination (0–100) for this filter in the [duration prediction](DURATION_PREDICTION.md#moon-limits-per-filter); omit for the default |
+| `moon_min_separation_deg` | No | Number | Min moon–target separation in degrees for the duration prediction; omit for the default |
 
 ### Filter Wheel Object Fields (Optional)
 

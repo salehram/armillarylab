@@ -372,7 +372,7 @@ This adds columns to `global_config` and `targets`, and creates:
 
 These tables are included in `config/migration.py` export/import ordering (level 3, after `targets`).
 
-### Plan duration prediction columns (unreleased)
+### Plan duration prediction columns (v2.9.0)
 
 Added automatically on startup by the additive migration (also by `flask migrate-db`); no manual steps:
 

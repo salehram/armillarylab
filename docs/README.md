@@ -13,9 +13,7 @@ Welcome to the ArmillaryLab documentation. This folder contains detailed guides 
 | [README.md](../README.md) | Project overview, installation, and quick start |
 | [CHANGELOG.md](../CHANGELOG.md) | Version history and release notes |
 
-**Current release:** **v2.7.0** — Mosaic Groups: label any set of panel targets as one mosaic, track per-channel aggregate progress across all panels, and get a "Tonight's Panel" recommendation. Dashboard performance significantly improved (10× faster window calculations). See [CHANGELOG.md](../CHANGELOG.md) for full history.
-
-**New on `main` (unreleased):** **Plan Duration Prediction** (nights to completion with moon and weather, adjustable hours per night, `flask validate-prediction`) and **Mosaic AstroBin export**.
+**Current release:** **v2.9.0** — Plan Duration Prediction: nights to completion for a target or mosaic in four views (Baseline / Moon / Weather / Moon + Weather), adjustable hours per night and efficiency, per-filter moon limits, and `flask validate-prediction` to check the calculations. Also adds the mosaic AstroBin export. See [CHANGELOG.md](../CHANGELOG.md) for full history.
 
 ### User Guides
 

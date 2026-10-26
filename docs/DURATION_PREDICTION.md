@@ -1,7 +1,7 @@
 # Plan Duration Prediction Guide
 
 Estimate how many nights a target's plan will take, how long you will image each night, and when you will finish — taking into account the target's position in the sky, the moon and the weather.
-
+*Available since v2.9.0.*
 ---
 
 ## Table of Contents

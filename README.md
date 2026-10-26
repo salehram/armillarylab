@@ -2,18 +2,23 @@
 
 A comprehensive web-based tool for planning astrophotography sessions and managing imaging targets. Built with Flask and designed to help astrophotographers optimize their imaging time and track their progress.
 
-![Version](https://img.shields.io/badge/version-2.8.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.9.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0.3-red.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 
-## � New on `main` (unreleased)
+## 🎉 Current release: v2.9.0 — Plan Duration Prediction
 
-- **Plan Duration Prediction** — a card on every target (and mosaic) page that estimates how many nights the plan needs, how long you will image each night and when you will finish. It shows four views (Baseline, Moon, Weather, Moon + Weather), lets you set the hours you want to spend per night and your efficiency, and highlights nights lost to the moon. Calculations are checked against an exact astroplan reference with `flask validate-prediction <id>`. See the [Plan Duration Prediction Guide](docs/DURATION_PREDICTION.md).
-- **Mosaic AstroBin export** — one consolidated CSV for all panels of a mosaic, counting calibration once per night and filter. See the [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md#mosaics-panel-vs-whole-mosaic-export).
+**ArmillaryLab v2.9.0** adds **Plan Duration Prediction**: a card on every target (and mosaic) page that estimates how many nights the plan needs, how long you will image each night and when you will finish. It shows four views (Baseline, Moon, Weather, Moon + Weather), lets you set the hours you want to spend per night and your efficiency, and highlights nights lost to the moon. Per-filter moon limits decide which filters can be used under a bright moon; the weather views use the 16-day forecast, 7Timer seeing and three years of historical weather for your location. Calculations are checked against an exact astroplan reference with `flask validate-prediction <id>` (windows agree within 1–2 minutes). See the [Plan Duration Prediction Guide](docs/DURATION_PREDICTION.md).
 
-## �🎉 Current release: v2.7.0 — Mosaic Groups & Dashboard Performance
+v2.9.0 also adds **Mosaic AstroBin export** — one consolidated CSV for all panels of a mosaic, counting calibration once per night and filter. See the [AstroBin Export Guide](docs/ASTROBIN_EXPORT.md#mosaics-panel-vs-whole-mosaic-export). New settings columns are added automatically on startup on both SQLite and PostgreSQL.
+
+### Previous releases
+
+**v2.8.0** added per-project filter wheels, logging flats together with a light session, mosaic flat backfill, per-physical-filter AstroBin IDs and SQLite/PostgreSQL migration fixes.
+
+#### v2.7.0 — Mosaic Groups & Dashboard Performance
 
 **ArmillaryLab v2.7.0** introduces **Mosaic Groups**: label any set of panel targets as one named mosaic, track per-channel aggregate progress across all panels (total Ha/OIII/SII done vs. planned), get a nightly “Tonight’s Panel” recommendation, and navigate directly from each panel’s dashboard badge to the mosaic overview. The `mosaic_groups` table and two new nullable columns on `targets` (`mosaic_group_id`, `mosaic_panel_number`) are added automatically on startup — no manual migration needed. The mosaic group dropdown appears on the New/Edit Target form; a “Mosaics” nav link and a compact dashboard summary section keep everything one click away.
 
@@ -581,9 +586,9 @@ docker-compose up --build
 
 ## 📊 Current Status
 
-**Shipping version:** **2.7.0** (`APP_VERSION` in `app.py`). Install from `main` for the latest. v2.7.0 adds Mosaic Groups (multi-panel mosaic project grouping with aggregate progress and tonight’s panel recommendation) and a ~10× dashboard window-calculation speedup. v2.6.0 added the NINA V2 Advanced Sequencer export and per-session gain/cooling tracking. v2.5.0 dropped the two-point flat nudge in favour of a single end-of-channel reminder. See [CHANGELOG.md](CHANGELOG.md) for the full history.
+**Shipping version:** **2.9.0** (`APP_VERSION` in `app.py`). Install from `main` for the latest. v2.9.0 adds Plan Duration Prediction (nights to completion with moon and weather) and the mosaic AstroBin export. v2.8.0 added per-project filter wheels and flat logging improvements. v2.7.0 added Mosaic Groups and a ~10× dashboard window-calculation speedup. v2.6.0 added the NINA V2 Advanced Sequencer export and per-session gain/cooling tracking. See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
-### ✅ New on `main` (unreleased)
+### ✅ New in v2.9.0 (Plan Duration Prediction)
 
 - ⏳ **Plan Duration Prediction**: nights to completion in four views (Baseline / Moon / Weather / Moon + Weather), adjustable hours per night and efficiency, moon-skipped nights shaded, mosaic support — see the [guide](docs/DURATION_PREDICTION.md)
 - ✅ **`flask validate-prediction <id>`**: verifies windows and moon geometry against astroplan and checks simulator invariants

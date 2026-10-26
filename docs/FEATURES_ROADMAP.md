@@ -1009,7 +1009,7 @@ The "latest plan" lookup `order_by(TargetPlan.created_at.desc()).first()` appear
 
 ---
 
-## ✅ 22. Plan Duration Prediction
+## ✅ 22. Plan Duration Prediction (v2.9.0)
 
 Estimates how many nights a plan needs from its per-filter integration, the target's nightly window, the moon and the weather.
 

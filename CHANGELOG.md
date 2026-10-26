@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [2.9.0] - 2026-10-26
+
+Minor release: **Plan Duration Prediction** and **Mosaic AstroBin export**. New database columns are added automatically on startup (SQLite and PostgreSQL); no manual migration needed.
+
 ### Added
 
 - **Plan Duration Prediction** — new card on the target page (and mosaic page) estimating imaging nights, calendar nights, finish date and time per night for four scenarios: Baseline, Moon, Weather and Moon + Weather. Shows integration to schedule per filter, rise/set/transit and tonight's window. Hours per night and efficiency can be adjusted live and saved per target. Weather uses the 16-day forecast and 7Timer seeing, then monthly historical usable-night rates for your location. Nights skipped because of the moon are shaded in the chart. See [docs/DURATION_PREDICTION.md](docs/DURATION_PREDICTION.md).
